@@ -1,0 +1,48 @@
+{
+  "name": "OLX ORBIT — OLX India Classifieds",
+  "short_name": "OLX ORBIT",
+  "description": "Buy and sell second-hand cars, bikes, mobiles, electronics, furniture, and real estate across India.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#002f34",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Post Free Ad",
+      "short_name": "Sell",
+      "description": "Post a classified ad to sell cars, phones, or properties fast",
+      "url": "/?action=sell",
+      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "My Messages",
+      "short_name": "Chat",
+      "description": "Open your buyer and seller chats",
+      "url": "/?action=chat",
+      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+    },
+    {
+      "name": "Saved Wishlist",
+      "short_name": "Wishlist",
+      "description": "View bookmarked ads",
+      "url": "/?action=wishlist",
+      "icons": [{ "src": "/icon-192.svg", "sizes": "192x192" }]
+    }
+  ],
+  "categories": ["shopping", "lifestyle", "business"]
+}

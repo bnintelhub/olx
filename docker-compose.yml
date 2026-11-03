@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # ========================================================
+  # MySQL 8.4 Database Container
+  # ========================================================
+  mysql:
+    image: mysql:8.4
+    container_name: bharatmarket_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-olx_marketplace}
+      MYSQL_USER: ${DB_USER:-olx_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-olx_secret_pass}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Backend API Server (Node.js + Prisma + Socket.IO)
+  # ========================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: bharatmarket_backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: "mysql://${DB_USER:-olx_user}:${DB_PASSWORD:-olx_secret_pass}@mysql:3306/${DB_NAME:-olx_marketplace}"
+      JWT_SECRET: ${JWT_SECRET:-bharatmarket_super_secure_jwt_secret_key_2026}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-bharatmarket_refresh_jwt_secret_key_2026}
+      SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
+      MOCK_OTP_CODE: ${MOCK_OTP_CODE:-123456}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+    ports:
+      - "5000:5000"
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Frontend Web Client (React + Vite PWA + Nginx)
+  # ========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bharatmarket_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - bharatmarket_net
+
+volumes:
+  mysql_data:
+    driver: local
+  backend_uploads:
+    driver: local
+
+networks:
+  bharatmarket_net:
+    driver: bridge

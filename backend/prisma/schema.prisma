@@ -1,0 +1,623 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum UserRole {
+  GUEST
+  USER
+  MODERATOR
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  BANNED
+  DELETED
+}
+
+enum OtpPurpose {
+  LOGIN
+  REGISTER
+  PHONE_UPDATE
+  TRANSACTION_VERIFY
+}
+
+enum AttributeType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  SELECT
+  MULTI_SELECT
+  DATE
+}
+
+enum AdStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  REJECTED
+  EXPIRED
+  SOLD
+  ARCHIVED
+}
+
+enum BoostType {
+  FEATURED
+  URGENT
+  HOME_SPOTLIGHT
+}
+
+enum BoostStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  LOCATION
+  SYSTEM_NOTICE
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+enum NotificationType {
+  CHAT_MESSAGE
+  AD_APPROVED
+  AD_REJECTED
+  AD_EXPIRING_SOON
+  PRICE_DROP
+  SAVED_SEARCH_MATCH
+  SYSTEM_ALERT
+}
+
+enum ReportReason {
+  SPAM_OR_FRAUD
+  INAPPROPRIATE_CONTENT
+  PROHIBITED_ITEM
+  MISLEADING_PRICE
+  DUPLICATE_LISTING
+  ALREADY_SOLD
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED
+  DISMISSED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+// ============================================================================
+// USER & IDENTITY MODELS
+// ============================================================================
+
+model User {
+  id               String       @id @default(uuid()) @db.VarChar(36)
+  phoneNumber      String?      @unique @map("phone_number") @db.VarChar(15)
+  isPhoneVerified  Boolean      @default(false) @map("is_phone_verified")
+  email            String?      @unique @db.VarChar(255)
+  isEmailVerified  Boolean      @default(false) @map("is_email_verified")
+  passwordHash     String?      @map("password_hash") @db.VarChar(255)
+  googleId         String?      @unique @map("google_id") @db.VarChar(255)
+  role             UserRole     @default(USER)
+  status           UserStatus   @default(ACTIVE)
+  refreshTokenHash String?      @map("refresh_token_hash") @db.VarChar(255)
+  lastLoginAt      DateTime?    @map("last_login_at")
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+  deletedAt        DateTime?    @map("deleted_at")
+
+  profile         Profile?
+  otpSessions     OtpSession[]
+  ads             Ad[]
+  favourites      Favourite[]
+  savedSearches   SavedSearch[]
+  buyerConvs      Conversation[] @relation("BuyerConversations")
+  sellerConvs     Conversation[] @relation("SellerConversations")
+  messagesSent    Message[]      @relation("SentMessages")
+  notifications   Notification[]
+  reportsFiled    Report[]       @relation("ReporterUser")
+  reportsReceived Report[]       @relation("ReportedUser")
+  assignedReports Report[]       @relation("ReportAssignee")
+  supportTickets  SupportTicket[] @relation("TicketRequester")
+  assignedTickets SupportTicket[] @relation("TicketAssignee")
+  supportTicketEntries SupportTicketEntry[]
+  blocksMade      Block[]        @relation("BlockingUser")
+  blocksReceived  Block[]        @relation("BlockedUser")
+  reviewsGiven    Review[]       @relation("ReviewAuthor")
+  reviewsReceived Review[]       @relation("ReviewTarget")
+  auditLogs       AuditLog[]
+
+  @@index([phoneNumber])
+  @@index([email])
+  @@index([role, status])
+  @@map("users")
+}
+
+model Profile {
+  id                 String    @id @default(uuid()) @db.VarChar(36)
+  userId             String    @unique @map("user_id") @db.VarChar(36)
+  name               String    @db.VarChar(100)
+  avatarUrl          String?   @map("avatar_url") @db.VarChar(500)
+  bio                String?   @db.VarChar(500)
+  accountType        String    @default("INDIVIDUAL") @map("account_type") @db.VarChar(20)
+  businessName       String?   @map("business_name") @db.VarChar(150)
+  locationId         String?   @map("location_id") @db.VarChar(36)
+  ratingAverage      Decimal   @default(0.0) @map("rating_average") @db.Decimal(3, 2)
+  ratingCount        Int       @default(0) @map("rating_count")
+  isIdentityVerified Boolean   @default(false) @map("is_identity_verified")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location           Location? @relation(fields: [locationId], references: [id], onDelete: SetNull)
+
+  @@map("profiles")
+}
+
+model OtpSession {
+  id          String     @id @default(uuid()) @db.VarChar(36)
+  userId      String?    @map("user_id") @db.VarChar(36)
+  phoneNumber String     @map("phone_number") @db.VarChar(15)
+  otpHash     String     @map("otp_hash") @db.VarChar(255)
+  purpose     OtpPurpose @default(LOGIN)
+  attempts    Int        @default(0)
+  isUsed      Boolean    @default(false) @map("is_used")
+  expiresAt   DateTime   @map("expires_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([phoneNumber, isUsed, expiresAt])
+  @@map("otp_sessions")
+}
+
+// ============================================================================
+// LOCATION & GEO-SPATIAL MODELS
+// ============================================================================
+
+model Location {
+  id        String     @id @default(uuid()) @db.VarChar(36)
+  name      String     @db.VarChar(100)
+  slug      String     @db.VarChar(120)
+  parentId  String?    @map("parent_id") @db.VarChar(36)
+  type      String     @db.VarChar(20) // STATE, CITY, LOCALITY
+  latitude  Float
+  longitude Float
+  pincode   String?    @db.VarChar(10)
+  isActive  Boolean    @default(true) @map("is_active")
+  createdAt DateTime   @default(now()) @map("created_at")
+  updatedAt DateTime   @updatedAt @map("updated_at")
+
+  parent    Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children  Location[] @relation("LocationHierarchy")
+  ads       Ad[]
+  profiles  Profile[]
+
+  @@unique([slug, parentId])
+  @@index([type, parentId])
+  @@index([latitude, longitude])
+  @@map("locations")
+}
+
+// ============================================================================
+// CATEGORY & DYNAMIC ATTRIBUTES
+// ============================================================================
+
+model Category {
+  id           String              @id @default(uuid()) @db.VarChar(36)
+  name         String              @db.VarChar(100)
+  slug         String              @unique @db.VarChar(120)
+  description  String?             @db.VarChar(500)
+  iconUrl      String?             @map("icon_url") @db.VarChar(500)
+  parentId     String?             @map("parent_id") @db.VarChar(36)
+  displayOrder Int                 @default(0) @map("display_order")
+  isActive     Boolean             @default(true) @map("is_active")
+  createdAt    DateTime            @default(now()) @map("created_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+
+  parent       Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Category[]          @relation("CategoryHierarchy")
+  attributes   CategoryAttribute[]
+  ads          Ad[]
+
+  @@index([parentId, isActive, displayOrder])
+  @@map("categories")
+}
+
+model CategoryAttribute {
+  id           String             @id @default(uuid()) @db.VarChar(36)
+  categoryId   String             @map("category_id") @db.VarChar(36)
+  name         String             @db.VarChar(100)
+  key          String             @db.VarChar(50) // e.g. "fuel_type", "kms_driven"
+  displayLabel String?            @map("display_label") @db.VarChar(120)
+  type         AttributeType
+  options      Json?              // For SELECT / MULTI_SELECT
+  validationRules Json?           @map("validation_rules")
+  isRequired   Boolean            @default(false) @map("is_required")
+  isFilterable Boolean            @default(true) @map("is_filterable")
+  unit         String?            @db.VarChar(20) // "KM", "GB", "BHK"
+  displayOrder Int                @default(0) @map("display_order")
+  createdAt    DateTime           @default(now()) @map("created_at")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  category     Category           @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  values       AdAttributeValue[]
+
+  @@unique([categoryId, key])
+  @@index([categoryId, isFilterable])
+  @@map("category_attributes")
+}
+
+// ============================================================================
+// CLASSIFIED ADS & MEDIA
+// ============================================================================
+
+model Ad {
+  id                String             @id @default(uuid()) @db.VarChar(36)
+  userId            String             @map("user_id") @db.VarChar(36)
+  categoryId        String             @map("category_id") @db.VarChar(36)
+  locationId        String             @map("location_id") @db.VarChar(36)
+  title             String             @db.VarChar(150)
+  slug              String             @unique @db.VarChar(200)
+  description       String             @db.Text
+  price             Decimal            @db.Decimal(12, 2)
+  isNegotiable      Boolean            @default(true) @map("is_negotiable")
+  status            AdStatus           @default(ACTIVE)
+  rejectionReason   String?            @map("rejection_reason") @db.VarChar(255)
+  viewCount         Int                @default(0) @map("view_count")
+  chatCount         Int                @default(0) @map("chat_count")
+  favouriteCount    Int                @default(0) @map("favourite_count")
+  attributesCache   Json?              @map("attributes_cache")
+  contactPreference String             @default("CHAT_AND_CALL") @map("contact_preference") @db.VarChar(30)
+  latitude          Float
+  longitude         Float
+  expiresAt         DateTime           @map("expires_at")
+  renewedAt         DateTime?          @map("renewed_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  deletedAt         DateTime?          @map("deleted_at")
+
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category          Category           @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  location          Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  images            AdImage[]
+  attributeValues   AdAttributeValue[]
+  favourites        Favourite[]
+  conversations     Conversation[]
+  reports           Report[]
+  featuredBoosts    FeaturedAd[]
+
+  @@index([status, categoryId, createdAt])
+  @@index([status, locationId, createdAt])
+  @@index([status, price])
+  @@index([userId, status])
+  @@index([latitude, longitude])
+  @@map("ads")
+}
+
+model AdImage {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  adId         String    @map("ad_id") @db.VarChar(36)
+  originalUrl  String    @map("original_url") @db.VarChar(500)
+  displayUrl   String    @map("display_url") @db.VarChar(500)
+  thumbnailUrl String    @map("thumbnail_url") @db.VarChar(500)
+  sortOrder    Int       @default(0) @map("sort_order")
+  isCover      Boolean   @default(false) @map("is_cover")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  ad           Ad        @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@index([adId, sortOrder])
+  @@map("ad_images")
+}
+
+model AdAttributeValue {
+  id          String            @id @default(uuid()) @db.VarChar(36)
+  adId        String            @map("ad_id") @db.VarChar(36)
+  attributeId String            @map("attribute_id") @db.VarChar(36)
+  value       String            @db.Text
+  createdAt   DateTime          @default(now()) @map("created_at")
+
+  ad          Ad                @relation(fields: [adId], references: [id], onDelete: Cascade)
+  attribute   CategoryAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, attributeId])
+  @@index([attributeId])
+  @@map("ad_attribute_values")
+}
+
+// ============================================================================
+// CHAT & MESSAGING
+// ============================================================================
+
+model Conversation {
+  id                String        @id @default(uuid()) @db.VarChar(36)
+  adId              String        @map("ad_id") @db.VarChar(36)
+  buyerId           String        @map("buyer_id") @db.VarChar(36)
+  sellerId          String        @map("seller_id") @db.VarChar(36)
+  lastMessageText   String?       @map("last_message_text") @db.VarChar(1000)
+  lastMessageAt     DateTime?     @map("last_message_at")
+  buyerUnreadCount  Int           @default(0) @map("buyer_unread_count")
+  sellerUnreadCount Int           @default(0) @map("seller_unread_count")
+  isBlocked         Boolean       @default(false) @map("is_blocked")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  ad                Ad            @relation(fields: [adId], references: [id], onDelete: Cascade)
+  buyer             User          @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller            User          @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
+  messages          Message[]
+  reports           Report[]
+
+  @@unique([adId, buyerId, sellerId])
+  @@index([buyerId, lastMessageAt])
+  @@index([sellerId, lastMessageAt])
+  @@map("conversations")
+}
+
+model Message {
+  id             String        @id @default(uuid()) @db.VarChar(36)
+  conversationId String        @map("conversation_id") @db.VarChar(36)
+  senderId       String        @map("sender_id") @db.VarChar(36)
+  type           MessageType   @default(TEXT)
+  content        String        @db.Text
+  attachmentUrl  String?       @map("attachment_url") @db.VarChar(500)
+  status         MessageStatus @default(SENT)
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  reports        Report[]
+
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+// ============================================================================
+// FAVOURITES & SAVED SEARCHES
+// ============================================================================
+
+model Favourite {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  userId    String   @map("user_id") @db.VarChar(36)
+  adId      String   @map("ad_id") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, adId])
+  @@index([userId, createdAt])
+  @@map("favourites")
+}
+
+model SavedSearch {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  userId         String    @map("user_id") @db.VarChar(36)
+  name           String    @db.VarChar(100)
+  queryCriteria  Json      @map("query_criteria")
+  notifyEmail    Boolean   @default(false) @map("notify_email")
+  notifyPush     Boolean   @default(true) @map("notify_push")
+  lastNotifiedAt DateTime? @map("last_notified_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("saved_searches")
+}
+
+// ============================================================================
+// TRUST, REVIEWS & MODERATION
+// ============================================================================
+
+model Review {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  authorId  String   @map("author_id") @db.VarChar(36)
+  targetId  String   @map("target_id") @db.VarChar(36)
+  rating    Int      @db.SmallInt
+  comment   String?  @db.VarChar(1000)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  author    User     @relation("ReviewAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  target    User     @relation("ReviewTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([authorId, targetId])
+  @@index([targetId, rating])
+  @@map("reviews")
+}
+
+model Report {
+  id         String       @id @default(uuid()) @db.VarChar(36)
+  reporterId String       @map("reporter_id") @db.VarChar(36)
+  reportedId String?      @map("reported_id") @db.VarChar(36)
+  adId       String?      @map("ad_id") @db.VarChar(36)
+  conversationId String?  @map("conversation_id") @db.VarChar(36)
+  messageId  String?      @map("message_id") @db.VarChar(36)
+  reason     ReportReason
+  details    String?      @db.Text
+  status     ReportStatus @default(PENDING)
+  adminNote  String?      @map("admin_note") @db.Text
+  assignedToId String?    @map("assigned_to_id") @db.VarChar(36)
+  resolutionReason String? @map("resolution_reason") @db.Text
+  resolvedAt DateTime?    @map("resolved_at")
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  reporter   User         @relation("ReporterUser", fields: [reporterId], references: [id], onDelete: Cascade)
+  reported   User?        @relation("ReportedUser", fields: [reportedId], references: [id], onDelete: SetNull)
+  ad         Ad?          @relation(fields: [adId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  message    Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  assignedTo User?        @relation("ReportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([assignedToId, status])
+  @@index([conversationId])
+  @@index([messageId])
+  @@map("reports")
+}
+
+model SupportTicket {
+  id           String         @id @default(uuid()) @db.VarChar(36)
+  requesterId  String         @map("requester_id") @db.VarChar(36)
+  category     String         @db.VarChar(80)
+  subject      String         @db.VarChar(200)
+  priority     TicketPriority @default(NORMAL)
+  status       TicketStatus   @default(OPEN)
+  assignedToId String?        @map("assigned_to_id") @db.VarChar(36)
+  slaTargetAt  DateTime?      @map("sla_target_at")
+  resolvedAt   DateTime?      @map("resolved_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  requester    User           @relation("TicketRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  assignedTo   User?          @relation("TicketAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  entries      SupportTicketEntry[]
+
+  @@index([status, priority, createdAt])
+  @@index([assignedToId, status])
+  @@map("support_tickets")
+}
+
+model SupportTicketEntry {
+  id        String        @id @default(uuid()) @db.VarChar(36)
+  ticketId  String        @map("ticket_id") @db.VarChar(36)
+  authorId  String?       @map("author_id") @db.VarChar(36)
+  body      String        @db.Text
+  isInternal Boolean      @default(false) @map("is_internal")
+  createdAt DateTime      @default(now()) @map("created_at")
+
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author    User?         @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@map("support_ticket_entries")
+}
+
+model Block {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  blockerId String   @map("blocker_id") @db.VarChar(36)
+  blockedId String   @map("blocked_id") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  blocker   User     @relation("BlockingUser", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@map("blocks")
+}
+
+// ============================================================================
+// PROMOTIONS, BANNERS & NOTIFICATIONS
+// ============================================================================
+
+model FeaturedAd {
+  id        String      @id @default(uuid()) @db.VarChar(36)
+  adId      String      @map("ad_id") @db.VarChar(36)
+  type      BoostType   @default(FEATURED)
+  status    BoostStatus @default(ACTIVE)
+  startsAt  DateTime    @map("starts_at")
+  endsAt    DateTime    @map("ends_at")
+  createdAt DateTime    @default(now()) @map("created_at")
+
+  ad        Ad          @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@index([adId, status, endsAt])
+  @@map("featured_ads")
+}
+
+model Banner {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  title        String   @db.VarChar(150)
+  imageUrl     String   @map("image_url") @db.VarChar(500)
+  targetUrl    String?  @map("target_url") @db.VarChar(500)
+  position     String   @default("HOME_HERO") @db.VarChar(50)
+  cityId       String?  @map("city_id") @db.VarChar(36)
+  isActive     Boolean  @default(true) @map("is_active")
+  displayOrder Int      @default(0) @map("display_order")
+  startsAt     DateTime @map("starts_at")
+  endsAt       DateTime @map("ends_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([isActive, position, displayOrder])
+  @@map("banners")
+}
+
+model Notification {
+  id        String           @id @default(uuid()) @db.VarChar(36)
+  userId    String           @map("user_id") @db.VarChar(36)
+  type      NotificationType
+  title     String           @db.VarChar(150)
+  body      String           @db.VarChar(500)
+  data      Json?
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  userId     String?  @map("user_id") @db.VarChar(36)
+  action     String   @db.VarChar(100)
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String   @map("entity_id") @db.VarChar(50)
+  oldData    Json?    @map("old_data")
+  newData    Json?    @map("new_data")
+  ipAddress  String?  @map("ip_address") @db.VarChar(45)
+  userAgent  String?  @map("user_agent") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([action, createdAt])
+  @@map("audit_logs")
+}
+
+model PlatformSetting {
+  key       String   @id @db.VarChar(100)
+  value     Json
+  updatedBy String?  @map("updated_by") @db.VarChar(36)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}

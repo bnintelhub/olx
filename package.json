@@ -1,0 +1,31 @@
+{
+  "name": "bharatmarket-olx",
+  "version": "1.0.0",
+  "description": "OLX ORBIT — Production-Grade OLX India Classifieds Marketplace",
+  "private": true,
+  "scripts": {
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:backend": "npm --prefix backend run build",
+    "build:frontend": "npm --prefix frontend run build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "test:e2e": "powershell -File tests/e2e_full_platform.ps1",
+    "docker:up": "docker compose up --build -d",
+    "docker:down": "docker compose down"
+  },
+  "keywords": [
+    "olx",
+    "classifieds",
+    "marketplace",
+    "react",
+    "vite",
+    "pwa",
+    "nodejs",
+    "express",
+    "mysql",
+    "prisma",
+    "socketio"
+  ],
+  "author": "OLX ORBIT Team",
+  "license": "MIT"
+}
