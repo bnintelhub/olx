@@ -30,6 +30,8 @@ enum OtpPurpose {
   REGISTER
   PHONE_UPDATE
   TRANSACTION_VERIFY
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
 }
 
 enum AttributeType {
@@ -190,7 +192,8 @@ model Profile {
 model OtpSession {
   id          String     @id @default(uuid()) @db.VarChar(36)
   userId      String?    @map("user_id") @db.VarChar(36)
-  phoneNumber String     @map("phone_number") @db.VarChar(15)
+  phoneNumber String?    @map("phone_number") @db.VarChar(15)
+  email       String?    @db.VarChar(255)
   otpHash     String     @map("otp_hash") @db.VarChar(255)
   purpose     OtpPurpose @default(LOGIN)
   attempts    Int        @default(0)
@@ -201,6 +204,7 @@ model OtpSession {
   user        User?      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([phoneNumber, isUsed, expiresAt])
+  @@index([email, isUsed, expiresAt])
   @@map("otp_sessions")
 }
 

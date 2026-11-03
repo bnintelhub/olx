@@ -1,6 +1,12 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { AuthService } from './auth.service';
 import {
+  registerSchema,
+  loginSchema,
+  verifyEmailOtpSchema,
+  forgotPasswordSchema,
+  resetPasswordSchema,
+  resendOtpSchema,
   sendOtpSchema,
   verifyOtpSchema,
   refreshTokenSchema,
@@ -9,6 +15,83 @@ import {
 import { writeAuditLog } from '../../shared/utils/audit.util';
 
 export class AuthController {
+  // ==========================================
+  // EMAIL AUTH
+  // ==========================================
+
+  static async register(request: FastifyRequest, reply: FastifyReply) {
+    const body = registerSchema.parse(request.body);
+    const result = await AuthService.register(body);
+
+    return reply.status(201).send({
+      success: true,
+      data: result,
+      meta: { timestamp: new Date().toISOString() },
+    });
+  }
+
+  static async login(request: FastifyRequest, reply: FastifyReply) {
+    const body = loginSchema.parse(request.body);
+    const result = await AuthService.login(body);
+
+    await writeAuditLog({
+      userId: result.user.id,
+      action: 'USER_EMAIL_LOGIN',
+      entityType: 'USER',
+      entityId: result.user.id,
+      request,
+    });
+
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
+
+  static async verifyEmailOtp(request: FastifyRequest, reply: FastifyReply) {
+    const body = verifyEmailOtpSchema.parse(request.body);
+    const result = await AuthService.verifyEmailOtp(body);
+
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
+
+  static async forgotPassword(request: FastifyRequest, reply: FastifyReply) {
+    const body = forgotPasswordSchema.parse(request.body);
+    const result = await AuthService.forgotPassword(body);
+
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
+
+  static async resetPassword(request: FastifyRequest, reply: FastifyReply) {
+    const body = resetPasswordSchema.parse(request.body);
+    const result = await AuthService.resetPassword(body);
+
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
+
+  static async resendOtp(request: FastifyRequest, reply: FastifyReply) {
+    const body = resendOtpSchema.parse(request.body);
+    const result = await AuthService.resendOtp(body);
+
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
+
+  // ==========================================
+  // MOBILE OTP & ADMIN
+  // ==========================================
+
   static async sendOtp(request: FastifyRequest, reply: FastifyReply) {
     const { phoneNumber } = sendOtpSchema.parse(request.body);
     const result = await AuthService.sendOtp(phoneNumber);

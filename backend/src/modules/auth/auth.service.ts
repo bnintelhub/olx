@@ -3,10 +3,19 @@ import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/app-error';
 import { HashUtil } from '../../shared/utils/hash.util';
 import { SmsService } from '../../integrations/sms/sms.service';
+import { dispatchOtpEmail } from '../../jobs/otp.job';
 import { AuthRepository } from './auth.repository';
 import { TokenPayload, AuthTokens, SendOtpResult } from './auth.types';
 import { OtpPurpose, UserRole } from '@prisma/client';
 import { getCache, setCache, delCache } from '../../config/redis';
+import {
+  RegisterInput,
+  LoginInput,
+  VerifyEmailOtpInput,
+  ForgotPasswordInput,
+  ResetPasswordInput,
+  ResendOtpInput,
+} from './auth.schema';
 
 export class AuthService {
   static sanitizePhoneNumber(phone: string): string {
@@ -33,12 +42,338 @@ export class AuthService {
     };
   }
 
-  static async sendOtp(rawPhone: string, purpose = OtpPurpose.LOGIN): Promise<SendOtpResult> {
-    const phoneNumber = this.sanitizePhoneNumber(rawPhone);
+  private static generateOtpCode(): string {
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    return isDevOrTest && env.SMS_PROVIDER === 'MOCK'
+      ? env.MOCK_OTP_CODE
+      : Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  // ==========================================
+  // EMAIL REGISTER & LOGIN
+  // ==========================================
+
+  static async register(data: RegisterInput) {
+    const cleanEmail = data.email.toLowerCase().trim();
+
+    const existingUser = await AuthRepository.findUserByEmail(cleanEmail);
+    if (existingUser && existingUser.passwordHash) {
+      throw new AppError(409, 'USER_EXISTS', 'An account with this email address already exists.');
+    }
+
+    const passwordHash = await HashUtil.hashPassword(data.password);
+
+    let user = existingUser;
+    if (!user) {
+      user = await AuthRepository.createUserWithEmail({
+        email: cleanEmail,
+        passwordHash,
+        name: data.name,
+      });
+    } else {
+      await AuthRepository.updateUserPassword(user.id, passwordHash);
+    }
+
+    // Generate Email Verification OTP
+    const otpCode = this.generateOtpCode();
+    const otpHash = HashUtil.sha256(otpCode);
+    const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_SECONDS * 1000);
+
+    const session = await AuthRepository.createOtpSession({
+      email: cleanEmail,
+      userId: user.id,
+      otpHash,
+      purpose: OtpPurpose.EMAIL_VERIFICATION,
+      expiresAt,
+    });
+
+    // Dispatch background email job via BullMQ
+    await dispatchOtpEmail({
+      to: cleanEmail,
+      otp: otpCode,
+      purpose: 'EMAIL_VERIFICATION',
+    });
 
     const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
 
-    // 1. Check Redis cooldown first, fallback to DB
+    return {
+      message: 'Registration successful. A verification OTP has been sent to your email.',
+      sessionId: session.id,
+      expiresInSeconds: env.OTP_EXPIRY_SECONDS,
+      mockOtp: isDevOrTest ? otpCode : undefined,
+    };
+  }
+
+  static async login(data: LoginInput) {
+    const cleanEmail = data.email.toLowerCase().trim();
+    const user = await AuthRepository.findUserByEmail(cleanEmail);
+
+    if (!user || user.status !== 'ACTIVE') {
+      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    }
+
+    if (!user.passwordHash) {
+      throw new AppError(401, 'PASSWORD_NOT_SET', 'No password set for this account. Please login using OTP or reset your password.');
+    }
+
+    const isPasswordValid = await HashUtil.comparePassword(data.password, user.passwordHash);
+    if (!isPasswordValid) {
+      throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
+    }
+
+    const tokenPayload: TokenPayload = {
+      userId: user.id,
+      role: user.role,
+      phoneNumber: user.phoneNumber || undefined,
+      email: user.email || undefined,
+    };
+
+    const tokens = this.generateTokens(tokenPayload);
+    const tokenHash = HashUtil.sha256(tokens.refreshToken);
+
+    await AuthRepository.updateUserTokens(user.id, tokenHash);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        isEmailVerified: user.isEmailVerified,
+        role: user.role,
+        profile: user.profile,
+      },
+      tokens,
+    };
+  }
+
+  static async verifyEmailOtp(data: VerifyEmailOtpInput) {
+    const cleanEmail = data.email.toLowerCase().trim();
+    const session = await AuthRepository.findOtpSession(data.sessionId);
+
+    if (!session || session.email !== cleanEmail) {
+      throw new AppError(400, 'INVALID_SESSION', 'Invalid or expired OTP session. Please request a new code.');
+    }
+
+    if (session.isUsed) {
+      throw new AppError(400, 'OTP_ALREADY_USED', 'This OTP has already been verified.');
+    }
+
+    if (new Date() > session.expiresAt) {
+      throw new AppError(400, 'OTP_EXPIRED', 'OTP has expired. Please request a new verification code.');
+    }
+
+    if (session.attempts >= 3) {
+      throw new AppError(429, 'MAX_ATTEMPTS_EXCEEDED', 'Too many invalid attempts. Session locked.');
+    }
+
+    const submittedHash = HashUtil.sha256(data.otp);
+    if (submittedHash !== session.otpHash) {
+      await AuthRepository.incrementOtpAttempts(session.id);
+      throw new AppError(400, 'INCORRECT_OTP', 'Incorrect OTP entered. Please try again.');
+    }
+
+    await AuthRepository.markOtpSessionUsed(session.id);
+
+    const user = await AuthRepository.findUserByEmail(cleanEmail);
+    if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User profile not found');
+
+    await AuthRepository.markEmailVerified(user.id);
+
+    const tokenPayload: TokenPayload = {
+      userId: user.id,
+      role: user.role,
+      phoneNumber: user.phoneNumber || undefined,
+      email: user.email || undefined,
+    };
+
+    const tokens = this.generateTokens(tokenPayload);
+    const tokenHash = HashUtil.sha256(tokens.refreshToken);
+    await AuthRepository.updateUserTokens(user.id, tokenHash);
+
+    return {
+      message: 'Email verified successfully!',
+      user: {
+        id: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        isEmailVerified: true,
+        role: user.role,
+        profile: user.profile,
+      },
+      tokens,
+    };
+  }
+
+  // ==========================================
+  // FORGOT PASSWORD, RESET & RESEND
+  // ==========================================
+
+  static async forgotPassword(data: ForgotPasswordInput) {
+    const cleanEmail = data.email.toLowerCase().trim();
+    const user = await AuthRepository.findUserByEmail(cleanEmail);
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'No account found with this email address.');
+    }
+
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    const cooldownKey = `otp_cooldown:${cleanEmail}`;
+    const inCooldown = await getCache<boolean>(cooldownKey);
+
+    if (inCooldown && !isDevOrTest) {
+      throw new AppError(429, 'OTP_RATE_LIMITED', `Please wait ${env.OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting a new code.`);
+    }
+
+    const otpCode = this.generateOtpCode();
+    const otpHash = HashUtil.sha256(otpCode);
+    const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_SECONDS * 1000);
+
+    const session = await AuthRepository.createOtpSession({
+      email: cleanEmail,
+      userId: user.id,
+      otpHash,
+      purpose: OtpPurpose.PASSWORD_RESET,
+      expiresAt,
+    });
+
+    await setCache(cooldownKey, true, env.OTP_RESEND_COOLDOWN_SECONDS);
+
+    // BullMQ background email
+    await dispatchOtpEmail({
+      to: cleanEmail,
+      otp: otpCode,
+      purpose: 'PASSWORD_RESET',
+    });
+
+    return {
+      message: 'Password reset OTP has been sent to your email address.',
+      sessionId: session.id,
+      expiresInSeconds: env.OTP_EXPIRY_SECONDS,
+      mockOtp: isDevOrTest ? otpCode : undefined,
+    };
+  }
+
+  static async resetPassword(data: ResetPasswordInput) {
+    const cleanEmail = data.email.toLowerCase().trim();
+    const session = await AuthRepository.findOtpSession(data.sessionId);
+
+    if (!session || session.email !== cleanEmail || session.purpose !== OtpPurpose.PASSWORD_RESET) {
+      throw new AppError(400, 'INVALID_SESSION', 'Invalid or expired password reset session.');
+    }
+
+    if (session.isUsed) {
+      throw new AppError(400, 'OTP_ALREADY_USED', 'This password reset code has already been used.');
+    }
+
+    if (new Date() > session.expiresAt) {
+      throw new AppError(400, 'OTP_EXPIRED', 'Password reset code has expired. Please request a new code.');
+    }
+
+    if (session.attempts >= 3) {
+      throw new AppError(429, 'MAX_ATTEMPTS_EXCEEDED', 'Too many invalid attempts. Session locked.');
+    }
+
+    const submittedHash = HashUtil.sha256(data.otp);
+    if (submittedHash !== session.otpHash) {
+      await AuthRepository.incrementOtpAttempts(session.id);
+      throw new AppError(400, 'INCORRECT_OTP', 'Incorrect reset code entered. Please try again.');
+    }
+
+    await AuthRepository.markOtpSessionUsed(session.id);
+
+    const user = await AuthRepository.findUserByEmail(cleanEmail);
+    if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User profile not found');
+
+    const passwordHash = await HashUtil.hashPassword(data.newPassword);
+    await AuthRepository.updateUserPassword(user.id, passwordHash);
+
+    await delCache(`user:${user.id}`);
+
+    return {
+      message: 'Password has been reset successfully. Please log in with your new password.',
+    };
+  }
+
+  static async resendOtp(data: ResendOtpInput) {
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    const otpCode = this.generateOtpCode();
+    const otpHash = HashUtil.sha256(otpCode);
+    const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_SECONDS * 1000);
+    const purpose = data.purpose || OtpPurpose.LOGIN;
+
+    if (data.email) {
+      const cleanEmail = data.email.toLowerCase().trim();
+      const cooldownKey = `otp_cooldown:${cleanEmail}`;
+      const inCooldown = await getCache<boolean>(cooldownKey);
+
+      if (inCooldown && !isDevOrTest) {
+        throw new AppError(429, 'OTP_RATE_LIMITED', `Please wait ${env.OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting a new code.`);
+      }
+
+      const session = await AuthRepository.createOtpSession({
+        email: cleanEmail,
+        otpHash,
+        purpose,
+        expiresAt,
+      });
+
+      await setCache(cooldownKey, true, env.OTP_RESEND_COOLDOWN_SECONDS);
+
+      // BullMQ Email Dispatch
+      await dispatchOtpEmail({
+        to: cleanEmail,
+        otp: otpCode,
+        purpose,
+      });
+
+      return {
+        message: 'A new OTP has been sent to your email.',
+        sessionId: session.id,
+        expiresInSeconds: env.OTP_EXPIRY_SECONDS,
+        resendCooldownSeconds: env.OTP_RESEND_COOLDOWN_SECONDS,
+        mockOtp: isDevOrTest ? otpCode : undefined,
+      };
+    }
+
+    if (data.phoneNumber) {
+      const phoneNumber = this.sanitizePhoneNumber(data.phoneNumber);
+      const cooldownKey = `otp_cooldown:${phoneNumber}`;
+      const inCooldown = await getCache<boolean>(cooldownKey);
+
+      if (inCooldown && !isDevOrTest) {
+        throw new AppError(429, 'OTP_RATE_LIMITED', `Please wait ${env.OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting a new code.`);
+      }
+
+      const session = await AuthRepository.createOtpSession({
+        phoneNumber,
+        otpHash,
+        purpose,
+        expiresAt,
+      });
+
+      await setCache(cooldownKey, true, env.OTP_RESEND_COOLDOWN_SECONDS);
+      await SmsService.sendOtp(phoneNumber, otpCode);
+
+      return {
+        message: 'A new OTP has been sent to your mobile number.',
+        sessionId: session.id,
+        expiresInSeconds: env.OTP_EXPIRY_SECONDS,
+        resendCooldownSeconds: env.OTP_RESEND_COOLDOWN_SECONDS,
+        mockOtp: isDevOrTest ? otpCode : undefined,
+      };
+    }
+
+    throw new AppError(400, 'BAD_REQUEST', 'Please provide either an email or mobile number.');
+  }
+
+  // ==========================================
+  // MOBILE OTP LOGIN & ADMIN
+  // ==========================================
+
+  static async sendOtp(rawPhone: string, purpose = OtpPurpose.LOGIN): Promise<SendOtpResult> {
+    const phoneNumber = this.sanitizePhoneNumber(rawPhone);
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+
     const cooldownKey = `otp_cooldown:${phoneNumber}`;
     const inCooldown = await getCache<boolean>(cooldownKey);
     if (inCooldown && !isDevOrTest) {
@@ -50,7 +385,7 @@ export class AuthService {
     }
 
     const cooldownDate = new Date(Date.now() - env.OTP_RESEND_COOLDOWN_SECONDS * 1000);
-    const recentDbSession = await AuthRepository.findRecentOtpSession(phoneNumber, cooldownDate);
+    const recentDbSession = await AuthRepository.findRecentOtpSession({ phoneNumber }, cooldownDate);
     if (recentDbSession && !isDevOrTest) {
       throw new AppError(
         429,
@@ -59,16 +394,10 @@ export class AuthService {
       );
     }
 
-    // 2. Generate OTP
-    const otpCode =
-      isDevOrTest && env.SMS_PROVIDER === 'MOCK'
-        ? env.MOCK_OTP_CODE
-        : Math.floor(100000 + Math.random() * 900000).toString();
-
+    const otpCode = this.generateOtpCode();
     const otpHash = HashUtil.sha256(otpCode);
     const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_SECONDS * 1000);
 
-    // 3. Save OTP Session
     const session = await AuthRepository.createOtpSession({
       phoneNumber,
       otpHash,
@@ -76,10 +405,7 @@ export class AuthService {
       expiresAt,
     });
 
-    // 4. Cache cooldown in Redis
     await setCache(cooldownKey, true, env.OTP_RESEND_COOLDOWN_SECONDS);
-
-    // 5. Send SMS
     await SmsService.sendOtp(phoneNumber, otpCode);
 
     return {
@@ -160,6 +486,7 @@ export class AuthService {
       userId: user.id,
       role: user.role,
       phoneNumber: user.phoneNumber || undefined,
+      email: user.email || undefined,
     };
     const tokens = this.generateTokens(tokenPayload);
     const newHash = HashUtil.sha256(tokens.refreshToken);

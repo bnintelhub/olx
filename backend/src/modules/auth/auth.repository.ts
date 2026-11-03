@@ -1,10 +1,17 @@
 import { prisma } from '../../config/prisma';
-import { OtpPurpose, User, UserRole } from '@prisma/client';
+import { OtpPurpose, UserRole } from '@prisma/client';
 
 export class AuthRepository {
   static async findUserByPhone(phoneNumber: string) {
     return prisma.user.findUnique({
       where: { phoneNumber },
+      include: { profile: true },
+    });
+  }
+
+  static async findUserByEmail(email: string) {
+    return prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
       include: { profile: true },
     });
   }
@@ -29,6 +36,25 @@ export class AuthRepository {
           { phoneNumber: '+919876543210' },
           { role: UserRole.ADMIN },
         ],
+      },
+      include: { profile: true },
+    });
+  }
+
+  static async createUserWithEmail(data: { email: string; passwordHash: string; name?: string }) {
+    const cleanEmail = data.email.toLowerCase();
+    const defaultName = data.name || cleanEmail.split('@')[0];
+
+    return prisma.user.create({
+      data: {
+        email: cleanEmail,
+        passwordHash: data.passwordHash,
+        isEmailVerified: false,
+        profile: {
+          create: {
+            name: defaultName,
+          },
+        },
       },
       include: { profile: true },
     });
@@ -81,8 +107,27 @@ export class AuthRepository {
     });
   }
 
+  static async updateUserPassword(userId: string, passwordHash: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash,
+        refreshTokenHash: null,
+      },
+    });
+  }
+
+  static async markEmailVerified(userId: string) {
+    return prisma.user.update({
+      where: { id: userId },
+      data: { isEmailVerified: true },
+    });
+  }
+
   static async createOtpSession(data: {
-    phoneNumber: string;
+    phoneNumber?: string;
+    email?: string;
+    userId?: string;
     otpHash: string;
     purpose: OtpPurpose;
     expiresAt: Date;
@@ -94,13 +139,24 @@ export class AuthRepository {
     return prisma.otpSession.findUnique({ where: { id } });
   }
 
-  static async findRecentOtpSession(phoneNumber: string, cooldownDate: Date) {
-    return prisma.otpSession.findFirst({
-      where: {
-        phoneNumber,
-        createdAt: { gte: cooldownDate },
-      },
-    });
+  static async findRecentOtpSession(filter: { phoneNumber?: string; email?: string }, cooldownDate: Date) {
+    if (filter.phoneNumber) {
+      return prisma.otpSession.findFirst({
+        where: {
+          phoneNumber: filter.phoneNumber,
+          createdAt: { gte: cooldownDate },
+        },
+      });
+    }
+    if (filter.email) {
+      return prisma.otpSession.findFirst({
+        where: {
+          email: filter.email.toLowerCase(),
+          createdAt: { gte: cooldownDate },
+        },
+      });
+    }
+    return null;
   }
 
   static async incrementOtpAttempts(id: string) {

@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { initRedis, redis } from './config/redis';
 import { checkDatabaseConnection, prisma } from './config/prisma';
 import { setupChatSocket } from './modules/chat/chat.socket';
+import { closeOtpQueue } from './jobs/otp.job';
 
 async function startServer() {
   try {
@@ -34,6 +35,7 @@ async function startServer() {
     console.log(`📡 URL: http://localhost:${port}/api/v1/health`);
     console.log(`📚 Swagger Docs: http://localhost:${port}/docs`);
     console.log(`⚡ Real-Time Socket.IO: Activated`);
+    console.log(`🐂 Background Jobs: BullMQ (Queue: otp-dispatch)`);
     console.log(`🗄️ Database: PostgreSQL 16 (${dbStatus ? 'Connected' : 'Pending'})`);
     console.log(`⚡ Cache: Redis 7 (${redis.status === 'ready' || redis.status === 'connect' ? 'Connected' : 'Connecting'})`);
     console.log(`📱 SMS Gateway: ${env.SMS_PROVIDER} (Mock Code: ${env.MOCK_OTP_CODE})`);
@@ -43,6 +45,7 @@ async function startServer() {
     const closeGracefully = async (signal: string) => {
       console.log(`\nReceived ${signal}, closing server gracefully...`);
       io.close();
+      await closeOtpQueue();
       await app.close();
       await prisma.$disconnect();
       redis.disconnect();
