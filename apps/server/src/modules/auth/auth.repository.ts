@@ -27,14 +27,12 @@ export class AuthRepository {
   }
 
   static async findUserByEmailOrPhone(cleanUsername: string) {
+    const term = cleanUsername.trim().toLowerCase();
     return prisma.user.findFirst({
       where: {
         OR: [
-          { email: 'admin@bharatmarket.in' },
-          { email: cleanUsername.toLowerCase() },
-          { phoneNumber: cleanUsername },
-          { phoneNumber: '+919876543210' },
-          { role: UserRole.ADMIN },
+          { email: term },
+          { phoneNumber: cleanUsername.trim() },
         ],
       },
       include: { profile: true },

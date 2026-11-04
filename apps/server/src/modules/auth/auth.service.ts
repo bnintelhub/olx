@@ -500,23 +500,37 @@ export class AuthService {
     const cleanUsername = String(username).trim();
     const cleanPassword = String(password).trim();
 
+    // 1. Look up user by exact email or phone
     let adminUser = await AuthRepository.findUserByEmailOrPhone(cleanUsername);
 
-    // If specific role was requested for rahul credentials, find corresponding user or fallback
-    if (requestedRole && cleanUsername.toLowerCase().includes('rahul')) {
-      const roleSuffix = requestedRole.toLowerCase().replace(/_/g, '');
-      const specificUser = await AuthRepository.findUserByEmailOrPhone(`rahul+${roleSuffix}@gmail.com`);
-      if (specificUser) {
-        adminUser = specificUser;
-      }
+    // If literal "admin" was entered as username, fallback to env.ADMIN_USERNAME
+    if (!adminUser && cleanUsername.toLowerCase() === 'admin') {
+      adminUser = await AuthRepository.findUserByEmailOrPhone(env.ADMIN_USERNAME);
     }
 
-    const usernameMatches =
-      cleanUsername.toLowerCase() === env.ADMIN_USERNAME.toLowerCase() ||
-      cleanUsername.toLowerCase() === 'rahul@gmail.com' ||
-      cleanUsername.toLowerCase() === 'admin' ||
-      (adminUser?.email && cleanUsername.toLowerCase() === adminUser.email.toLowerCase());
+    // 2. Validate allowed administrative roles
+    const staffRoles: UserRole[] = [
+      UserRole.SUPER_ADMIN,
+      UserRole.ADMIN,
+      UserRole.MODERATOR,
+      UserRole.CUSTOMER_SUPPORT,
+      UserRole.FINANCE_ADMIN,
+      UserRole.CONTENT_MANAGER,
+      UserRole.ANALYST,
+    ];
 
+    const isStaff = adminUser ? staffRoles.includes(adminUser.role) : false;
+    const isEnvAdmin = cleanUsername.toLowerCase() === env.ADMIN_USERNAME.toLowerCase();
+
+    if (!adminUser && !isEnvAdmin) {
+      throw new AppError(401, 'INVALID_ADMIN_CREDENTIALS', 'Invalid Admin username or password');
+    }
+
+    if (adminUser && !isStaff) {
+      throw new AppError(403, 'INSUFFICIENT_PERMISSIONS', 'Account does not have admin console privileges');
+    }
+
+    // 3. Verify password
     let passwordMatches = false;
     if (adminUser?.passwordHash) {
       passwordMatches = await HashUtil.comparePassword(cleanPassword, adminUser.passwordHash);
@@ -529,7 +543,7 @@ export class AuthService {
           : env.NODE_ENV !== 'production' && Boolean(env.ADMIN_PASSWORD) && cleanPassword === env.ADMIN_PASSWORD);
     }
 
-    if (!usernameMatches || !passwordMatches) {
+    if (!passwordMatches) {
       throw new AppError(401, 'INVALID_ADMIN_CREDENTIALS', 'Invalid Admin username or password');
     }
 
@@ -538,7 +552,7 @@ export class AuthService {
       adminUser = await AuthRepository.createDefaultAdmin(hashed);
     }
 
-    // Use the user's actual database role. Only SUPER_ADMIN can optionally assume other view contexts.
+    // 4. Effective role: Use database role; only SUPER_ADMIN can optionally assume other view contexts
     let effectiveRole = adminUser.role;
     if (adminUser.role === 'SUPER_ADMIN' && requestedRole) {
       effectiveRole = requestedRole as any;
