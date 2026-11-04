@@ -123,7 +123,7 @@ export const Sidebar = React.forwardRef<
   if (collapsible === 'none') {
     return (
       <div
-        className={cn('flex h-full w-[--sidebar-width] flex-col bg-card border-r text-card-foreground', className)}
+        className={cn('flex h-full w-[--sidebar-width] flex-col bg-sidebar border-r border-sidebar-border text-sidebar-foreground transition-colors duration-200', className)}
         ref={ref}
         {...props}
       >
@@ -140,7 +140,7 @@ export const Sidebar = React.forwardRef<
         <div
           ref={ref}
           className={cn(
-            'relative flex h-full w-[--sidebar-width-mobile] flex-col bg-card border-r text-card-foreground shadow-2xl z-50 p-0',
+            'relative flex h-full w-[--sidebar-width-mobile] flex-col bg-sidebar border-r border-sidebar-border text-sidebar-foreground shadow-2xl z-50 p-0 transition-colors duration-200',
             className
           )}
           style={{ width: SIDEBAR_WIDTH_MOBILE }}
@@ -167,7 +167,7 @@ export const Sidebar = React.forwardRef<
     >
       <div
         className={cn(
-          'fixed inset-y-0 z-20 hidden h-screen w-[--sidebar-width] flex-col border-r bg-card text-card-foreground transition-[left,right,width] ease-linear md:flex duration-200',
+          'fixed inset-y-0 z-20 hidden h-screen w-[--sidebar-width] flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-[left,right,width] ease-linear md:flex duration-200',
           side === 'left' ? 'left-0' : 'right-0',
           state === 'collapsed' && 'w-[--sidebar-width-icon]',
           variant === 'floating' || variant === 'inset' ? 'p-2' : ''
@@ -246,7 +246,7 @@ SidebarTrigger.displayName = 'SidebarTrigger';
 
 export const SidebarHeader = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => {
-    return <div ref={ref} data-sidebar="header" className={cn('flex flex-col gap-2 p-2', className)} {...props} />;
+    return <div ref={ref} data-sidebar="header" className={cn('flex flex-col gap-2 p-2 border-b border-sidebar-border/60 bg-sidebar transition-colors duration-200', className)} {...props} />;
   }
 );
 SidebarHeader.displayName = 'SidebarHeader';
@@ -257,7 +257,7 @@ export const SidebarContent = React.forwardRef<HTMLDivElement, React.ComponentPr
       <div
         ref={ref}
         data-sidebar="content"
-        className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden no-scrollbar', className)}
+        className={cn('flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden no-scrollbar bg-sidebar transition-colors duration-200', className)}
         {...props}
       />
     );
@@ -267,7 +267,7 @@ SidebarContent.displayName = 'SidebarContent';
 
 export const SidebarFooter = React.forwardRef<HTMLDivElement, React.ComponentProps<'div'>>(
   ({ className, ...props }, ref) => {
-    return <div ref={ref} data-sidebar="footer" className={cn('flex flex-col gap-2 p-2 mt-auto border-t', className)} {...props} />;
+    return <div ref={ref} data-sidebar="footer" className={cn('flex flex-col gap-2 p-2 mt-auto border-t border-sidebar-border/60 bg-sidebar transition-colors duration-200', className)} {...props} />;
   }
 );
 SidebarFooter.displayName = 'SidebarFooter';
@@ -287,7 +287,7 @@ export const SidebarGroupLabel = React.forwardRef<HTMLDivElement, React.Componen
         ref={ref}
         data-sidebar="group-label"
         className={cn(
-          'flex h-7 shrink-0 items-center rounded-md px-2 text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80 outline-none group-data-[collapsible=icon]:hidden',
+          'flex h-7 shrink-0 items-center rounded-md px-2 text-[10px] font-bold tracking-wider uppercase text-sidebar-foreground/60 outline-none group-data-[collapsible=icon]:hidden',
           className
         )}
         {...props}
@@ -319,12 +319,12 @@ export const SidebarMenuItem = React.forwardRef<HTMLLIElement, React.ComponentPr
 SidebarMenuItem.displayName = 'SidebarMenuItem';
 
 const sidebarMenuButtonVariants = cva(
-  'peer/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-lg p-2 text-left text-xs font-medium outline-none transition-colors hover:bg-muted/80 hover:text-foreground focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0',
+  'peer/menu-button flex w-full items-center gap-2.5 overflow-hidden rounded-lg p-2 text-left text-xs font-medium outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0',
   {
     variants: {
       variant: {
-        default: 'hover:bg-muted/80 hover:text-foreground',
-        outline: 'bg-background shadow-xs hover:bg-muted/80',
+        default: 'hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+        outline: 'bg-background shadow-xs hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
       },
       size: {
         default: 'h-8 text-xs',

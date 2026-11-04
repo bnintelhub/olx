@@ -43,13 +43,13 @@ export function NavMain() {
             </TooltipContent>
           </Tooltip>
         ) : (
-          <div className="flex items-center gap-2.5 rounded-lg border bg-muted/40 p-2 text-xs">
+          <div className="flex items-center gap-2.5 rounded-lg border border-sidebar-border bg-sidebar-accent/50 p-2 text-xs transition-colors duration-200">
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary shrink-0">
               <RoleIcon className="h-4 w-4" />
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between">
-                <span className="truncate text-xs font-bold text-foreground">{roleMeta.label}</span>
+                <span className="truncate text-xs font-bold text-sidebar-foreground">{roleMeta.label}</span>
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
               </div>
               <span className="truncate text-[10px] text-muted-foreground block">{roleMeta.subtitle}</span>
@@ -61,7 +61,7 @@ export function NavMain() {
       {/* Grouped Navigation Sections */}
       {navGroups.map((group) => (
         <SidebarGroup key={group.label} className="py-1 px-2">
-          <SidebarGroupLabel className="text-[10px] font-bold text-muted-foreground tracking-wider uppercase px-2 mb-1 group-data-[collapsible=icon]:hidden">
+          <SidebarGroupLabel className="text-[10px] font-bold text-sidebar-foreground/60 tracking-wider uppercase px-2 mb-1 group-data-[collapsible=icon]:hidden">
             {group.label}
           </SidebarGroupLabel>
           <SidebarMenu>
@@ -75,14 +75,14 @@ export function NavMain() {
                       onClick={handleLinkClick}
                       className={({ isActive }) =>
                         cn(
-                          'flex items-center gap-2.5 w-full rounded-lg transition-colors',
+                          'flex items-center gap-2.5 w-full rounded-lg transition-colors duration-150',
                           isActive
                             ? 'bg-primary text-primary-foreground font-semibold shadow-xs hover:bg-primary/90 hover:text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-muted/80 hover:text-foreground'
+                            : 'text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                         )
                       }
                     >
-                      <Icon className="h-4 w-4 shrink-0" />
+                      <Icon className="h-4 w-4 shrink-0 transition-colors" />
                       <span className="truncate group-data-[collapsible=icon]:hidden">{item.title}</span>
                       {item.badge && (
                         <SidebarMenuBadge

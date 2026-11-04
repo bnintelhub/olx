@@ -52,7 +52,7 @@ export function TeamSwitcher({ teams = DEFAULT_TEAMS }: { teams?: Team[] }) {
                 <Logo className="size-4" />
               </div>
               <div className="grid flex-1 text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-bold text-foreground">{activeTeam.name}</span>
+                <span className="truncate font-bold text-sidebar-foreground">{activeTeam.name}</span>
                 <span className="truncate text-[10px] text-muted-foreground">{activeTeam.plan}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden text-muted-foreground" />

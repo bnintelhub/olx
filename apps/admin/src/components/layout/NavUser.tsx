@@ -57,7 +57,7 @@ export function NavUser({
                 <AvatarFallback className="rounded-lg font-bold text-xs">RK</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
-                <span className="truncate font-semibold text-foreground">{user.name}</span>
+                <span className="truncate font-semibold text-sidebar-foreground">{user.name}</span>
                 <span className="truncate text-[10px] text-muted-foreground">{user.email}</span>
               </div>
               <ChevronsUpDown className="ml-auto size-4 group-data-[collapsible=icon]:hidden text-muted-foreground" />
