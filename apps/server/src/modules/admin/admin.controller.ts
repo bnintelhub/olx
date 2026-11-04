@@ -1,6 +1,11 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { AdminService } from './admin.service';
-import { userActionSchema, updateAdminProfileSchema, changeAdminPasswordSchema } from './admin.schema';
+import {
+  userActionSchema,
+  updateAdminProfileSchema,
+  changeAdminPasswordSchema,
+  createInvitationSchema,
+} from './admin.schema';
 import { AdStatus } from '@prisma/client';
 import { writeAuditLog } from '../../shared/utils/audit.util';
 
@@ -85,5 +90,41 @@ export class AdminController {
     const { currentPassword, newPassword } = changeAdminPasswordSchema.parse(request.body);
     const result = await AdminService.changePassword(request.user!.id, currentPassword, newPassword);
     return reply.status(200).send({ success: true, data: result });
+  }
+
+  static async createStaffInvitation(request: FastifyRequest, reply: FastifyReply) {
+    const { email, role } = createInvitationSchema.parse(request.body);
+    const result = await AdminService.createStaffInvitation(request.user!.id, email, role);
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: 'STAFF_INVITATION_SENT',
+      entityType: 'INVITATION',
+      entityId: result.invitation.id,
+      newData: { email, role },
+      request,
+    });
+
+    return reply.status(201).send({ success: true, data: result });
+  }
+
+  static async getStaffInvitations(request: FastifyRequest, reply: FastifyReply) {
+    const list = await AdminService.getStaffInvitations();
+    return reply.status(200).send({ success: true, data: list });
+  }
+
+  static async revokeStaffInvitation(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const revoked = await AdminService.revokeStaffInvitation(id);
+
+    await writeAuditLog({
+      userId: request.user!.id,
+      action: 'STAFF_INVITATION_REVOKED',
+      entityType: 'INVITATION',
+      entityId: id,
+      request,
+    });
+
+    return reply.status(200).send({ success: true, data: revoked });
   }
 }

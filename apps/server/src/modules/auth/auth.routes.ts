@@ -16,6 +16,10 @@ export async function authRoutes(fastify: FastifyInstance) {
   fastify.post('/admin-login', AuthController.adminLogin);
   fastify.post('/refresh', AuthController.refreshTokens);
 
+  // Staff Invitation Acceptance (Public)
+  fastify.get('/invitation/:token', AuthController.getInvitation);
+  fastify.post('/accept-invitation', AuthController.acceptInvitation);
+
   // Authenticated endpoints
   fastify.get('/me', { preHandler: [fastify.authenticate] }, AuthController.getMe);
   fastify.post('/logout', { preHandler: [fastify.authenticate] }, AuthController.logout);

@@ -60,6 +60,15 @@ export const adminLoginSchema = z.object({
   role: z.string().optional(),
 });
 
+export const acceptInvitationSchema = z.object({
+  token: z.string().min(10, 'Invitation token is required'),
+  name: z.string().min(2, 'Full name must be at least 2 characters'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  phoneNumber: z.string().optional(),
+});
+
+export type AcceptInvitationInput = z.infer<typeof acceptInvitationSchema>;
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type VerifyEmailOtpInput = z.infer<typeof verifyEmailOtpSchema>;

@@ -10,6 +10,7 @@ import {
   sendOtpSchema,
   verifyOtpSchema,
   adminLoginSchema,
+  acceptInvitationSchema,
 } from './auth.schema';
 import { writeAuditLog } from '../../shared/utils/audit.util';
 import { env } from '../../config/env';
@@ -267,6 +268,38 @@ export class AuthController {
     return reply.status(200).send({
       success: true,
       data: { message: 'Logged out successfully' },
+    });
+  }
+
+  // ==========================================
+  // STAFF INVITATION WORKFLOW
+  // ==========================================
+
+  static async getInvitation(request: FastifyRequest, reply: FastifyReply) {
+    const { token } = request.params as { token: string };
+    const details = await AuthService.getInvitationByToken(token);
+    return reply.status(200).send({ success: true, data: details });
+  }
+
+  static async acceptInvitation(request: FastifyRequest, reply: FastifyReply) {
+    const body = acceptInvitationSchema.parse(request.body);
+    const result = await AuthService.acceptStaffInvitation(body);
+
+    // Set HTTP-only session cookies
+    setAuthCookies(reply, result.tokens);
+
+    await writeAuditLog({
+      userId: result.user.id,
+      action: 'STAFF_INVITATION_ACCEPTED',
+      entityType: 'USER',
+      entityId: result.user.id,
+      request,
+    });
+
+    return reply.status(200).send({
+      success: true,
+      data: result,
+      message: 'Invitation accepted successfully. Account activated.',
     });
   }
 }

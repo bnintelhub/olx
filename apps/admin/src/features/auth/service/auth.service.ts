@@ -32,6 +32,29 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+export interface StaffInvitationItem {
+  id: string;
+  email: string;
+  role: AdminRole;
+  token: string;
+  status: 'PENDING' | 'ACCEPTED' | 'EXPIRED' | 'REVOKED';
+  expiresAt: string;
+  acceptedAt?: string | null;
+  createdAt: string;
+  invitedBy?: {
+    id: string;
+    email?: string;
+    profile?: { name?: string | null };
+  };
+}
+
+export interface InvitationDetails {
+  email: string;
+  role: AdminRole;
+  invitedBy: string;
+  expiresAt: string;
+}
+
 export const authService = {
   // Primary admin authentication endpoint - sets secure HTTP-only cookies on reply
   async adminLogin(payload: AdminLoginPayload): Promise<AuthResponseData> {
@@ -110,5 +133,47 @@ export const authService = {
   // Terminate session and clear HTTP-only cookies on backend
   async logout(): Promise<void> {
     await apiClient.post('/auth/logout');
+  },
+
+  // ==========================================
+  // STAFF INVITATIONS (Super Admin Actions)
+  // ==========================================
+
+  async createStaffInvitation(payload: { email: string; role: AdminRole }): Promise<{ invitation: StaffInvitationItem; inviteLink: string }> {
+    const { data } = await apiClient.post<ApiResponse<{ invitation: StaffInvitationItem; inviteLink: string }>>('/admin/invitations', payload);
+    return data.data;
+  },
+
+  async getStaffInvitations(): Promise<StaffInvitationItem[]> {
+    const { data } = await apiClient.get<ApiResponse<StaffInvitationItem[]>>('/admin/invitations');
+    return data.data;
+  },
+
+  async revokeStaffInvitation(id: string): Promise<StaffInvitationItem> {
+    const { data } = await apiClient.delete<ApiResponse<StaffInvitationItem>>(`/admin/invitations/${id}`);
+    return data.data;
+  },
+
+  // ==========================================
+  // STAFF INVITATION ACCEPTANCE (Public Flow)
+  // ==========================================
+
+  async getInvitationDetails(token: string): Promise<InvitationDetails> {
+    const { data } = await apiClient.get<ApiResponse<InvitationDetails>>(`/auth/invitation/${token}`);
+    return data.data;
+  },
+
+  async acceptStaffInvitation(payload: { token: string; name: string; password: string; phoneNumber?: string }): Promise<AuthResponseData> {
+    const { data } = await apiClient.post<ApiResponse<any>>('/auth/accept-invitation', payload);
+    const rawUser = data.data.user;
+    const user: AdminUser = {
+      id: rawUser.id,
+      email: rawUser.email,
+      phoneNumber: rawUser.phoneNumber,
+      role: rawUser.role,
+      name: rawUser.name || rawUser.profile?.name || 'Staff Member',
+      permissions: rawUser.permissions || [],
+    };
+    return { user, tokens: data.data.tokens };
   },
 };

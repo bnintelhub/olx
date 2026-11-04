@@ -46,4 +46,21 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.get('/profile', auth, AdminController.getProfile);
   fastify.put('/profile', auth, AdminController.updateProfile);
   fastify.put('/change-password', auth, AdminController.changePassword);
+
+  // Staff Invitations Workflow (Super Admin only)
+  fastify.post(
+    '/invitations',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
+    AdminController.createStaffInvitation
+  );
+  fastify.get(
+    '/invitations',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
+    AdminController.getStaffInvitations
+  );
+  fastify.delete(
+    '/invitations/:id',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
+    AdminController.revokeStaffInvitation
+  );
 }

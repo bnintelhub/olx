@@ -1,4 +1,6 @@
+import crypto from 'crypto';
 import { prisma } from '../../config/prisma';
+import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/app-error';
 import { AdStatus, Prisma, UserRole } from '@prisma/client';
 import { HashUtil } from '../../shared/utils/hash.util';
@@ -193,5 +195,92 @@ export class AdminService {
       data: { passwordHash: hashed },
     });
     return { message: 'Password changed successfully' };
+  }
+
+  // ==========================================
+  // STAFF INVITATION WORKFLOW
+  // ==========================================
+
+  static async createStaffInvitation(invitedById: string, email: string, role: UserRole) {
+    const cleanEmail = email.trim().toLowerCase();
+
+    const staffRoles: UserRole[] = [
+      UserRole.SUPER_ADMIN,
+      UserRole.ADMIN,
+      UserRole.MODERATOR,
+      UserRole.CUSTOMER_SUPPORT,
+      UserRole.FINANCE_ADMIN,
+      UserRole.CONTENT_MANAGER,
+      UserRole.ANALYST,
+    ];
+
+    if (!staffRoles.includes(role)) {
+      throw new AppError(400, 'INVALID_ROLE', 'Only administrative staff roles can be invited');
+    }
+
+    // Check if user already exists as active staff
+    const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
+    if (existingUser && staffRoles.includes(existingUser.role)) {
+      throw new AppError(409, 'STAFF_ALREADY_EXISTS', `An active staff account with email ${cleanEmail} already exists`);
+    }
+
+    // Invalidate any prior pending invite for this email
+    await (prisma as any).staffInvitation.updateMany({
+      where: { email: cleanEmail, status: 'PENDING' },
+      data: { status: 'REVOKED' },
+    });
+
+    // Generate single-use secure crypto token expiring in 48 hours
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+
+    const invitation = await (prisma as any).staffInvitation.create({
+      data: {
+        email: cleanEmail,
+        role,
+        token,
+        invitedById,
+        status: 'PENDING',
+        expiresAt,
+      },
+      include: {
+        invitedBy: {
+          select: { id: true, email: true, profile: { select: { name: true } } },
+        },
+      },
+    });
+
+    const clientOrigin = env.CLIENT_URL || 'http://localhost:5174';
+    const inviteLink = `${clientOrigin}/accept-invite?token=${token}`;
+
+    return {
+      invitation,
+      inviteLink,
+    };
+  }
+
+  static async getStaffInvitations() {
+    return (prisma as any).staffInvitation.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        invitedBy: {
+          select: { id: true, email: true, profile: { select: { name: true } } },
+        },
+      },
+    });
+  }
+
+  static async revokeStaffInvitation(id: string) {
+    const invitation = await (prisma as any).staffInvitation.findUnique({ where: { id } });
+    if (!invitation) throw new AppError(404, 'INVITATION_NOT_FOUND', 'Staff invitation not found');
+
+    if (invitation.status !== 'PENDING') {
+      throw new AppError(400, 'CANNOT_REVOKE', `Invitation cannot be revoked because status is ${invitation.status}`);
+    }
+
+    return (prisma as any).staffInvitation.update({
+      where: { id },
+      data: { status: 'REVOKED' },
+    });
   }
 }

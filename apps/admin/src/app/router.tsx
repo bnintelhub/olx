@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { AdminRole } from '../types';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoginPage } from '../features/auth/LoginPage';
+import { AcceptInvitePage } from '../features/auth/AcceptInvitePage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { ModeratorDashboard } from '../features/dashboard/ModeratorDashboard';
 import { UsersPage } from '../features/users/UsersPage';
@@ -68,6 +69,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <LoginPage />,
+  },
+  {
+    path: '/accept-invite',
+    element: <AcceptInvitePage />,
   },
   {
     path: '/',

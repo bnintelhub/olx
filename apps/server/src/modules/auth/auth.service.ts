@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { prisma } from '../../config/prisma';
 import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/app-error';
 import { HashUtil } from '../../shared/utils/hash.util';
@@ -605,6 +606,119 @@ export class AuthService {
         adsCount: user._count.ads,
         favouritesCount: user._count.favourites,
       },
+    };
+  }
+
+  // ==========================================
+  // STAFF INVITATION ACCEPTANCE
+  // ==========================================
+
+  static async getInvitationByToken(token: string) {
+    const cleanToken = String(token).trim();
+    const invitation = await (prisma as any).staffInvitation.findUnique({
+      where: { token: cleanToken },
+      include: {
+        invitedBy: {
+          select: { email: true, profile: { select: { name: true } } },
+        },
+      },
+    });
+
+    if (!invitation) {
+      throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid token');
+    }
+
+    const isExpired = new Date() > new Date(invitation.expiresAt);
+    if (invitation.status === 'REVOKED') {
+      throw new AppError(400, 'INVITATION_REVOKED', 'This invitation was revoked by an administrator');
+    }
+    if (invitation.status === 'ACCEPTED') {
+      throw new AppError(400, 'INVITATION_ACCEPTED', 'This invitation has already been accepted');
+    }
+    if (isExpired || invitation.status === 'EXPIRED') {
+      throw new AppError(400, 'INVITATION_EXPIRED', 'This invitation has expired. Please ask for a new invite.');
+    }
+
+    return {
+      email: invitation.email,
+      role: invitation.role,
+      invitedBy: invitation.invitedBy?.profile?.name || invitation.invitedBy?.email || 'Super Admin',
+      expiresAt: invitation.expiresAt,
+    };
+  }
+
+  static async acceptStaffInvitation(data: { token: string; name: string; password: string; phoneNumber?: string }) {
+    const cleanToken = String(data.token).trim();
+    const invitation = await (prisma as any).staffInvitation.findUnique({
+      where: { token: cleanToken },
+    });
+
+    if (!invitation) {
+      throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid token');
+    }
+    if (invitation.status !== 'PENDING' || new Date() > new Date(invitation.expiresAt)) {
+      throw new AppError(400, 'INVITATION_INVALID', 'Invitation is no longer valid or has expired');
+    }
+
+    const passwordHash = await HashUtil.hashPassword(data.password.trim());
+
+    // Create or upgrade user with the invited role
+    const user = await prisma.user.upsert({
+      where: { email: invitation.email },
+      update: {
+        passwordHash,
+        role: invitation.role,
+        status: 'ACTIVE',
+        isEmailVerified: true,
+        phoneNumber: data.phoneNumber?.trim() || undefined,
+        profile: {
+          upsert: {
+            create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
+            update: { name: data.name.trim() },
+          },
+        },
+      },
+      create: {
+        email: invitation.email,
+        passwordHash,
+        role: invitation.role,
+        status: 'ACTIVE',
+        isEmailVerified: true,
+        phoneNumber: data.phoneNumber?.trim(),
+        profile: {
+          create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
+        },
+      },
+      include: { profile: true },
+    });
+
+    // Mark invitation as ACCEPTED
+    await (prisma as any).staffInvitation.update({
+      where: { id: invitation.id },
+      data: { status: 'ACCEPTED', acceptedAt: new Date() },
+    });
+
+    // Issue HTTP-only authentication session tokens
+    const tokenPayload: TokenPayload = {
+      userId: user.id,
+      role: user.role,
+      email: user.email || undefined,
+      phoneNumber: user.phoneNumber || undefined,
+    };
+
+    const tokens = this.generateTokens(tokenPayload);
+    const tokenHash = HashUtil.sha256(tokens.refreshToken);
+    await AuthRepository.updateUserTokens(user.id, tokenHash);
+
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        role: user.role,
+        profile: user.profile,
+      },
+      tokens,
     };
   }
 }
