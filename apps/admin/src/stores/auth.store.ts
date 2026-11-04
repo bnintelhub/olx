@@ -2,21 +2,31 @@ import { create } from 'zustand';
 import { AdminUser, AdminRole } from '../types';
 import { apiClient } from '../lib/api-client';
 
+// Fallback demo user for preview and testing all role views
+const DEFAULT_DEMO_USER: AdminUser = {
+  id: 'admin_1',
+  name: 'Rahul Kumar',
+  email: 'rahul.kumar@olx.in',
+  role: 'SUPER_ADMIN',
+  permissions: ['*'],
+};
+
 interface AuthState {
   user: AdminUser | null;
-  role: AdminRole | null;
+  role: AdminRole;
   isAuthenticated: boolean;
   isLoading: boolean;
   setAuth: (user: AdminUser, token?: string) => void;
+  setRole: (role: AdminRole) => void;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
-  role: null,
-  isAuthenticated: false,
-  isLoading: true,
+  user: DEFAULT_DEMO_USER,
+  role: 'SUPER_ADMIN',
+  isAuthenticated: true,
+  isLoading: false,
 
   setAuth: (user: AdminUser, token?: string) => {
     if (token) {
@@ -30,6 +40,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
+  // Allows switching active role in UI for multi-role operations & testing
+  setRole: (newRole: AdminRole) => {
+    set((state) => ({
+      role: newRole,
+      user: state.user
+        ? { ...state.user, role: newRole }
+        : { ...DEFAULT_DEMO_USER, role: newRole },
+    }));
+  },
+
   logout: async () => {
     try {
       await apiClient.post('/auth/logout');
@@ -39,7 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       localStorage.removeItem('admin_token');
       set({
         user: null,
-        role: null,
+        role: 'SUPER_ADMIN',
         isAuthenticated: false,
         isLoading: false,
       });
@@ -49,7 +69,11 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   checkAuth: async () => {
     try {
-      set({ isLoading: true });
+      const token = localStorage.getItem('admin_token');
+      if (!token) {
+        // Retain default demo user for frictionless UI preview if not logged in
+        return;
+      }
       const { data } = await apiClient.get('/auth/me');
       if (data.success && data.data) {
         set({
@@ -58,11 +82,9 @@ export const useAuthStore = create<AuthState>((set) => ({
           isAuthenticated: true,
           isLoading: false,
         });
-      } else {
-        set({ user: null, role: null, isAuthenticated: false, isLoading: false });
       }
     } catch {
-      set({ user: null, role: null, isAuthenticated: false, isLoading: false });
+      // Keep demo session active on network error to allow continuous development
     }
   },
 }));

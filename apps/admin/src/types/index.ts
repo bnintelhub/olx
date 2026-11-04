@@ -21,7 +21,7 @@ export interface MetricCardData {
   value: string | number;
   change: string;
   isPositive: boolean;
-  description: string;
+  description?: string;
 }
 
 export interface UserItem {
@@ -32,6 +32,7 @@ export interface UserItem {
   status: 'ACTIVE' | 'SUSPENDED' | 'BANNED';
   createdAt: string;
   name?: string;
+  listingsCount?: number;
 }
 
 export interface ListingItem {
@@ -43,6 +44,53 @@ export interface ListingItem {
   sellerName: string;
   createdAt: string;
   imagesCount: number;
+  imageUrl?: string;
+}
+
+export interface ModerationQueueItem {
+  id: string;
+  title: string;
+  sellerName: string;
+  sellerEmail: string;
+  category: string;
+  price: number;
+  flagReason: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  thumbnailUrl?: string;
+  submittedAt: string;
+}
+
+export interface SupportTicketItem {
+  id: string;
+  ticketNumber: string;
+  customerName: string;
+  email: string;
+  subject: string;
+  category: string;
+  priority: 'HIGH' | 'MEDIUM' | 'LOW';
+  status: 'OPEN' | 'IN_PROGRESS' | 'RESOLVED';
+  createdAt: string;
+}
+
+export interface TransactionItem {
+  id: string;
+  amount: number;
+  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REFUNDED';
+  userEmail: string;
+  userName?: string;
+  packageType: string;
+  createdAt: string;
+}
+
+export interface BannerItem {
+  id: string;
+  title: string;
+  placement: string;
+  impressions: number;
+  clicks: number;
+  ctr: string;
+  status: 'ACTIVE' | 'SCHEDULED' | 'PAUSED';
+  expiryDate: string;
 }
 
 export interface ReportItem {
@@ -62,14 +110,5 @@ export interface AuditLogItem {
   entityType: string;
   entityId: string;
   ipAddress?: string;
-  createdAt: string;
-}
-
-export interface TransactionItem {
-  id: string;
-  amount: number;
-  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REFUNDED';
-  userEmail: string;
-  packageType: string;
   createdAt: string;
 }

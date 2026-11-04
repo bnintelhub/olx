@@ -47,3 +47,4 @@ export function SettingsPage() {
     </div>
   );
 }
+
