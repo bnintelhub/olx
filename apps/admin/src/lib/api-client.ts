@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-// Base Axios client configured for secure, HTTP-only cookie authentication
+// Base Axios client configured for secure, HTTP-only cookie authentication.
+// Automatically attaches and receives HTTP-only cookies on every request.
 export const apiClient = axios.create({
   baseURL: '/api/v1',
-  withCredentials: true, // Automatically sends and receives HTTP-only cookies
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -12,7 +13,8 @@ export const apiClient = axios.create({
 // Mutex promise to prevent duplicate concurrent refresh requests
 let refreshPromise: Promise<boolean> | null = null;
 
-// Silently refreshes authentication cookies using the HTTP-only refresh_token cookie
+// Silently refreshes authentication cookies using the HTTP-only refresh_token cookie.
+// Returns a boolean indicating whether the refresh attempt succeeded.
 export async function executeSilentRefresh(): Promise<boolean> {
   if (refreshPromise) {
     return refreshPromise;
@@ -41,20 +43,38 @@ apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    const isRefreshCall = originalRequest?.url?.includes('/auth/refresh');
-    const isLoginCall = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/admin-login');
+    const url = originalRequest?.url || '';
+    const isRefreshCall = url.includes('/auth/refresh');
+    const isPublicAuthCall =
+      url.includes('/auth/login') ||
+      url.includes('/auth/admin-login') ||
+      url.includes('/auth/register') ||
+      url.includes('/auth/invitation') ||
+      url.includes('/auth/accept-invitation') ||
+      url.includes('/auth/otp') ||
+      url.includes('/auth/forgot-password') ||
+      url.includes('/auth/reset-password');
 
-    if (error.response?.status === 401 && !originalRequest?._retry && !isRefreshCall && !isLoginCall) {
+    // Do not attempt token refresh for public auth endpoints
+    if (isRefreshCall || isPublicAuthCall) {
+      return Promise.reject(error);
+    }
+
+    if (error.response?.status === 401 && !originalRequest?._retry) {
       originalRequest._retry = true;
 
       const refreshSuccess = await executeSilentRefresh();
       if (refreshSuccess) {
-        // Retry original request with newly issued session cookies
         return apiClient(originalRequest);
       }
 
-      // If refresh failed completely, session is invalid
-      if (window.location.pathname !== '/login') {
+      // Redirect only if the user is on a protected route.
+      // Public pages like /login and /accept-invite must never be redirected.
+      const isPublicPage =
+        window.location.pathname === '/login' ||
+        window.location.pathname.startsWith('/accept-invite');
+
+      if (!isPublicPage) {
         window.location.href = '/login';
       }
     }

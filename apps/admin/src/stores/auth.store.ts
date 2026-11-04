@@ -102,10 +102,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return success;
   },
 
+  // Verifies existing session on application boot by querying authenticated profile.
+  // Sets authenticated user state if cookie is valid, otherwise unsets session.
   checkAuth: async () => {
     set({ isLoading: true });
     try {
-      // Validate session via HTTP-only cookie automatically sent with request
       const user = await authService.getMe();
       if (user) {
         schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
@@ -118,28 +119,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         return;
       }
     } catch {
-      // If cookie expired during idle, attempt silent refresh before giving up
-      const refreshed = await executeSilentRefresh();
-      if (refreshed) {
-        try {
-          const user = await authService.getMe();
-          if (user) {
-            schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
-            set({
-              user,
-              role: user.role,
-              isAuthenticated: true,
-              isLoading: false,
-            });
-            return;
-          }
-        } catch {
-          // Silent refresh failed
-        }
-      }
+      // Session does not exist or refresh failed in interceptor
     }
 
-    // No valid session on server - clear credentials and lock access
     clearPredictiveTimer();
     set({
       user: null,
