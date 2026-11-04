@@ -4,6 +4,7 @@ import { useTheme } from '../../app/theme-provider';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { SidebarTrigger } from '../ui/sidebar';
+import { Separator } from '../ui/separator';
 import { AdminRole } from '../../types';
 import { ROLE_CONFIGS } from '../../lib/permissions';
 import {
@@ -64,6 +65,7 @@ export function AdminHeader() {
       <div className="flex items-center gap-3 flex-1 max-w-lg">
         {/* Responsive shadcn Sidebar Trigger */}
         <SidebarTrigger />
+        <Separator orientation="vertical" className="hidden sm:block h-4" />
 
         {/* Global Search Input */}
         <div className="relative w-full hidden sm:block">
