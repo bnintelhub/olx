@@ -6,10 +6,12 @@
   "packageManager": "pnpm@11.25.0",
   "scripts": {
     "dev": "turbo run dev",
+    "dev:admin": "pnpm --filter @olx/admin dev",
     "dev:client": "pnpm --filter @olx/client dev",
     "dev:server": "pnpm --filter @olx/server dev",
     "dev:workers": "pnpm --filter @olx/workers dev",
     "build": "turbo run build",
+    "build:admin": "pnpm --filter @olx/admin build",
     "build:client": "pnpm --filter @olx/client build",
     "build:server": "pnpm --filter @olx/server build",
     "build:workers": "pnpm --filter @olx/workers build",

@@ -109,6 +109,22 @@ services:
     networks:
       - bharatmarket_net
 
+  # ========================================================
+  # Admin Operations Client (React + Vite + Nginx)
+  # ========================================================
+  admin:
+    build:
+      context: .
+      dockerfile: ./apps/admin/Dockerfile
+    container_name: bharatmarket_admin
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "5174:80"
+    networks:
+      - bharatmarket_net
+
 volumes:
   postgres_data:
     driver: local

@@ -55,6 +55,7 @@ The repository is organized as a high-performance **pnpm + Turborepo monorepo**:
 ```
 olx/
 ├── apps/
+│   ├── admin/               # React + Tailwind + TanStack Admin Operations Portal (@olx/admin)
 │   ├── client/              # React 18 + Vite Web Application (@olx/client)
 │   ├── server/              # Fastify v4 + TypeScript 7 Backend REST API (@olx/server)
 │   └── workers/             # BullMQ 5.x Background Job Processing Workers (@olx/workers)
@@ -73,8 +74,9 @@ All commands can be executed from the monorepo root:
 
 | Command | Action |
 |:---|:---|
-| `pnpm dev` | Starts all applications (`client`, `server`, `workers`) concurrently via Turbo |
-| `pnpm dev:client` | Starts only the React + Vite frontend development server on port 5173 |
+| `pnpm dev` | Starts all applications (`admin`, `client`, `server`, `workers`) concurrently via Turbo |
+| `pnpm dev:admin` | Starts the Admin Operations Portal on port 5174 |
+| `pnpm dev:client` | Starts the React + Vite frontend development server on port 5173 |
 | `pnpm dev:server` | Starts only the Fastify backend API in watch mode via `tsx` on port 5000 |
 | `pnpm dev:workers` | Starts only the BullMQ background worker service in watch mode via `tsx` |
 | `pnpm build` | Compiles all packages and applications via Turbo with topological ordering |
