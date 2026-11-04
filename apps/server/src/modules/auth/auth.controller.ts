@@ -20,12 +20,16 @@ import { AuthTokens } from './auth.types';
 // Sets secure HTTP-only cookies on reply to keep the user logged in across page reloads.
 // Configures short-lived access token and 30-day refresh token with CSRF-safe SameSite.
 function setAuthCookies(reply: FastifyReply, tokens: AuthTokens) {
+  const accessMaxAge = tokens.expiresInSeconds && tokens.expiresInSeconds > 900
+    ? tokens.expiresInSeconds
+    : 24 * 60 * 60; // 24 hours for staff sessions
+
   reply.setCookie('access_token', tokens.accessToken, {
     path: '/',
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 15 * 60,
+    maxAge: accessMaxAge,
   });
 
   reply.setCookie('refresh_token', tokens.refreshToken, {

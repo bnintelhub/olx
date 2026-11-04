@@ -1,12 +1,19 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { AdminUser, AdminRole } from '../types';
 import { authService } from '../features/auth/service/auth.service';
 import { executeSilentRefresh } from '../lib/api-client';
 
-// Access token lifespan is 15 minutes (900 seconds)
-const ACCESS_TOKEN_LIFESPAN_MS = 15 * 60 * 1000;
-// Proactively refresh 1 minute before expiry (at 14 minutes)
-const PREDICTIVE_BUFFER_MS = 14 * 60 * 1000;
+// Clean up any legacy localStorage key to ensure no tokens remain in client storage
+try {
+  localStorage.removeItem('olx-admin-auth');
+} catch {
+  // Ignore in non-browser environments
+}
+
+// Access token lifespan for admin sessions is 24 hours (86,400,000 ms)
+// Proactively schedule silent refresh 1 hour before expiry
+const PREDICTIVE_BUFFER_MS = 23 * 60 * 60 * 1000;
 
 // In-memory standing timer for predictive silent refresh
 let predictiveTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -18,7 +25,6 @@ function clearPredictiveTimer() {
   }
 }
 
-// Proactively schedules a background cookie renewal 1 minute before the 15-minute access token expires
 function schedulePredictiveRefresh(delayMs = PREDICTIVE_BUFFER_MS) {
   clearPredictiveTimer();
 
@@ -26,7 +32,6 @@ function schedulePredictiveRefresh(delayMs = PREDICTIVE_BUFFER_MS) {
     // Silently renew HTTP-only cookies in background
     const success = await executeSilentRefresh();
     if (success) {
-      // Re-arm timer for the next cycle
       schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
     }
   }, delayMs);
@@ -44,90 +49,113 @@ interface AuthState {
   silentRefresh: () => Promise<boolean>;
 }
 
-export const useAuthStore = create<AuthState>((set, get) => ({
-  user: null,
-  role: 'ADMIN',
-  isAuthenticated: false,
-  isLoading: true, // starts in loading state while checking authentic server session cookie
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      role: 'ADMIN',
+      isAuthenticated: false,
+      isLoading: true,
 
-  setAuth: (user: AdminUser) => {
-    // Arm in-memory predictive timer on login (zero localStorage token usage)
-    schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
-
-    set({
-      user,
-      role: user.role,
-      isAuthenticated: true,
-      isLoading: false,
-    });
-  },
-
-  // Allows switching active role in UI - strictly guarded so only SUPER_ADMIN can toggle dashboards
-  setRole: (newRole: AdminRole) => {
-    const currentUser = get().user;
-    if (currentUser?.role !== 'SUPER_ADMIN') {
-      // Non-super-admins cannot toggle dashboards
-      return;
-    }
-    set({
-      role: newRole,
-    });
-  },
-
-  logout: async () => {
-    clearPredictiveTimer();
-    try {
-      await authService.logout();
-    } catch {
-      // Ignore network errors on logout
-    } finally {
-      set({
-        user: null,
-        role: 'ADMIN',
-        isAuthenticated: false,
-        isLoading: false,
-      });
-
-      if (window.location.pathname !== '/login') {
-        window.location.href = '/login';
-      }
-    }
-  },
-
-  silentRefresh: async () => {
-    const success = await executeSilentRefresh();
-    if (success) {
-      schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
-    }
-    return success;
-  },
-
-  // Verifies existing session on application boot by querying authenticated profile.
-  // Sets authenticated user state if cookie is valid, otherwise unsets session.
-  checkAuth: async () => {
-    set({ isLoading: true });
-    try {
-      const user = await authService.getMe();
-      if (user) {
+      setAuth: (user: AdminUser) => {
         schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
+
         set({
           user,
           role: user.role,
           isAuthenticated: true,
           isLoading: false,
         });
-        return;
-      }
-    } catch {
-      // Session does not exist or refresh failed in interceptor
-    }
+      },
 
-    clearPredictiveTimer();
-    set({
-      user: null,
-      role: 'ADMIN',
-      isAuthenticated: false,
-      isLoading: false,
-    });
-  },
-}));
+      setRole: (newRole: AdminRole) => {
+        const currentUser = get().user;
+        if (currentUser?.role !== 'SUPER_ADMIN') {
+          return;
+        }
+        set({ role: newRole });
+      },
+
+      logout: async () => {
+        clearPredictiveTimer();
+        try {
+          await authService.logout();
+        } catch {
+          // Ignore network errors on logout
+        } finally {
+          set({
+            user: null,
+            role: 'ADMIN',
+            isAuthenticated: false,
+            isLoading: false,
+          });
+
+          try {
+            localStorage.removeItem('olx-admin-user');
+          } catch {
+            // ignore
+          }
+
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login';
+          }
+        }
+      },
+
+      silentRefresh: async () => {
+        const success = await executeSilentRefresh();
+        if (success) {
+          schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
+        }
+        return success;
+      },
+
+      checkAuth: async () => {
+        const currentUser = get().user;
+        if (!currentUser) {
+          set({ isLoading: true });
+        }
+
+        try {
+          // Authenticate against server using secure HTTP-only cookies
+          const user = await authService.getMe();
+          if (user) {
+            schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
+            set({
+              user,
+              role: user.role,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+            return;
+          }
+        } catch (err: any) {
+          // If server explicitly returns 401 and silent refresh failed, reset session
+          if (err?.response?.status === 401) {
+            await get().logout();
+            return;
+          }
+          // On network errors or server reboot, preserve existing cached profile
+        }
+
+        set({ isLoading: false });
+      },
+    }),
+    {
+      name: 'olx-admin-user',
+      storage: createJSONStorage(() => localStorage),
+      // Only persist non-sensitive user profile data for immediate UI rendering
+      // NO tokens are ever persisted to localStorage (100% HTTP-only cookies)
+      partialize: (state) => ({
+        user: state.user,
+        role: state.role,
+        isAuthenticated: state.isAuthenticated,
+      }),
+      onRehydrateStorage: () => (state) => {
+        if (state && state.user) {
+          state.isLoading = false;
+        }
+      },
+    }
+  )
+);

@@ -1,15 +1,29 @@
 import { FastifyInstance } from 'fastify';
 import { AdminController } from './admin.controller';
-import { requirePermission } from '../../plugins/auth.plugin';
+import { requirePermission, authorizeRoles } from '../../plugins/auth.plugin';
 import { Permissions } from '../../shared/auth/rbac';
+import { UserRole } from '@prisma/client';
 
 export async function adminRoutes(fastify: FastifyInstance) {
   const auth = { preHandler: [fastify.authenticate] };
 
-  // Analytics & Platform Stats (Super Admin, Admin, Analyst)
+  // Analytics & Platform Stats (Accessible to all staff dashboard roles)
   fastify.get(
     '/stats',
-    { preHandler: [fastify.authenticate, requirePermission(Permissions.ANALYTICS_READ)] },
+    {
+      preHandler: [
+        fastify.authenticate,
+        authorizeRoles(
+          UserRole.SUPER_ADMIN,
+          UserRole.ADMIN,
+          UserRole.MODERATOR,
+          UserRole.CUSTOMER_SUPPORT,
+          UserRole.FINANCE_ADMIN,
+          UserRole.CONTENT_MANAGER,
+          UserRole.ANALYST
+        ),
+      ],
+    },
     AdminController.getStats
   );
 

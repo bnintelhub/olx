@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -12,45 +11,21 @@ import {
 } from '../../components/ui/table';
 import {
   Image,
-  Megaphone,
   FolderTree,
   Sparkles,
-  Plus,
-  CheckCircle2,
+  ShoppingBag,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react';
-import { toast } from 'sonner';
-
-interface BannerItem {
-  id: string;
-  name: string;
-  slot: string;
-  views: string;
-  clicks: string;
-  ctr: string;
-  status: 'ACTIVE' | 'PAUSED';
-}
-
-const INITIAL_BANNERS: BannerItem[] = [
-  { id: 'b_1', name: 'Diwali Electronics Mega Sale', slot: 'Home Top Banner', views: '2.4M', clicks: '142K', ctr: '5.9%', status: 'ACTIVE' },
-  { id: 'b_2', name: 'Certified Pre-Owned Cars Festival', slot: 'Vehicles Category Header', views: '980K', clicks: '68K', ctr: '6.9%', status: 'ACTIVE' },
-  { id: 'b_3', name: 'Verified Business Seller Program', slot: 'Side Rails & Search', views: '1.1M', clicks: '44K', ctr: '4.0%', status: 'ACTIVE' },
-  { id: 'b_4', name: 'Zero Brokerage Homes Campaign', slot: 'Real Estate Header', views: '720K', clicks: '51K', ctr: '7.1%', status: 'ACTIVE' },
-];
+import { useDashboardStats, useCategoriesList } from './hook/useDashboardQuery';
 
 export function ContentManagerDashboard() {
-  const [banners, setBanners] = useState<BannerItem[]>(INITIAL_BANNERS);
+  const { data: stats, isFetching: statsFetching, refetch: refetchStats } = useDashboardStats('CONTENT_MANAGER');
+  const { data: categories = [], isLoading: catLoading, isFetching: catFetching, refetch: refetchCats } = useCategoriesList();
 
-  const toggleBanner = (id: string, name: string) => {
-    setBanners((prev) =>
-      prev.map((b) => {
-        if (b.id === id) {
-          const next = b.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
-          toast.success(`Banner "${name}" set to ${next}`);
-          return { ...b, status: next };
-        }
-        return b;
-      })
-    );
+  const handleRefresh = () => {
+    refetchStats();
+    refetchCats();
   };
 
   return (
@@ -60,71 +35,90 @@ export function ContentManagerDashboard() {
         <div>
           <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Content & CMS Management</h2>
           <p className="text-xs text-muted-foreground">
-            Manage banners, featured collections, taxonomy categories, and platform announcements.
+            Manage banners, taxonomy categories, featured collections, and promotional slots.
           </p>
         </div>
-        <Button size="sm" className="gap-1.5 text-xs">
-          <Plus className="h-3.5 w-3.5" />
-          <span>New Campaign</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={statsFetching || catFetching}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${statsFetching || catFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Badge variant="outline" className="px-3 py-1 text-xs font-semibold border-primary/20 text-primary">
+            CMS Engine Active
+          </Badge>
+        </div>
       </div>
 
       {/* 4 Content KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Hero Banners</span>
-            <Image className="h-4 w-4 text-pink-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">12 Active</div>
-            <p className="text-[11px] text-muted-foreground mt-1">4 scheduled for weekend</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Announcements</span>
-            <Megaphone className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-foreground">5 Published</div>
-            <p className="text-[11px] text-muted-foreground mt-1">Platform-wide broadcasts</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <span className="text-xs font-medium text-muted-foreground">Active Categories</span>
             <FolderTree className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">36 Categories</div>
-            <p className="text-[11px] text-muted-foreground mt-1">214 Subcategories active</p>
+            <div className="text-2xl font-bold text-foreground">
+              {stats?.totalCategories ?? categories.length} Categories
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Marketplace taxonomy</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Featured Collections</span>
+            <span className="text-xs font-medium text-muted-foreground">Hero Banners</span>
+            <Image className="h-4 w-4 text-pink-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">
+              {stats?.activeBanners ?? 0} Active
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Platform visual campaigns</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-medium text-muted-foreground">Featured Promotions</span>
             <Sparkles className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-foreground">8 Live</div>
-            <p className="text-[11px] text-emerald-600 font-medium mt-1">+14.2% engagement</p>
+            <div className="text-2xl font-bold text-foreground">
+              {stats?.activePromotions ?? 0} Live
+            </div>
+            <p className="text-[11px] text-emerald-600 font-medium mt-1">Active promoted listings</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <span className="text-xs font-medium text-muted-foreground">Pending Review</span>
+            <ShoppingBag className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-foreground">
+              {stats?.pendingAds ?? 0} Ads
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Editorial check queue</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Banners & Promotions Table */}
+      {/* Categories Taxonomy Table */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between pb-4 border-b">
           <div>
-            <CardTitle className="text-base font-bold">Marketing Banners & Campaigns</CardTitle>
-            <p className="text-xs text-muted-foreground">Monitor impression delivery and click-through performance.</p>
+            <CardTitle className="text-base font-bold">Category Taxonomy & Structure</CardTitle>
+            <p className="text-xs text-muted-foreground">Live marketplace categories registered in the database.</p>
           </div>
-          <Badge variant="outline" className="text-xs">
-            Live Impressions Counter
+          <Badge variant="outline" className="text-xs font-mono">
+            {categories.length} Registered
           </Badge>
         </CardHeader>
 
@@ -132,47 +126,48 @@ export function ContentManagerDashboard() {
           <Table>
             <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider">
               <TableRow>
-                <TableHead className="px-5 py-3">Campaign Name</TableHead>
-                <TableHead className="px-5 py-3">Slot Placement</TableHead>
-                <TableHead className="px-5 py-3">Impressions</TableHead>
-                <TableHead className="px-5 py-3">Clicks</TableHead>
-                <TableHead className="px-5 py-3">CTR</TableHead>
-                <TableHead className="px-5 py-3">Status</TableHead>
-                <TableHead className="px-5 py-3 text-right">Action</TableHead>
+                <TableHead className="px-5 py-3">Category Name</TableHead>
+                <TableHead className="px-5 py-3">Slug Identifier</TableHead>
+                <TableHead className="px-5 py-3">ID</TableHead>
+                <TableHead className="px-5 py-3 text-right">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {banners.map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell className="px-5 py-3 font-bold text-foreground">{b.name}</TableCell>
-                  <TableCell className="px-5 py-3 text-muted-foreground">{b.slot}</TableCell>
-                  <TableCell className="px-5 py-3 font-semibold text-foreground">{b.views}</TableCell>
-                  <TableCell className="px-5 py-3 font-semibold text-foreground">{b.clicks}</TableCell>
-                  <TableCell className="px-5 py-3 font-bold text-emerald-600 dark:text-emerald-400">{b.ctr}</TableCell>
-                  <TableCell className="px-5 py-3">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        b.status === 'ACTIVE'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {b.status === 'ACTIVE' && <CheckCircle2 className="h-3 w-3" />}
-                      {b.status}
-                    </span>
-                  </TableCell>
-                  <TableCell className="px-5 py-3 text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => toggleBanner(b.id, b.name)}
-                      className="h-7 text-xs"
-                    >
-                      {b.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                    </Button>
+              {catLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-12">
+                    <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      <span>Loading categories...</span>
+                    </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : categories.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center py-12 text-muted-foreground text-xs">
+                    No categories configured yet.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                categories.map((cat) => (
+                  <TableRow key={cat.id} className="hover:bg-muted/30">
+                    <TableCell className="px-5 py-3 font-bold text-xs text-foreground">
+                      {cat.name}
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-xs font-mono text-muted-foreground">
+                      /{cat.slug}
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-xs font-mono text-muted-foreground">
+                      {cat.id}
+                    </TableCell>
+                    <TableCell className="px-5 py-3 text-right">
+                      <Badge variant="outline" className="text-[10px] text-emerald-600 border-emerald-500/20 bg-emerald-500/10">
+                        ACTIVE
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -180,4 +175,3 @@ export function ContentManagerDashboard() {
     </div>
   );
 }
-

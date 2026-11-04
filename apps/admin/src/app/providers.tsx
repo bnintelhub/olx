@@ -7,11 +7,10 @@ import { useAuthStore } from '../stores/auth.store';
 import { ThemeProvider } from './theme-provider';
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const checkAuth = useAuthStore((s) => s.checkAuth);
-
   useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+    // Check authentic session exactly once on application mount
+    useAuthStore.getState().checkAuth();
+  }, []);
 
   return (
     <ThemeProvider defaultTheme="dark" storageKey="olx-admin-theme">

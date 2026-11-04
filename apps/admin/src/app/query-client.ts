@@ -5,7 +5,14 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 1000 * 60 * 2, // 2 minutes
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: (failureCount, error: any) => {
+        // Never retry client auth or permission errors to prevent infinite request cascades
+        const status = error?.response?.status;
+        if (status === 401 || status === 403 || status === 404) {
+          return false;
+        }
+        return failureCount < 1;
+      },
     },
   },
 });

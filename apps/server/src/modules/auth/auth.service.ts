@@ -37,14 +37,27 @@ export class AuthService {
   // Generates short-lived signed JWT access token and cryptographically random refresh token.
   // Returns token pair along with access token expiration interval for client sync.
   static generateTokens(payload: TokenPayload): AuthTokens {
+    const staffRoles: UserRole[] = [
+      UserRole.SUPER_ADMIN,
+      UserRole.ADMIN,
+      UserRole.MODERATOR,
+      UserRole.CUSTOMER_SUPPORT,
+      UserRole.FINANCE_ADMIN,
+      UserRole.CONTENT_MANAGER,
+      UserRole.ANALYST,
+    ];
+    const isStaff = payload.role && staffRoles.includes(payload.role as UserRole);
+    const accessExpiresIn = isStaff ? '24h' : env.JWT_ACCESS_EXPIRES_IN;
+    const expiresInSeconds = isStaff ? 24 * 60 * 60 : 900;
+
     const accessToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
-      expiresIn: env.JWT_ACCESS_EXPIRES_IN as any,
+      expiresIn: accessExpiresIn as any,
     });
     const refreshToken = HashUtil.randomBytes(40);
     return {
       accessToken,
       refreshToken,
-      expiresInSeconds: 900,
+      expiresInSeconds,
     };
   }
 
@@ -543,6 +556,10 @@ export class AuthService {
 
     if (adminUser && !isStaff) {
       throw new AppError(403, 'INSUFFICIENT_PERMISSIONS', 'Account does not have admin console privileges');
+    }
+
+    if (adminUser && adminUser.status !== 'ACTIVE') {
+      throw new AppError(403, 'ACCOUNT_SUSPENDED', 'Account is suspended or inactive');
     }
 
     // 3. Verify password

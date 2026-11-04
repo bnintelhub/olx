@@ -7,24 +7,175 @@ import { HashUtil } from '../../shared/utils/hash.util';
 import { delCache } from '../../config/redis';
 
 export class AdminService {
-  // Aggregates high-level marketplace metrics for the admin overview dashboard.
+  // Aggregates high-level marketplace metrics tailored dynamically to the caller's role.
   // Queries non-deleted users, active/pending ads, and unresolved reports concurrently.
-  static async getStats() {
-    const [totalUsers, totalAds, pendingAds, activeAds, totalReports] = await Promise.all([
-      prisma.user.count({ where: { status: { not: 'DELETED' } } }),
-      prisma.ad.count({ where: { deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.PENDING_REVIEW, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.ACTIVE, deletedAt: null } }),
-      prisma.report.count({ where: { status: 'PENDING' } }),
-    ]);
+  static async getStats(role?: string) {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
-    return {
+    // Common marketplace metrics calculated concurrently
+    const [
       totalUsers,
       totalAds,
       pendingAds,
       activeAds,
-      totalReports,
-    };
+      soldAds,
+      rejectedAds,
+      expiredAds,
+      openReports,
+      totalBoosts,
+      activeBoosts,
+      suspendedUsers,
+      verifiedUsers,
+    ] = await Promise.all([
+      prisma.user.count({ where: { status: { not: 'DELETED' } } }),
+      prisma.ad.count({ where: { deletedAt: null } }),
+      prisma.ad.count({ where: { status: AdStatus.PENDING_REVIEW, deletedAt: null } }),
+      prisma.ad.count({ where: { status: AdStatus.ACTIVE, deletedAt: null } }),
+      prisma.ad.count({ where: { status: AdStatus.SOLD, deletedAt: null } }),
+      prisma.ad.count({ where: { status: AdStatus.REJECTED, deletedAt: null } }),
+      prisma.ad.count({ where: { status: AdStatus.EXPIRED, deletedAt: null } }),
+      prisma.report.count({ where: { status: 'PENDING' } }),
+      prisma.featuredAd.count(),
+      prisma.featuredAd.count({ where: { status: 'ACTIVE' } }),
+      prisma.user.count({ where: { status: 'SUSPENDED' } }),
+      prisma.user.count({ where: { status: 'ACTIVE', profile: { isNot: null } } }),
+    ]);
+
+    const grossRevenueInr = totalBoosts * 199;
+
+    // Status breakdown for distribution charts
+    const statusDistribution = [
+      { name: 'Active', value: activeAds, color: '#10b981' },
+      { name: 'Pending Review', value: pendingAds, color: '#f59e0b' },
+      { name: 'Sold / Closed', value: soldAds, color: '#3b82f6' },
+      { name: 'Expired', value: expiredAds, color: '#94a3b8' },
+      { name: 'Rejected', value: rejectedAds, color: '#ef4444' },
+    ];
+
+    // Role-specific metrics payload
+    switch (role) {
+      case 'MODERATOR': {
+        const [reviewedToday, highRiskItems] = await Promise.all([
+          prisma.auditLog.count({
+            where: {
+              action: { in: ['ADMIN_APPROVE_AD', 'ADMIN_REJECT_AD', 'ADMIN_DELETE_AD', 'REPORT_RESOLVED'] },
+              createdAt: { gte: todayStart },
+            },
+          }),
+          prisma.report.count({
+            where: { status: 'PENDING', reason: 'SPAM_OR_FRAUD' },
+          }),
+        ]);
+
+        return {
+          role: 'MODERATOR',
+          pendingReviews: pendingAds,
+          openReports,
+          highRiskItems,
+          reviewedToday,
+          totalAds,
+        };
+      }
+
+      case 'CUSTOMER_SUPPORT': {
+        const [urgentTickets, resolvedToday] = await Promise.all([
+          prisma.report.count({
+            where: { status: 'PENDING', reason: { in: ['SPAM_OR_FRAUD', 'PROHIBITED_ITEM'] } },
+          }),
+          prisma.report.count({
+            where: {
+              status: 'RESOLVED',
+              resolvedAt: { gte: todayStart },
+            },
+          }),
+        ]);
+
+        return {
+          role: 'CUSTOMER_SUPPORT',
+          openTickets: openReports,
+          urgentTickets,
+          resolvedToday,
+          totalUsers,
+          totalReports: openReports,
+        };
+      }
+
+      case 'FINANCE_ADMIN': {
+        return {
+          role: 'FINANCE_ADMIN',
+          totalTransactions: totalBoosts,
+          activePromotions: activeBoosts,
+          grossRevenueInr,
+          currency: 'INR',
+          totalAds,
+        };
+      }
+
+      case 'CONTENT_MANAGER': {
+        const [activeBanners, totalCategories] = await Promise.all([
+          prisma.banner.count({ where: { isActive: true } }),
+          prisma.category.count(),
+        ]);
+
+        return {
+          role: 'CONTENT_MANAGER',
+          activeBanners,
+          totalCategories,
+          activePromotions: activeBoosts,
+          pendingAds,
+        };
+      }
+
+      case 'ANALYST': {
+        return {
+          role: 'ANALYST',
+          totalUsers,
+          totalAds,
+          activeAds,
+          soldAds,
+          totalReports: openReports,
+          totalBoosts,
+          conversionRate: totalAds > 0 ? Number(((soldAds / totalAds) * 100).toFixed(1)) : 0,
+          statusDistribution,
+        };
+      }
+
+      case 'ADMIN': {
+        return {
+          role: 'ADMIN',
+          totalUsers,
+          activeAds,
+          pendingAds,
+          openReports,
+          suspendedUsers,
+          verifiedUsers,
+          statusDistribution,
+        };
+      }
+
+      case 'SUPER_ADMIN':
+      default: {
+        return {
+          role: role || 'SUPER_ADMIN',
+          totalUsers,
+          totalAds,
+          pendingAds,
+          activeAds,
+          soldAds,
+          rejectedAds,
+          expiredAds,
+          openReports,
+          totalBoosts,
+          activeBoosts,
+          suspendedUsers,
+          verifiedUsers,
+          grossRevenueInr,
+          statusDistribution,
+          operationalStatus: 'OPERATIONAL',
+        };
+      }
+    }
   }
 
   // Retrieves paginated user records with optional status, role, or text search filters.

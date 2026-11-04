@@ -11,10 +11,17 @@ import { AdStatus } from '@prisma/client';
 import { writeAuditLog } from '../../shared/utils/audit.util';
 
 export class AdminController {
-  // Retrieves live dashboard KPI counts including users, active ads, and pending reports.
-  // Helps staff monitor operational volume and backlog in real-time.
+  // Retrieves live dashboard KPI counts tailored dynamically to the caller's role.
+  // Supports optional role simulation for Super Admin / Admin role previewing.
   static async getStats(request: FastifyRequest, reply: FastifyReply) {
-    const stats = await AdminService.getStats();
+    const userRole = request.user?.role;
+    const query = request.query as { role?: string };
+    const targetRole =
+      (userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') && query?.role
+        ? query.role
+        : userRole;
+
+    const stats = await AdminService.getStats(targetRole);
     return reply.status(200).send({ success: true, data: stats });
   }
 

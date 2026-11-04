@@ -17,61 +17,51 @@ import {
   Activity,
   Search,
   CheckCircle2,
-  Ban,
   Mail,
-  MapPin,
+  Phone,
   ChevronLeft,
   ChevronRight,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
-import { toast } from 'sonner';
-
-interface AdminUserRow {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  city: string;
-  role: 'BUSINESS_SELLER' | 'VERIFIED_SELLER' | 'BUYER' | 'DEALER';
-  status: 'ACTIVE' | 'SUSPENDED';
-  listingsCount: number;
-  joined: string;
-  kycVerified: boolean;
-}
-
-const INITIAL_USERS: AdminUserRow[] = [
-  { id: 'usr_1', name: 'Rahul Sharma', email: 'rahul.s@techhub.in', phone: '+91 98101 23456', city: 'Delhi NCR', role: 'BUSINESS_SELLER', status: 'ACTIVE', listingsCount: 248, joined: 'Aug 14, 2025', kycVerified: true },
-  { id: 'usr_2', name: 'Priya Verma', email: 'priya.v@gmail.com', phone: '+91 98450 11223', city: 'Bengaluru', role: 'VERIFIED_SELLER', status: 'ACTIVE', listingsCount: 14, joined: 'Sep 02, 2025', kycVerified: true },
-  { id: 'usr_3', name: 'Vikram Motors', email: 'contact@vikrammotors.com', phone: '+91 98220 98765', city: 'Gurugram', role: 'DEALER', status: 'ACTIVE', listingsCount: 64, joined: 'Jul 19, 2025', kycVerified: true },
-  { id: 'usr_4', name: 'Karan Mehra', email: 'karan99@yahoo.com', phone: '+91 97110 55443', city: 'Mumbai', role: 'BUYER', status: 'ACTIVE', listingsCount: 2, joined: 'Oct 05, 2025', kycVerified: false },
-  { id: 'usr_5', name: 'Ankit Patel', email: 'ankit.p@outlook.com', phone: '+91 99090 44332', city: 'Ahmedabad', role: 'BUSINESS_SELLER', status: 'ACTIVE', listingsCount: 88, joined: 'Nov 12, 2025', kycVerified: true },
-  { id: 'usr_6', name: 'Spam Actor 99', email: 'spam.bot24@tempmail.com', phone: '+91 91234 00000', city: 'Noida', role: 'BUYER', status: 'SUSPENDED', listingsCount: 0, joined: 'Sep 28, 2025', kycVerified: false },
-];
+import { useDashboardStats, useAdminUsers } from './hook/useDashboardQuery';
+import { useUserAction } from './hook/useDashboardMutation';
 
 export function AdminDashboard() {
-  const [users, setUsers] = useState<AdminUserRow[]>(INITIAL_USERS);
+  const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'SUSPENDED'>('ALL');
 
-  const filteredUsers = users.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(search.toLowerCase()) ||
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
-      u.city.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  const { data: stats, isFetching: statsFetching, refetch: refetchStats } = useDashboardStats('ADMIN');
+  const {
+    data: userData,
+    isLoading: usersLoading,
+    isFetching: usersFetching,
+    refetch: refetchUsers,
+  } = useAdminUsers({
+    page,
+    limit: 10,
+    q: search.trim() || undefined,
+    status: statusFilter === 'ALL' ? undefined : statusFilter,
   });
 
-  const toggleStatus = (id: string) => {
-    setUsers((prev) =>
-      prev.map((u) => {
-        if (u.id === id) {
-          const newStatus = u.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE';
-          toast.success(`User ${u.name} marked as ${newStatus}`);
-          return { ...u, status: newStatus };
-        }
-        return u;
-      })
-    );
+  const userActionMutation = useUserAction();
+
+  const users = userData?.users || [];
+  const pagination = userData?.pagination || { total: 0, pages: 1, page: 1, limit: 10 };
+
+  const handleToggleStatus = (id: string, currentStatus: string) => {
+    const nextAction = currentStatus === 'ACTIVE' ? 'SUSPEND' : 'ACTIVATE';
+    userActionMutation.mutate({
+      id,
+      action: nextAction,
+      reason: 'Admin operational dashboard toggle',
+    });
+  };
+
+  const handleRefreshAll = () => {
+    refetchStats();
+    refetchUsers();
   };
 
   return (
@@ -84,6 +74,21 @@ export function AdminDashboard() {
             Manage users, listings, categories, and marketplace operational integrity.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshAll}
+            disabled={statsFetching || usersFetching}
+            className="h-8 gap-1.5 text-xs"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${statsFetching || usersFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Badge variant="outline" className="px-3 py-1 font-semibold text-xs border-primary/20 text-primary">
+            Admin Console
+          </Badge>
+        </div>
       </div>
 
       {/* 4 Operations KPI Cards */}
@@ -94,19 +99,23 @@ export function AdminDashboard() {
             <Users className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">2,48,930</div>
+            <div className="text-2xl font-bold">
+              {(stats?.totalUsers ?? 0).toLocaleString('en-IN')}
+            </div>
             <p className="text-[11px] text-emerald-600 font-medium mt-1">Platform verified members</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Verified Sellers</span>
+            <span className="text-xs font-medium text-muted-foreground">Verified Profiles</span>
             <ShieldCheck className="h-4 w-4 text-emerald-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">45,210</div>
-            <p className="text-[11px] text-muted-foreground mt-1">KYC completed accounts</p>
+            <div className="text-2xl font-bold">
+              {(stats?.verifiedUsers ?? 0).toLocaleString('en-IN')}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Accounts with active profiles</p>
           </CardContent>
         </Card>
 
@@ -116,19 +125,23 @@ export function AdminDashboard() {
             <ShoppingBag className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">4,28,357</div>
-            <p className="text-[11px] text-emerald-600 font-medium mt-1">+9.8% this month</p>
+            <div className="text-2xl font-bold">
+              {(stats?.activeAds ?? 0).toLocaleString('en-IN')}
+            </div>
+            <p className="text-[11px] text-emerald-600 font-medium mt-1">Live in marketplace</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">System Health</span>
-            <Activity className="h-4 w-4 text-teal-600" />
+            <span className="text-xs font-medium text-muted-foreground">Suspended Accounts</span>
+            <Activity className="h-4 w-4 text-rose-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-teal-600">99.98%</div>
-            <p className="text-[11px] text-muted-foreground mt-1">All services online</p>
+            <div className="text-2xl font-bold text-rose-600">
+              {(stats?.suspendedUsers ?? 0).toLocaleString('en-IN')}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">Safety enforcement actions</p>
           </CardContent>
         </Card>
       </div>
@@ -147,9 +160,12 @@ export function AdminDashboard() {
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search user, email or city..."
+                placeholder="Search user, phone or email..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
                 className="h-8 rounded-lg border bg-muted/40 pl-8 pr-3 text-xs focus:bg-background outline-none w-48"
               />
             </div>
@@ -158,7 +174,10 @@ export function AdminDashboard() {
               {(['ALL', 'ACTIVE', 'SUSPENDED'] as const).map((filter) => (
                 <button
                   key={filter}
-                  onClick={() => setStatusFilter(filter)}
+                  onClick={() => {
+                    setStatusFilter(filter);
+                    setPage(1);
+                  }}
                   className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
                     statusFilter === filter ? 'bg-background shadow-xs text-foreground' : 'text-muted-foreground'
                   }`}
@@ -177,7 +196,7 @@ export function AdminDashboard() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="px-5 py-3 min-w-[220px]">User & Identity</TableHead>
                   <TableHead className="px-5 py-3 min-w-[130px]">Role / Tier</TableHead>
-                  <TableHead className="px-5 py-3 min-w-[120px]">Location</TableHead>
+                  <TableHead className="px-5 py-3 min-w-[120px]">Contact</TableHead>
                   <TableHead className="px-5 py-3 min-w-[110px]">Inventory</TableHead>
                   <TableHead className="px-5 py-3 min-w-[100px] text-center">Status</TableHead>
                   <TableHead className="px-5 py-3 min-w-[110px]">Joined Date</TableHead>
@@ -185,116 +204,148 @@ export function AdminDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsers.map((u) => {
-                  const initials = u.name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .slice(0, 2)
-                    .join('');
+                {usersLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12">
+                      <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        <span>Loading user accounts...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : users.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
+                      No user accounts found matching your filters.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  users.map((u) => {
+                    const displayName = u.profile?.name || u.phoneNumber || 'User';
+                    const initials = displayName
+                      .split(' ')
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join('')
+                      .toUpperCase();
 
-                  return (
-                    <TableRow key={u.id} className="transition-colors hover:bg-muted/30">
-                      {/* User & Identity */}
-                      <TableCell className="px-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background font-bold text-xs shrink-0 shadow-2xs">
-                            {initials}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
-                              <span className="truncate">{u.name}</span>
-                              {u.kycVerified && (
-                                <span title="KYC Verified">
-                                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-                                </span>
-                              )}
+                    return (
+                      <TableRow key={u.id} className="transition-colors hover:bg-muted/30">
+                        {/* User & Identity */}
+                        <TableCell className="px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background font-bold text-xs shrink-0 shadow-2xs">
+                              {initials}
                             </div>
-                            <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
-                              <Mail className="h-3 w-3 shrink-0" />
-                              <span>{u.email}</span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+                                <span className="truncate">{displayName}</span>
+                                {u.profile?.name && (
+                                  <span title="Verified Profile">
+                                    <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1 text-[11px] text-muted-foreground truncate">
+                                <Mail className="h-3 w-3 shrink-0" />
+                                <span>{u.email || 'No email provided'}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </TableCell>
+                        </TableCell>
 
-                      {/* Role */}
-                      <TableCell className="px-5 py-3">
-                        <Badge variant="outline" className="font-mono text-[10px]">
-                          {u.role.replace('_', ' ')}
-                        </Badge>
-                      </TableCell>
+                        {/* Role */}
+                        <TableCell className="px-5 py-3">
+                          <Badge variant="outline" className="font-mono text-[10px]">
+                            {u.role.replace('_', ' ')}
+                          </Badge>
+                        </TableCell>
 
-                      {/* Location */}
-                      <TableCell className="px-5 py-3 text-xs text-foreground">
-                        <div className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                          <span>{u.city}</span>
-                        </div>
-                      </TableCell>
+                        {/* Contact */}
+                        <TableCell className="px-5 py-3 text-xs text-foreground">
+                          <div className="flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-muted-foreground shrink-0" />
+                            <span>{u.phoneNumber || '—'}</span>
+                          </div>
+                        </TableCell>
 
-                      {/* Listings */}
-                      <TableCell className="px-5 py-3 font-semibold text-xs text-foreground">
-                        {u.listingsCount} ads
-                      </TableCell>
+                        {/* Listings */}
+                        <TableCell className="px-5 py-3 font-semibold text-xs text-foreground">
+                          {u._count?.ads ?? 0} ads
+                        </TableCell>
 
-                      {/* Status */}
-                      <TableCell className="px-5 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                            u.status === 'ACTIVE'
-                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
-                          }`}
-                        >
+                        {/* Status */}
+                        <TableCell className="px-5 py-3 text-center">
                           <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              u.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                              u.status === 'ACTIVE'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
                             }`}
-                          />
-                          <span>{u.status}</span>
-                        </span>
-                      </TableCell>
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${
+                                u.status === 'ACTIVE' ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'
+                              }`}
+                            />
+                            <span>{u.status}</span>
+                          </span>
+                        </TableCell>
 
-                      {/* Joined Date */}
-                      <TableCell className="px-5 py-3 text-xs text-muted-foreground font-mono">
-                        {u.joined}
-                      </TableCell>
+                        {/* Joined Date */}
+                        <TableCell className="px-5 py-3 text-xs text-muted-foreground font-mono">
+                          {new Date(u.createdAt).toLocaleDateString()}
+                        </TableCell>
 
-                      {/* Actions */}
-                      <TableCell className="px-5 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant={u.status === 'ACTIVE' ? 'outline' : 'default'}
-                          onClick={() => toggleStatus(u.id)}
-                          className={`h-7 px-2.5 text-xs font-semibold ${
-                            u.status === 'ACTIVE'
-                              ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
-                              : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                          }`}
-                        >
-                          {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                        {/* Actions */}
+                        <TableCell className="px-5 py-3 text-right">
+                          <Button
+                            size="sm"
+                            variant={u.status === 'ACTIVE' ? 'outline' : 'default'}
+                            disabled={userActionMutation.isPending}
+                            onClick={() => handleToggleStatus(u.id, u.status)}
+                            className={`h-7 px-2.5 text-xs font-semibold ${
+                              u.status === 'ACTIVE'
+                                ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            }`}
+                          >
+                            {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
               </TableBody>
             </Table>
           </div>
 
           <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
             <div>
-              Showing <strong className="text-foreground">{filteredUsers.length}</strong> of{' '}
-              <strong className="text-foreground">2,48,930</strong> accounts
+              Showing <strong className="text-foreground">{users.length}</strong> of{' '}
+              <strong className="text-foreground">{pagination.total.toLocaleString('en-IN')}</strong> accounts
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled className="h-7 w-7 p-0">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || usersLoading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="h-7 w-7 p-0"
+              >
                 <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
               <span className="text-xs font-medium px-2 py-0.5 rounded border bg-background text-foreground font-mono">
-                1 / 41,488
+                {page} / {pagination.pages || 1}
               </span>
-              <Button variant="outline" size="sm" disabled className="h-7 w-7 p-0">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= pagination.pages || usersLoading}
+                onClick={() => setPage((p) => p + 1)}
+                className="h-7 w-7 p-0"
+              >
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </div>
