@@ -38,7 +38,7 @@ export const authService = {
     const { data } = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/admin-login', {
       username: payload.username.trim(),
       password: payload.password,
-      role: payload.role || 'SUPER_ADMIN',
+      role: payload.role || 'ADMIN',
     });
     return data.data;
   },

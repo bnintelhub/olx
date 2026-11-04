@@ -3,13 +3,13 @@ import { AdminUser, AdminRole } from '../types';
 import { authService } from '../features/auth/service/auth.service';
 import { executeSilentRefresh } from '../lib/api-client';
 
-// Fallback demo user for preview and testing all 7 role views
+// Fallback demo user: rahul@gmail.com with ADMIN role (restricted from superadmin dashboards)
 const DEFAULT_DEMO_USER: AdminUser = {
   id: 'admin_rahul',
   name: 'Rahul Kumar',
   email: 'rahul@gmail.com',
-  role: 'SUPER_ADMIN',
-  permissions: ['*'],
+  role: 'ADMIN',
+  permissions: ['users:*', 'listings:*', 'categories:*', 'reports:*', 'media:*'],
 };
 
 // Access token lifespan is 15 minutes (900 seconds)
@@ -53,9 +53,9 @@ interface AuthState {
   silentRefresh: () => Promise<boolean>;
 }
 
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: DEFAULT_DEMO_USER,
-  role: 'SUPER_ADMIN',
+  role: 'ADMIN',
   isAuthenticated: true,
   isLoading: false,
 
@@ -71,14 +71,16 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
 
-  // Allows switching active role in UI for multi-role dashboard testing
+  // Allows switching active role in UI - strictly guarded so only SUPER_ADMIN can toggle dashboards
   setRole: (newRole: AdminRole) => {
-    set((state) => ({
+    const currentUser = get().user;
+    if (currentUser?.role !== 'SUPER_ADMIN') {
+      // Non-super-admins cannot toggle dashboards
+      return;
+    }
+    set({
       role: newRole,
-      user: state.user
-        ? { ...state.user, role: newRole }
-        : { ...DEFAULT_DEMO_USER, role: newRole },
-    }));
+    });
   },
 
   logout: async () => {
@@ -90,7 +92,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } finally {
       set({
         user: null,
-        role: 'SUPER_ADMIN',
+        role: 'ADMIN',
         isAuthenticated: false,
         isLoading: false,
       });

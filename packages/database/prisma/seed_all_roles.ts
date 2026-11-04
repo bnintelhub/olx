@@ -24,13 +24,20 @@ async function main() {
 
   const passwordHash = await HashUtil.hashPassword('rahul@123');
 
-  // 1. Seed All 7 Admin Accounts with credentials: rahul@gmail.com / rahul@123
+  // 1. Seed All Staff Accounts with credentials: password rahul@123
   const staffAccounts = [
     {
       email: 'rahul@gmail.com',
       phoneNumber: '+919876543200',
       name: 'Rahul Kumar',
-      role: UserRole.SUPER_ADMIN,
+      role: UserRole.ADMIN, // Admin role: can only access Admin features, cannot toggle to other dashboards
+      bio: 'Operations & Platform Administrator',
+    },
+    {
+      email: 'superadmin@gmail.com',
+      phoneNumber: '+919876543207',
+      name: 'Super Admin',
+      role: UserRole.SUPER_ADMIN, // Super Admin: full platform control, can toggle across all dashboards
       bio: 'Platform Owner & Super Administrator',
     },
     {

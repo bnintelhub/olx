@@ -538,8 +538,11 @@ export class AuthService {
       adminUser = await AuthRepository.createDefaultAdmin(hashed);
     }
 
-    // Assign requested role if provided (e.g. from role selector), else fallback to user role
-    const effectiveRole = (requestedRole as any) || adminUser.role;
+    // Use the user's actual database role. Only SUPER_ADMIN can optionally assume other view contexts.
+    let effectiveRole = adminUser.role;
+    if (adminUser.role === 'SUPER_ADMIN' && requestedRole) {
+      effectiveRole = requestedRole as any;
+    }
 
     const tokenPayload: TokenPayload = {
       userId: adminUser.id,

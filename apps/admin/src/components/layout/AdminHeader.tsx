@@ -16,6 +16,7 @@ import {
   ChevronDown,
   LogOut,
   Crown,
+  ShieldCheck,
   Eye,
   Check,
 } from 'lucide-react';
@@ -32,10 +33,15 @@ const DASHBOARD_VIEWS: AdminRole[] = [
 
 export function AdminHeader() {
   const user = useAuthStore((s) => s.user);
-  const activeRole = useAuthStore((s) => s.role) || 'SUPER_ADMIN';
+  const activeRole = useAuthStore((s) => s.role) || 'ADMIN';
   const setRole = useAuthStore((s) => s.setRole);
   const logout = useAuthStore((s) => s.logout);
   const { theme, setTheme, resolvedTheme } = useTheme();
+
+  // Strict authority identification: only genuine SUPER_ADMIN can toggle dashboards
+  const userRole = user?.role || 'ADMIN';
+  const isSuperAdmin = userRole === 'SUPER_ADMIN';
+  const effectiveRole = isSuperAdmin ? activeRole : userRole;
 
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -57,7 +63,17 @@ export function AdminHeader() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const currentRoleMeta = ROLE_CONFIGS[activeRole] || ROLE_CONFIGS.SUPER_ADMIN;
+  const currentRoleMeta = ROLE_CONFIGS[effectiveRole] || ROLE_CONFIGS.ADMIN;
+
+  const displayName = user?.name || (isSuperAdmin ? 'Super Admin' : 'Rahul Kumar');
+  const displayEmail = user?.email || (isSuperAdmin ? 'superadmin@gmail.com' : 'rahul@gmail.com');
+  const initials = displayName
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'RK';
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b bg-background text-foreground px-4 sm:px-6 shadow-2xs transition-colors duration-200">
@@ -83,65 +99,75 @@ export function AdminHeader() {
         </div>
       </div>
 
-      {/* Right Controls: Role Badge, View Switcher, Theme Toggle, Profile */}
+      {/* Right Controls: Role Badge, View Switcher (Super Admin only), Theme Toggle, Profile */}
       <div className="flex items-center gap-2.5 sm:gap-3">
-        {/* Header Display: Super Admin Authority Badge */}
-        <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-600 dark:text-amber-400">
-          <Crown className="h-3.5 w-3.5 fill-amber-500/20" />
-          <span className="hidden sm:inline">Authority:</span>
-          <span>Super Admin</span>
-        </div>
+        {/* Header Display: Authority Badge */}
+        {isSuperAdmin ? (
+          <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-600 dark:text-amber-400">
+            <Crown className="h-3.5 w-3.5 fill-amber-500/20" />
+            <span className="hidden sm:inline">Authority:</span>
+            <span>Super Admin</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2.5 py-1 text-xs font-bold text-blue-600 dark:text-blue-400">
+            <ShieldCheck className="h-3.5 w-3.5 fill-blue-500/20" />
+            <span className="hidden sm:inline">Authority:</span>
+            <span>Admin</span>
+          </div>
+        )}
 
-        {/* Dashboard View Switcher: Access all 7 dashboards under Super Admin */}
-        <div className="relative" ref={viewMenuRef}>
-          <button
-            type="button"
-            onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
-            className="flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/80 transition shadow-2xs cursor-pointer"
-            title="Switch Dashboard View"
-          >
-            <Eye className="h-3.5 w-3.5 text-primary" />
-            <span className="hidden md:inline text-muted-foreground">Dashboard:</span>
-            <span className="font-bold">{currentRoleMeta.label}</span>
-            <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
-          </button>
+        {/* Dashboard View Switcher: ONLY super admin can toggle across dashboards */}
+        {isSuperAdmin && (
+          <div className="relative" ref={viewMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+              className="flex items-center gap-1.5 rounded-lg border bg-card px-2.5 py-1.5 text-xs font-semibold text-foreground hover:bg-muted/80 transition shadow-2xs cursor-pointer"
+              title="Switch Dashboard View"
+            >
+              <Eye className="h-3.5 w-3.5 text-primary" />
+              <span className="hidden md:inline text-muted-foreground">Dashboard:</span>
+              <span className="font-bold">{currentRoleMeta.label}</span>
+              <ChevronDown className="h-3 w-3 opacity-60 ml-0.5" />
+            </button>
 
-          {isViewMenuOpen && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl border bg-card p-1 text-card-foreground shadow-xl z-50">
-              <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                Switch Role Dashboard
+            {isViewMenuOpen && (
+              <div className="absolute right-0 mt-2 w-56 rounded-xl border bg-card p-1 text-card-foreground shadow-xl z-50">
+                <div className="px-3 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Switch Role Dashboard
+                </div>
+                <div className="space-y-0.5">
+                  {DASHBOARD_VIEWS.map((r) => {
+                    const meta = ROLE_CONFIGS[r];
+                    const Icon = meta.icon;
+                    const isSelected = r === activeRole;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => {
+                          setRole(r);
+                          setIsViewMenuOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground font-semibold'
+                            : 'text-foreground hover:bg-muted'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-3.5 w-3.5" />
+                          <span>{meta.label}</span>
+                        </div>
+                        {isSelected && <Check className="h-3.5 w-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <div className="space-y-0.5">
-                {DASHBOARD_VIEWS.map((r) => {
-                  const meta = ROLE_CONFIGS[r];
-                  const Icon = meta.icon;
-                  const isSelected = r === activeRole;
-                  return (
-                    <button
-                      key={r}
-                      type="button"
-                      onClick={() => {
-                        setRole(r);
-                        setIsViewMenuOpen(false);
-                      }}
-                      className={`flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition cursor-pointer ${
-                        isSelected
-                          ? 'bg-primary text-primary-foreground font-semibold'
-                          : 'text-foreground hover:bg-muted'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Icon className="h-3.5 w-3.5" />
-                        <span>{meta.label}</span>
-                      </div>
-                      {isSelected && <Check className="h-3.5 w-3.5" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Theme Toggle (Light / Dark Mode) */}
         <Button
@@ -169,11 +195,11 @@ export function AdminHeader() {
             className="flex items-center gap-2 rounded-lg p-1 hover:bg-muted/60 transition cursor-pointer"
           >
             <div className="flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-background font-black text-xs shadow-xs">
-              RK
+              {initials}
             </div>
             <div className="hidden lg:block text-left">
-              <div className="text-xs font-semibold leading-tight text-foreground">Rahul Kumar</div>
-              <div className="text-[10px] text-muted-foreground">{user?.email || 'rahul@gmail.com'}</div>
+              <div className="text-xs font-semibold leading-tight text-foreground">{displayName}</div>
+              <div className="text-[10px] text-muted-foreground">{displayEmail}</div>
             </div>
             <ChevronDown className="h-3 w-3 text-muted-foreground hidden lg:block" />
           </button>
@@ -181,10 +207,17 @@ export function AdminHeader() {
           {isProfileMenuOpen && (
             <div className="absolute right-0 mt-2 w-52 rounded-xl border bg-card p-1.5 text-card-foreground shadow-xl z-50">
               <div className="px-2.5 py-1.5 border-b mb-1">
-                <div className="text-xs font-bold text-foreground">Rahul Kumar</div>
-                <div className="text-[10px] text-muted-foreground">{user?.email || 'rahul@gmail.com'}</div>
-                <Badge variant="outline" className="mt-1 text-[9px] font-mono border-amber-500/40 text-amber-600 dark:text-amber-400">
-                  SUPER_ADMIN
+                <div className="text-xs font-bold text-foreground">{displayName}</div>
+                <div className="text-[10px] text-muted-foreground">{displayEmail}</div>
+                <Badge
+                  variant="outline"
+                  className={`mt-1 text-[9px] font-mono ${
+                    isSuperAdmin
+                      ? 'border-amber-500/40 text-amber-600 dark:text-amber-400'
+                      : 'border-blue-500/40 text-blue-600 dark:text-blue-400'
+                  }`}
+                >
+                  {userRole}
                 </Badge>
               </div>
 

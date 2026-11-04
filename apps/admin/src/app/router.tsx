@@ -1,6 +1,7 @@
 import React from 'react';
 import { createBrowserRouter, Navigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/auth.store';
+import { AdminRole } from '../types';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoginPage } from '../features/auth/LoginPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
@@ -39,6 +40,30 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Route guard to protect Super Admin-only sections from restricted roles
+function RoleGuard({
+  allowedRoles,
+  children,
+}: {
+  allowedRoles: AdminRole[];
+  children: React.ReactNode;
+}) {
+  const user = useAuthStore((s) => s.user);
+  const activeRole = useAuthStore((s) => s.role);
+
+  // Super Admin account has full access across all modules
+  if (user?.role === 'SUPER_ADMIN') {
+    return <>{children}</>;
+  }
+
+  const effectiveRole = user?.role || activeRole || 'ADMIN';
+  if (!allowedRoles.includes(effectiveRole)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -70,7 +95,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'moderation',
-        element: <ModeratorDashboard />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'MODERATOR']}>
+            <ModeratorDashboard />
+          </RoleGuard>
+        ),
       },
       {
         path: 'reports',
@@ -86,31 +115,59 @@ export const router = createBrowserRouter([
       },
       {
         path: 'payments',
-        element: <PaymentsPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'FINANCE_ADMIN']}>
+            <PaymentsPage />
+          </RoleGuard>
+        ),
       },
       {
         path: 'promotions',
-        element: <PromotionsPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'CONTENT_MANAGER']}>
+            <PromotionsPage />
+          </RoleGuard>
+        ),
       },
       {
         path: 'support',
-        element: <SupportPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'CUSTOMER_SUPPORT']}>
+            <SupportPage />
+          </RoleGuard>
+        ),
       },
       {
         path: 'analytics',
-        element: <AnalyticsPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'ANALYST']}>
+            <AnalyticsPage />
+          </RoleGuard>
+        ),
       },
       {
         path: 'roles-permissions',
-        element: <RolesPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+            <RolesPage />
+          </RoleGuard>
+        ),
       },
       {
         path: 'audit-logs',
-        element: <AuditLogsPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+            <AuditLogsPage />
+          </RoleGuard>
+        ),
       },
       {
         path: 'settings',
-        element: <SettingsPage />,
+        element: (
+          <RoleGuard allowedRoles={['SUPER_ADMIN']}>
+            <SettingsPage />
+          </RoleGuard>
+        ),
       },
     ],
   },

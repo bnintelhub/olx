@@ -30,10 +30,11 @@ export function LoginPage() {
         password,
       });
     } else {
+      const isSuperAdmin = email.trim().toLowerCase() === 'superadmin@gmail.com';
       loginMutation.mutate({
         username: email.trim(),
         password,
-        role: 'SUPER_ADMIN',
+        role: isSuperAdmin ? 'SUPER_ADMIN' : 'ADMIN',
       });
     }
   };
@@ -93,6 +94,54 @@ export function LoginPage() {
               <span>{errorMessage}</span>
             </div>
           )}
+
+          {/* Test Account Quick Fill Selector */}
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-2.5 text-xs">
+            <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-2">
+              Select Quick Test Account
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('rahul@gmail.com');
+                  setPassword('rahul@123');
+                }}
+                className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                  email === 'rahul@gmail.com'
+                    ? 'border-blue-500/60 bg-blue-500/10 text-blue-300'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5 text-zinc-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  Admin
+                </div>
+                <div className="text-[10px] text-zinc-400 truncate mt-0.5">rahul@gmail.com</div>
+                <div className="text-[9px] text-zinc-500">Admin features only</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setEmail('superadmin@gmail.com');
+                  setPassword('rahul@123');
+                }}
+                className={`p-2 rounded-lg border text-left transition cursor-pointer ${
+                  email === 'superadmin@gmail.com'
+                    ? 'border-amber-500/60 bg-amber-500/10 text-amber-300'
+                    : 'border-zinc-800 bg-zinc-950/60 text-zinc-400 hover:border-zinc-700'
+                }`}
+              >
+                <div className="font-bold text-xs flex items-center gap-1.5 text-zinc-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Super Admin
+                </div>
+                <div className="text-[10px] text-zinc-400 truncate mt-0.5">superadmin@gmail.com</div>
+                <div className="text-[9px] text-zinc-500">All 7 dashboards</div>
+              </button>
+            </div>
+          </div>
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-3">

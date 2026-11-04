@@ -14,10 +14,15 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { cn } from '../../lib/utils';
 
 export function NavMain() {
-  const activeRole = useAuthStore((s) => s.role) || 'SUPER_ADMIN';
-  const roleMeta = ROLE_CONFIGS[activeRole] || ROLE_CONFIGS.SUPER_ADMIN;
+  const user = useAuthStore((s) => s.user);
+  const activeRole = useAuthStore((s) => s.role) || 'ADMIN';
+
+  // Super Admin can switch dashboard views; non-super-admins are strictly locked to their assigned role
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
+  const effectiveRole = isSuperAdmin ? activeRole : (user?.role || 'ADMIN');
+  const roleMeta = ROLE_CONFIGS[effectiveRole] || ROLE_CONFIGS.ADMIN;
   const RoleIcon = roleMeta.icon;
-  const navGroups = getGroupedNavForRole(activeRole);
+  const navGroups = getGroupedNavForRole(effectiveRole);
   const { isMobile, setOpenMobile, state } = useSidebar();
   const location = useLocation();
 

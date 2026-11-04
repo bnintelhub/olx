@@ -23,14 +23,23 @@ export function useLoginMutation() {
         return await authService.adminLogin(payload);
       } catch (err: any) {
         // Fallback for local demo preview when backend is not actively running
-        const email = payload.username.trim();
-        const demoUser = {
-          id: 'admin_rahul',
-          name: email.split('@')[0] || 'Rahul Kumar',
-          email,
-          role: payload.role || 'SUPER_ADMIN',
-          permissions: ['*'],
-        };
+        const email = payload.username.trim().toLowerCase();
+        const isSuperAdmin = email === 'superadmin@gmail.com' || payload.role === 'SUPER_ADMIN';
+        const demoUser = isSuperAdmin
+          ? {
+              id: 'super_admin_1',
+              name: 'Super Admin',
+              email,
+              role: 'SUPER_ADMIN' as const,
+              permissions: ['*'],
+            }
+          : {
+              id: 'admin_rahul',
+              name: 'Rahul Kumar',
+              email: 'rahul@gmail.com',
+              role: 'ADMIN' as const,
+              permissions: ['users:*', 'listings:*', 'categories:*', 'reports:*', 'media:*'],
+            };
         return { user: demoUser };
       }
     },

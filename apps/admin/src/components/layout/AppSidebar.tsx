@@ -13,6 +13,7 @@ import { useAuthStore } from '../../stores/auth.store';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const user = useAuthStore((s) => s.user);
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN';
 
   return (
     <Sidebar collapsible="icon" variant="sidebar" {...props}>
@@ -25,8 +26,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <NavUser
           user={{
-            name: user?.name || 'Rahul Kumar',
-            email: user?.email || 'rahul@gmail.com',
+            name: user?.name || (isSuperAdmin ? 'Super Admin' : 'Rahul Kumar'),
+            email: user?.email || (isSuperAdmin ? 'superadmin@gmail.com' : 'rahul@gmail.com'),
+            role: user?.role || 'ADMIN',
           }}
         />
       </SidebarFooter>

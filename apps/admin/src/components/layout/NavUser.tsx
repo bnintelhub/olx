@@ -29,6 +29,7 @@ export interface UserProfileProps {
   name: string;
   email: string;
   avatar?: string;
+  role?: string;
 }
 
 export function NavUser({
@@ -36,12 +37,20 @@ export function NavUser({
     name: 'Rahul Kumar',
     email: 'rahul@gmail.com',
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80',
+    role: 'ADMIN',
   },
 }: {
   user?: UserProfileProps;
 }) {
   const { isMobile } = useSidebar();
   const logout = useAuthStore((s) => s.logout);
+  const initials = user.name
+    .split(' ')
+    .filter(Boolean)
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase() || 'RK';
 
   return (
     <SidebarMenu>
@@ -54,7 +63,7 @@ export function NavUser({
             >
               <Avatar className="h-8 w-8 rounded-lg shrink-0">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg font-bold text-xs">RK</AvatarFallback>
+                <AvatarFallback className="rounded-lg font-bold text-xs">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-xs leading-tight group-data-[collapsible=icon]:hidden">
                 <span className="truncate font-semibold text-sidebar-foreground">{user.name}</span>
@@ -73,7 +82,7 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-xs">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg font-bold">RK</AvatarFallback>
+                  <AvatarFallback className="rounded-lg font-bold">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-xs leading-tight">
                   <span className="truncate font-semibold text-foreground">{user.name}</span>
@@ -83,9 +92,9 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => toast.info('Super Admin already has full Enterprise tier active')} className="gap-2">
+              <DropdownMenuItem onClick={() => toast.info('Platform Enterprise tier active')} className="gap-2">
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                <span>Upgrade to Pro</span>
+                <span>Tier: {user.role || 'Enterprise'}</span>
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
