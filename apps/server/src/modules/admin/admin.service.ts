@@ -98,11 +98,20 @@ export class AdminService {
     if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account not found');
 
     let updateData: Prisma.UserUpdateInput = {};
-    if (action === 'SUSPEND') updateData.status = 'SUSPENDED';
-    else if (action === 'BAN') updateData.status = 'BANNED';
-    else if (action === 'ACTIVATE') updateData.status = 'ACTIVE';
-    else if (action === 'CHANGE_ROLE' && role) updateData.role = role;
-    else if (action === 'UPDATE_CAPABILITIES' && capabilities) updateData.capabilities = capabilities;
+    if (action === 'SUSPEND') {
+      updateData.status = 'SUSPENDED';
+      updateData.refreshTokenHash = null;
+    } else if (action === 'BAN') {
+      updateData.status = 'BANNED';
+      updateData.refreshTokenHash = null;
+    } else if (action === 'ACTIVATE') {
+      updateData.status = 'ACTIVE';
+    } else if (action === 'CHANGE_ROLE' && role) {
+      updateData.role = role;
+      updateData.refreshTokenHash = null; // Invalidate refresh token to force fresh session issuance
+    } else if (action === 'UPDATE_CAPABILITIES' && capabilities) {
+      updateData.capabilities = capabilities;
+    }
 
     const updated = await prisma.user.update({
       where: { id },
