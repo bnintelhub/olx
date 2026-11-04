@@ -6,6 +6,7 @@ export const userActionSchema = z.object({
   role: z.nativeEnum(UserRole).optional(),
   capabilities: z.array(z.string()).optional(),
   reason: z.string().optional(),
+  ticketReference: z.string().optional(),
 });
 
 export const updateAdminProfileSchema = z.object({
@@ -25,6 +26,18 @@ export const createInvitationSchema = z.object({
   role: z.nativeEnum(UserRole),
   expiryType: z.enum(['2_DAYS', '3_DAYS', '7_DAYS', 'NO_EXPIRY', 'CUSTOM']).optional().default('2_DAYS'),
   customExpiresAt: z.string().optional().nullable(),
+  reason: z.string().optional(),
+  ticketReference: z.string().optional(),
+});
+
+export const auditLogQuerySchema = z.object({
+  page: z.coerce.number().min(1).default(1),
+  limit: z.coerce.number().min(1).max(100).default(20),
+  action: z.string().optional(),
+  entityType: z.string().optional(),
+  entityId: z.string().optional(),
+  search: z.string().optional(),
 });
 
 export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
+export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;

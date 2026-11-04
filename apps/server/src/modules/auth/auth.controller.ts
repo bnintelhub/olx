@@ -298,6 +298,10 @@ export class AuthController {
       action: 'STAFF_INVITATION_ACCEPTED',
       entityType: 'USER',
       entityId: result.user.id,
+      newData: {
+        email: result.user.email,
+        role: result.user.role,
+      },
       request,
     });
 

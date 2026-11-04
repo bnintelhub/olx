@@ -127,7 +127,16 @@ export class AdminService {
     });
 
     await delCache(`user:${id}`);
-    return updated;
+    return {
+      updated,
+      previous: {
+        role: user.role,
+        status: user.status,
+        capabilities: user.capabilities,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+      },
+    };
   }
 
   // Retrieves paginated classified ads for content moderation and review.
@@ -348,5 +357,68 @@ export class AdminService {
       where: { id },
       data: { status: 'REVOKED' },
     });
+  }
+
+  // Retrieves paginated forensic audit records ordered from newest to oldest.
+  // Supports filtering by action, resource type, target identifier, and text search.
+  static async getAuditLogs(params: {
+    page: number;
+    limit: number;
+    action?: string;
+    entityType?: string;
+    entityId?: string;
+    search?: string;
+  }) {
+    const skip = (params.page - 1) * params.limit;
+    const where: Prisma.AuditLogWhereInput = {};
+
+    if (params.action) {
+      where.action = params.action;
+    }
+    if (params.entityType) {
+      where.entityType = params.entityType;
+    }
+    if (params.entityId) {
+      where.entityId = params.entityId;
+    }
+    if (params.search) {
+      where.OR = [
+        { action: { contains: params.search, mode: 'insensitive' } },
+        { entityType: { contains: params.search, mode: 'insensitive' } },
+        { entityId: { contains: params.search, mode: 'insensitive' } },
+        { user: { email: { contains: params.search, mode: 'insensitive' } } },
+        { user: { profile: { name: { contains: params.search, mode: 'insensitive' } } } },
+      ];
+    }
+
+    const [total, logs] = await Promise.all([
+      prisma.auditLog.count({ where }),
+      prisma.auditLog.findMany({
+        where,
+        skip,
+        take: params.limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              role: true,
+              profile: { select: { name: true } },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      logs,
+      pagination: {
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages: Math.ceil(total / params.limit),
+      },
+    };
   }
 }

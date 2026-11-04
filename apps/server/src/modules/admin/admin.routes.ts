@@ -63,4 +63,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
     { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
     AdminController.revokeStaffInvitation
   );
+
+  // Forensic Audit Trail (Immutable, restricted to roles with audit:read permission)
+  fastify.get(
+    '/audit-logs',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.AUDIT_READ)] },
+    AdminController.getAuditLogs
+  );
 }

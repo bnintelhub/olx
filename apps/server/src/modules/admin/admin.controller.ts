@@ -5,6 +5,7 @@ import {
   updateAdminProfileSchema,
   changeAdminPasswordSchema,
   createInvitationSchema,
+  auditLogQuerySchema,
 } from './admin.schema';
 import { AdStatus } from '@prisma/client';
 import { writeAuditLog } from '../../shared/utils/audit.util';
@@ -40,21 +41,59 @@ export class AdminController {
   }
 
   // Applies administrative account actions like suspension, bans, or role promotions.
-  // Records an immutable audit log entry for accountability and security compliance.
+  // Records comprehensive forensic audit logs with actor, target, old/new roles, status, and security context.
   static async updateUserAction(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
-    const { action, role, capabilities } = userActionSchema.parse(request.body);
-    const updated = await AdminService.updateUserAction(id, action, role, capabilities);
+    const { action, role, capabilities, reason, ticketReference } = userActionSchema.parse(request.body);
 
-    await writeAuditLog({
-      userId: request.user?.id,
-      action: `ADMIN_ACTION_${action}`,
-      entityType: 'USER',
-      entityId: id,
-      request,
-    });
+    try {
+      const { updated, previous } = await AdminService.updateUserAction(id, action, role, capabilities);
 
-    return reply.status(200).send({ success: true, data: updated });
+      const auditAction = action === 'CHANGE_ROLE' ? 'USER_ROLE_CHANGE' : `ADMIN_ACTION_${action}`;
+
+      await writeAuditLog({
+        userId: request.user?.id,
+        action: auditAction,
+        entityType: 'USER',
+        entityId: id,
+        status: 'SUCCESS',
+        reason,
+        ticketReference,
+        oldData: {
+          role: previous.role,
+          status: previous.status,
+          capabilities: previous.capabilities,
+          email: previous.email,
+        },
+        newData: {
+          role: updated.role,
+          status: updated.status,
+          capabilities: updated.capabilities,
+          email: updated.email,
+        },
+        request,
+      });
+
+      return reply.status(200).send({ success: true, data: updated });
+    } catch (err: any) {
+      await writeAuditLog({
+        userId: request.user?.id,
+        action: action === 'CHANGE_ROLE' ? 'USER_ROLE_CHANGE_FAILED' : `ADMIN_ACTION_${action}_FAILED`,
+        entityType: 'USER',
+        entityId: id,
+        status: 'FAILED',
+        reason: reason || err.message,
+        ticketReference,
+        newData: {
+          attemptedRole: role,
+          attemptedAction: action,
+          errorMessage: err.message,
+        },
+        request,
+      });
+
+      throw err;
+    }
   }
 
   // Fetches paginated classified listings for moderation and content safety review.
@@ -81,6 +120,7 @@ export class AdminController {
       action: 'ADMIN_DELETE_AD',
       entityType: 'AD',
       entityId: id,
+      status: 'SUCCESS',
       request,
     });
 
@@ -111,24 +151,48 @@ export class AdminController {
   }
 
   // Issues a configurable-lifespan onboarding token for new staff members.
-  // Supports presets (2 days, 3 days, 7 days, no expiry) or manual date configuration.
+  // Records audit trail with assigned role, expiry window, and optional reason/ticket.
   static async createStaffInvitation(request: FastifyRequest, reply: FastifyReply) {
-    const { email, role, expiryType, customExpiresAt } = createInvitationSchema.parse(request.body);
-    const result = await AdminService.createStaffInvitation(request.user!.id, email, role, {
-      expiryType,
-      customExpiresAt,
-    });
+    const { email, role, expiryType, customExpiresAt, reason, ticketReference } = createInvitationSchema.parse(request.body);
 
-    await writeAuditLog({
-      userId: request.user!.id,
-      action: 'STAFF_INVITATION_SENT',
-      entityType: 'INVITATION',
-      entityId: result.invitation.id,
-      newData: { email, role, expiryType, expiresAt: result.invitation.expiresAt },
-      request,
-    });
+    try {
+      const result = await AdminService.createStaffInvitation(request.user!.id, email, role, {
+        expiryType,
+        customExpiresAt,
+      });
 
-    return reply.status(201).send({ success: true, data: result });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: 'STAFF_INVITATION_SENT',
+        entityType: 'INVITATION',
+        entityId: result.invitation.id,
+        status: 'SUCCESS',
+        reason,
+        ticketReference,
+        newData: {
+          email,
+          role,
+          expiryType,
+          expiresAt: result.invitation.expiresAt,
+        },
+        request,
+      });
+
+      return reply.status(201).send({ success: true, data: result });
+    } catch (err: any) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: 'STAFF_INVITATION_SENT_FAILED',
+        entityType: 'INVITATION',
+        entityId: email,
+        status: 'FAILED',
+        reason: err.message,
+        newData: { email, role, expiryType },
+        request,
+      });
+
+      throw err;
+    }
   }
 
   // Lists all staff invitations showing current status, invited role, and expiration.
@@ -142,16 +206,42 @@ export class AdminController {
   // Emits an audit log entry so invitation cancellations are securely tracked.
   static async revokeStaffInvitation(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
-    const revoked = await AdminService.revokeStaffInvitation(id);
 
-    await writeAuditLog({
-      userId: request.user!.id,
-      action: 'STAFF_INVITATION_REVOKED',
-      entityType: 'INVITATION',
-      entityId: id,
-      request,
-    });
+    try {
+      const revoked = await AdminService.revokeStaffInvitation(id);
 
-    return reply.status(200).send({ success: true, data: revoked });
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: 'STAFF_INVITATION_REVOKED',
+        entityType: 'INVITATION',
+        entityId: id,
+        status: 'SUCCESS',
+        oldData: { status: 'PENDING', email: revoked.email, role: revoked.role },
+        newData: { status: 'REVOKED', email: revoked.email, role: revoked.role },
+        request,
+      });
+
+      return reply.status(200).send({ success: true, data: revoked });
+    } catch (err: any) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: 'STAFF_INVITATION_REVOKE_FAILED',
+        entityType: 'INVITATION',
+        entityId: id,
+        status: 'FAILED',
+        newData: { error: err.message },
+        request,
+      });
+
+      throw err;
+    }
+  }
+
+  // Retrieves paginated forensic audit records for compliance and review.
+  // Restricts access to authorized operators with the audit:read permission.
+  static async getAuditLogs(request: FastifyRequest, reply: FastifyReply) {
+    const query = auditLogQuerySchema.parse(request.query);
+    const result = await AdminService.getAuditLogs(query);
+    return reply.status(200).send({ success: true, data: result });
   }
 }
