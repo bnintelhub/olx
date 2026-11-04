@@ -1,50 +1,31 @@
 import axios from 'axios';
-import { isTokenExpiringSoon } from '../features/auth/service/auth.service';
 
+// Base Axios client configured for secure, HTTP-only cookie authentication
 export const apiClient = axios.create({
   baseURL: '/api/v1',
-  withCredentials: true,
+  withCredentials: true, // Automatically sends and receives HTTP-only cookies
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Mutex promise to ensure only one refresh request runs concurrently
-let refreshPromise: Promise<string | null> | null = null;
+// Mutex promise to prevent duplicate concurrent refresh requests
+let refreshPromise: Promise<boolean> | null = null;
 
-// Silently refreshes the access token using the stored refresh token or HTTP-only cookie
-export async function executeSilentRefresh(): Promise<string | null> {
+// Silently refreshes authentication cookies using the HTTP-only refresh_token cookie
+export async function executeSilentRefresh(): Promise<boolean> {
   if (refreshPromise) {
     return refreshPromise;
   }
 
-  const refreshToken = localStorage.getItem('admin_refresh_token');
-
+  // Use raw axios to bypass apiClient interceptors and avoid recursion
   refreshPromise = axios
-    .post(
-      '/api/v1/auth/refresh',
-      { refreshToken },
-      { withCredentials: true }
-    )
+    .post('/api/v1/auth/refresh', {}, { withCredentials: true })
     .then((res) => {
-      const newAccessToken = res.data?.data?.accessToken;
-      const newRefreshToken = res.data?.data?.refreshToken;
-
-      if (newAccessToken) {
-        localStorage.setItem('admin_access_token', newAccessToken);
-        localStorage.setItem('admin_token', newAccessToken);
-      }
-      if (newRefreshToken) {
-        localStorage.setItem('admin_refresh_token', newRefreshToken);
-      }
-      return newAccessToken || null;
+      return Boolean(res.data?.success);
     })
-    .catch((err) => {
-      // Clear credentials on invalid refresh session
-      localStorage.removeItem('admin_access_token');
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin_refresh_token');
-      return null;
+    .catch(() => {
+      return false;
     })
     .finally(() => {
       refreshPromise = null;
@@ -53,47 +34,26 @@ export async function executeSilentRefresh(): Promise<string | null> {
   return refreshPromise;
 }
 
-// Predictive Request Interceptor:
-// Checks if the access token will expire within the next 60 seconds.
-// If expiring soon, silently refreshes before the request is dispatched.
-apiClient.interceptors.request.use(async (config) => {
-  // Avoid intercepting refresh or logout endpoints to prevent recursive loops
-  const isAuthBypassUrl = config.url?.includes('/auth/refresh') || config.url?.includes('/auth/login');
-  let token = localStorage.getItem('admin_access_token') || localStorage.getItem('admin_token');
-
-  if (!isAuthBypassUrl && token && isTokenExpiringSoon(token, 60)) {
-    // Proactively refresh before the server rejects the request with a 401
-    const freshToken = await executeSilentRefresh();
-    if (freshToken) {
-      token = freshToken;
-    }
-  }
-
-  if (token && !config.headers.Authorization) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
-});
-
-// Reactive 401 Response Interceptor:
-// Fallback if the token expired server-side unexpectedly (e.g. clock skew or revoked token)
+// Reactive 401 Interceptor:
+// If an access token expires, catches the 401, renews cookies via silent refresh,
+// and replays the original request automatically without disturbing the user.
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
     const isRefreshCall = originalRequest?.url?.includes('/auth/refresh');
+    const isLoginCall = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/admin-login');
 
-    if (error.response?.status === 401 && !originalRequest?._retry && !isRefreshCall) {
+    if (error.response?.status === 401 && !originalRequest?._retry && !isRefreshCall && !isLoginCall) {
       originalRequest._retry = true;
 
-      const freshToken = await executeSilentRefresh();
-      if (freshToken) {
-        originalRequest.headers.Authorization = `Bearer ${freshToken}`;
+      const refreshSuccess = await executeSilentRefresh();
+      if (refreshSuccess) {
+        // Retry original request with newly issued session cookies
         return apiClient(originalRequest);
       }
 
-      // If refresh failed completely, redirect to login
+      // If refresh failed completely, session is invalid
       if (window.location.pathname !== '/login') {
         window.location.href = '/login';
       }

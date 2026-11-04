@@ -6,17 +6,17 @@ import { AdminUser } from '../../../types';
 
 export const AUTH_QUERY_KEY = ['auth', 'me'] as const;
 
-// Hook to query and cache the currently authenticated admin profile
+// Hook to query and cache the currently authenticated admin profile via HTTP-only cookie
 export function useAuthQuery() {
-  const { accessToken, setAuth, isAuthenticated } = useAuthStore();
+  const { setAuth, isAuthenticated } = useAuthStore();
 
   const query = useQuery<AdminUser, Error>({
     queryKey: AUTH_QUERY_KEY,
     queryFn: async () => {
       return await authService.getMe();
     },
-    // Only query backend when an active token exists
-    enabled: Boolean(accessToken && isAuthenticated),
+    // Only query when user is authenticated
+    enabled: Boolean(isAuthenticated),
     staleTime: 1000 * 60 * 5, // Cache profile for 5 minutes
     retry: (failureCount, error: any) => {
       // Do not retry on 401 unauthorized errors
@@ -25,7 +25,7 @@ export function useAuthQuery() {
     },
   });
 
-  // Keep Zustand auth state synchronized whenever TanStack Query fetches fresh user data
+  // Keep Zustand auth state synchronized whenever fresh user data is fetched
   useEffect(() => {
     if (query.data) {
       setAuth(query.data);

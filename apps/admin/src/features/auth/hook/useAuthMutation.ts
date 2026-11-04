@@ -11,7 +11,7 @@ import {
 import { useAuthStore } from '../../../stores/auth.store';
 import { AUTH_QUERY_KEY } from './useAuthQuery';
 
-// Mutation hook for Admin Sign-In
+// Mutation hook for Admin Sign-In using secure HTTP-only cookies
 export function useLoginMutation() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -31,16 +31,12 @@ export function useLoginMutation() {
           role: payload.role || 'SUPER_ADMIN',
           permissions: ['*'],
         };
-        const demoTokens = {
-          accessToken: 'demo_access_token_super_admin',
-          refreshToken: 'demo_refresh_token_super_admin',
-        };
-        return { user: demoUser, tokens: demoTokens };
+        return { user: demoUser };
       }
     },
     onSuccess: (data) => {
-      // Update persistent Zustand auth state and schedule silent refresh
-      setAuth(data.user, data.tokens);
+      // Update persistent Zustand auth state and arm predictive refresh timer
+      setAuth(data.user);
 
       // Populate TanStack Query cache with user data
       queryClient.setQueryData(AUTH_QUERY_KEY, data.user);
@@ -96,16 +92,13 @@ export function useLogoutMutation() {
   });
 }
 
-// Mutation hook for Manual Token Refresh
+// Mutation hook for Manual Silent Token Refresh via Cookie
 export function useRefreshTokenMutation() {
-  const setTokens = useAuthStore((s) => s.setTokens);
+  const silentRefresh = useAuthStore((s) => s.silentRefresh);
 
-  return useMutation<AuthTokens, Error, string | undefined>({
-    mutationFn: async (refreshToken?: string) => {
-      return await authService.refreshToken(refreshToken);
-    },
-    onSuccess: (tokens) => {
-      setTokens(tokens);
+  return useMutation<boolean, Error, void>({
+    mutationFn: async () => {
+      return await silentRefresh();
     },
   });
 }
