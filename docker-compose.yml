@@ -1,24 +1,21 @@
-version: '3.8'
-
 services:
   # ========================================================
-  # MySQL 8.4 Database Container
+  # PostgreSQL 16 Database Container
   # ========================================================
-  mysql:
-    image: mysql:8.4
-    container_name: bharatmarket_mysql
+  postgres:
+    image: postgres:16-alpine
+    container_name: bharatmarket_postgres
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpassword}
-      MYSQL_DATABASE: ${DB_NAME:-olx_marketplace}
-      MYSQL_USER: ${DB_USER:-olx_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-olx_secret_pass}
+      POSTGRES_DB: ${DB_NAME:-olx_marketplace}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     ports:
-      - "${DB_PORT:-3306}:3306"
+      - "${DB_PORT:-5433}:5432"
     volumes:
-      - mysql_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD:-rootpassword}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-olx_marketplace}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -26,26 +23,48 @@ services:
       - bharatmarket_net
 
   # ========================================================
-  # Backend API Server (Node.js + Prisma + Socket.IO)
+  # Redis 7 In-Memory Cache & Session Store
   # ========================================================
-  backend:
+  redis:
+    image: redis:7-alpine
+    container_name: bharatmarket_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Backend API Server (Fastify + Prisma + Socket.IO + Redis)
+  # ========================================================
+  server:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: bharatmarket_backend
+      context: .
+      dockerfile: ./apps/server/Dockerfile
+    container_name: bharatmarket_server
     restart: unless-stopped
     depends_on:
-      mysql:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 5000
-      DATABASE_URL: "mysql://${DB_USER:-olx_user}:${DB_PASSWORD:-olx_secret_pass}@mysql:3306/${DB_NAME:-olx_marketplace}"
-      JWT_SECRET: ${JWT_SECRET:-bharatmarket_super_secure_jwt_secret_key_2026}
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-bharatmarket_super_secure_jwt_secret_key_2026}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-bharatmarket_refresh_jwt_secret_key_2026}
       SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
       MOCK_OTP_CODE: ${MOCK_OTP_CODE:-123456}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost}
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
     ports:
       - "5000:5000"
     volumes:
@@ -54,23 +73,46 @@ services:
       - bharatmarket_net
 
   # ========================================================
-  # Frontend Web Client (React + Vite PWA + Nginx)
+  # BullMQ Background Worker Service
   # ========================================================
-  frontend:
+  workers:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: bharatmarket_frontend
+      context: .
+      dockerfile: ./apps/workers/Dockerfile
+    container_name: bharatmarket_workers
     restart: unless-stopped
     depends_on:
-      - backend
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Frontend Web Client (React + Vite PWA + Nginx)
+  # ========================================================
+  client:
+    build:
+      context: .
+      dockerfile: ./apps/client/Dockerfile
+    container_name: bharatmarket_client
+    restart: unless-stopped
+    depends_on:
+      - server
     ports:
       - "80:80"
     networks:
       - bharatmarket_net
 
 volumes:
-  mysql_data:
+  postgres_data:
+    driver: local
+  redis_data:
     driver: local
   backend_uploads:
     driver: local

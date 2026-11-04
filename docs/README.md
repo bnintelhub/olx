@@ -74,7 +74,7 @@ flowchart LR
 ### Repository structure
 
 ```text
-olx-main/
+olx/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/       # Customer और admin UI modules
@@ -260,7 +260,7 @@ Backend पर:
 
 ## 7. Database Design
 
-Prisma schema [backend/prisma/schema.prisma](../backend/prisma/schema.prisma) में MySQL के लिए defined है।
+Prisma schema [packages/database/prisma/schema.prisma](../packages/database/prisma/schema.prisma) में PostgreSQL के लिए defined है।
 
 ### Identity
 
@@ -408,6 +408,8 @@ Frontend build में TypeScript check और Vite production bundle शा�
 | [02-SYSTEM-ARCHITECTURE.md](02-SYSTEM-ARCHITECTURE.md) | विस्तृत architecture plan |
 | [03-DATABASE-SCHEMA.md](03-DATABASE-SCHEMA.md) | Data model और schema reference |
 | [04-API-SPEC.md](04-API-SPEC.md) | REST/Socket protocol reference |
+| [AUTH_WORKFLOW.md](AUTH_WORKFLOW.md) | Fastify Authentication, BullMQ Email OTP Queue, and API Payloads |
+| [RBAC_WORKFLOW.md](RBAC_WORKFLOW.md) | Role-Based Access Control, Granular Permissions, and Capabilities |
 | [05-UI-UX-PLAN.md](05-UI-UX-PLAN.md) | UI/UX plan और responsive layouts |
 | [06-SECURITY-AND-COMPLIANCE.md](06-SECURITY-AND-COMPLIANCE.md) | Security और compliance guidance |
 | [07-SEARCH-AND-RECOMMENDATION.md](07-SEARCH-AND-RECOMMENDATION.md) | Search और recommendation design |

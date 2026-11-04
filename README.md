@@ -15,6 +15,12 @@
 
 ## Table of Contents
 
+- [Monorepo Architecture (pnpm & Turborepo)](#monorepo-architecture-pnpm--turborepo)
+  - [Workspace Structure](#workspace-structure)
+  - [Available Monorepo Commands](#available-monorepo-commands)
+- [Backend & Authentication Architecture](#backend--authentication-architecture)
+  - [👉 Detailed Auth Workflow & API Payloads Documentation (Clickable)](docs/AUTH_WORKFLOW.md)
+  - [👉 RBAC & Account Capabilities Architecture Documentation (Clickable)](docs/RBAC_WORKFLOW.md)
 - [Features](#features)
   - [Marketplace and Ads](#marketplace-and-ads)
   - [Search and Discovery](#search-and-discovery)
@@ -37,6 +43,170 @@
 - [Contributing](#contributing)
 - [License](#license)
 - [Contact](#contact)
+
+---
+
+## Monorepo Architecture (pnpm & Turborepo)
+
+The repository is organized as a high-performance **pnpm + Turborepo monorepo**:
+
+### Workspace Structure
+
+```
+olx/
+├── apps/
+│   ├── client/              # React 18 + Vite Web Application (@olx/client)
+│   ├── server/              # Fastify v4 + TypeScript 7 Backend REST API (@olx/server)
+│   └── workers/             # BullMQ 5.x Background Job Processing Workers (@olx/workers)
+├── packages/
+│   ├── database/            # Prisma 5.22 ORM, PostgreSQL schema, migrations, seed (@olx/database)
+│   └── shared/              # Unified RBAC, capabilities, errors, audit & crypto utils (@olx/shared)
+├── docker-compose.yml        # PostgreSQL 16, Redis 7, Server, Workers & Client containers
+├── pnpm-workspace.yaml       # Monorepo packages mapping (apps/* and packages/*)
+├── turbo.json               # Turbo pipeline definitions, task caching & dependency graphs
+└── package.json             # Root monorepo scripts & orchestration
+```
+
+### Available Monorepo Commands
+
+All commands can be executed from the monorepo root:
+
+| Command | Action |
+|:---|:---|
+| `pnpm dev` | Starts all applications (`client`, `server`, `workers`) concurrently via Turbo |
+| `pnpm dev:client` | Starts only the React + Vite frontend development server on port 5173 |
+| `pnpm dev:server` | Starts only the Fastify backend API in watch mode via `tsx` on port 5000 |
+| `pnpm dev:workers` | Starts only the BullMQ background worker service in watch mode via `tsx` |
+| `pnpm build` | Compiles all packages and applications via Turbo with topological ordering |
+| `pnpm test` | Runs the full test suite (22 unit, integration, and e2e tests via Vitest) |
+| `pnpm db:generate` | Generates the Prisma Client in `@olx/database` |
+| `pnpm db:push` | Pushes Prisma schema updates directly to PostgreSQL |
+| `pnpm db:studio` | Opens Prisma Studio visual database inspector on port 5555 |
+| `pnpm db:seed` | Seeds database with initial categories, locations, and admin credentials |
+| `pnpm docker:db` | Starts isolated PostgreSQL (port 5433) and Redis (port 6379) containers |
+| `pnpm docker:up` | Boots the full application stack in Docker (Postgres, Redis, Server, Workers, Client) |
+| `pnpm docker:down` | Gracefully stops all Docker containers |
+| `pnpm docker:build` | Builds production Docker container images for all services |
+
+---
+
+## Backend & Authentication Architecture
+
+> 🔗 **Quick Link**: [Click here to open the full Authentication & BullMQ Workflow Documentation](docs/AUTH_WORKFLOW.md) for request/response payloads, error codes, and complete specifications.
+
+The backend is built with **Fastify v4** following clean modular architecture (`backend/src/modules`), backed by **PostgreSQL 16**, **Redis 7.0**, and **BullMQ 5.x** for background job processing:
+
+- **Fastify Modular API**: Distinct modules for `auth`, `users`, `listings`, `categories`, `uploads`, `search`, `favourites`, `chat`, `notifications`, `reports`, `payments`, and `admin`.
+- **BullMQ Background Email Queue**: Non-blocking asynchronous OTP dispatch via Redis queue (`otp-dispatch`) with worker retries and exponential backoff.
+- **Enterprise-Grade Security**:
+  - Passwords hashed with `bcrypt` (12 rounds).
+  - OTP values hashed with `SHA-256` before persistence.
+  - Brute-force protection: Max 3 attempts before OTP session lockout.
+  - Rate limiting & 45s resend cooldown enforced via Redis TTL.
+  - Dual-token session security: Short-lived JWT (15 mins) + 40-byte cryptographically random refresh token rotation.
+
+### Registration & BullMQ Background Queue Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as "Client (Web / Mobile)"
+    participant Fastify as "Fastify API (/api/v1/auth)"
+    participant DB as "PostgreSQL (Prisma ORM)"
+    participant Redis as "Redis 7.0"
+    participant BullMQ as "BullMQ (otp-dispatch)"
+    participant Worker as "BullMQ Background Worker"
+    participant Email as "Email Delivery Service"
+
+    Client->>Fastify: POST /register { email, password, name }
+    Fastify->>DB: Check uniqueness & hash password (bcrypt)
+    Fastify->>DB: Store OtpSession with SHA-256 OTP Hash
+    Fastify->>BullMQ: Enqueue "send-otp-email" job
+    Fastify-->>Client: 201 Created { sessionId, expiresInSeconds: 300 }
+
+    Note over BullMQ,Worker: Asynchronous Background Processing
+    Worker->>BullMQ: Pop "send-otp-email" job
+    Worker->>Email: Deliver 6-digit OTP code to user's inbox
+    Email-->>Client: Receive OTP via Email
+
+    Client->>Fastify: POST /verify-email-otp { email, sessionId, otp }
+    Fastify->>DB: Verify SHA-256 hash & check attempt limit (<= 3)
+    Fastify->>DB: Mark isEmailVerified=true & update tokens
+    Fastify-->>Client: 200 OK { user, tokens: { accessToken, refreshToken } }
+```
+
+### Password Recovery & Rate Limit Cooldown Flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as "Client (Web / Mobile)"
+    participant Fastify as "Fastify API"
+    participant Redis as "Redis (Cooldown TTL)"
+    participant DB as "PostgreSQL"
+    participant BullMQ as "BullMQ Worker"
+
+    Client->>Fastify: POST /forgot-password { email }
+    Fastify->>Redis: Check cooldown key "otp_cooldown:<email>"
+    alt Within 45-Second Cooldown
+        Fastify-->>Client: 429 Too Many Requests (Rate limited)
+    else Cooldown Cleared
+        Fastify->>DB: Create OtpSession (PASSWORD_RESET, SHA-256)
+        Fastify->>Redis: Set cooldown TTL (45s)
+        Fastify->>BullMQ: Enqueue background email
+        Fastify-->>Client: 200 OK { sessionId, expiresInSeconds: 300 }
+        BullMQ->>Client: Send Reset Code Email
+    end
+
+    Client->>Fastify: POST /reset-password { email, sessionId, otp, newPassword }
+    Fastify->>DB: Validate OTP hash & update password hash
+    Fastify->>Redis: Invalidate cached user session
+    Fastify-->>Client: 200 OK { message: "Password has been reset successfully" }
+```
+
+### Role-Based Access Control (RBAC) & Account Capabilities
+
+> 🔗 **Quick Link**: [Click here to open the full RBAC & Capabilities Documentation](docs/RBAC_WORKFLOW.md) for permission matrices, authorization guards, and endpoint security specs.
+
+Access control is built upon fine-grained permissions and marketplace account capabilities:
+
+#### 1. Admin Panel Roles (Strict Separation of Duties)
+Universal admin power is explicitly prevented — permissions are granularly assigned to isolate sensitive domains:
+- **Super Admin (`SUPER_ADMIN`)**: Root control with wildcard (`*`) access across all modules and settings.
+- **Admin (`ADMIN`)**: Users, listings, categories, settings, operational moderation (cannot issue financial refunds).
+- **Moderator (`MODERATOR`)**: Review listings and investigate reports (cannot refund, change settings, or ban users).
+- **Customer Support (`CUSTOMER_SUPPORT`)**: Support tickets, dispute review, read-only user and listing lookup.
+- **Finance Admin (`FINANCE_ADMIN`)**: Payments, refunds, invoices, revenue (cannot moderate listings or change security settings).
+- **Content Manager (`CONTENT_MANAGER`)**: Categories, taxonomy attributes, promotional banners, announcements.
+- **Analyst (`ANALYST`)**: Read-only business intelligence, traffic, and platform reports.
+
+#### 2. Marketplace Account Capabilities (Unified Buyer & Seller)
+**Buyer and seller are handled through account capabilities rather than separate mutually exclusive roles.**
+Every registered user can seamlessly buy AND sell items:
+- `can_buy`: Browse listings, chat in real time, make offers, save favourites, report scams.
+- `can_sell`: Create, edit, promote, and manage classified listings.
+- `is_dealer`: Manage bulk dealer inventory, verified showroom profile, and dealer badges.
+
+If an account violates marketplace rules, administrators can revoke `can_sell` while keeping `can_buy` active.
+
+```mermaid
+flowchart TD
+    Req(["HTTP Request to Fastify API"]) --> Authenticate{"fastify.authenticate<br/>Valid JWT Token?"}
+    Authenticate -->|"No"| Deny401["401 Unauthorized"]
+    Authenticate -->|"Yes"| LoadUser["Extract user role, permissions<br/>and account capabilities"]
+    
+    LoadUser --> CheckActive{"Account status<br/>ACTIVE?"}
+    CheckActive -->|"No"| DenyInactive["401 User Inactive / Suspended"]
+    CheckActive -->|"Yes"| GuardType{"Route Guard Type"}
+    
+    GuardType -->|"requirePermission(P)"| CheckPerm{"user.role == SUPER_ADMIN<br/>OR has Permission P?"}
+    CheckPerm -->|"Yes"| PassPerm["Allowed - Execute Controller"]
+    CheckPerm -->|"No"| Deny403P["403 Forbidden<br/>FORBIDDEN_PERMISSION"]
+    
+    GuardType -->|"requireCapability(C)"| CheckCap{"user holds Capability C<br/>(e.g. can_sell)?"}
+    CheckCap -->|"Yes"| PassCap["Allowed - Execute Controller"]
+    CheckCap -->|"No"| Deny403C["403 Forbidden<br/>FORBIDDEN_CAPABILITY"]
+```
 
 ---
 
@@ -317,5 +487,4 @@ Feel free to reach out through the links below.
 <a href="https://twitter.com/sijeeshmiziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-Twitter-1DA1F2?style=for-the-badge&logo=Twitter&logoColor=white" alt="Twitter"></a>
 <a href="mailto:sijeeshmiziha1@gmail.com" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-Gmail-D14836?style=for-the-badge&logo=Gmail&logoColor=white" alt="Gmail"></a>
 <a href="https://www.youtube.com/c/sijeeshmiziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-YouTube-FF0000?style=for-the-badge&logo=YouTube&logoColor=white" alt="YouTube"></a>
-#   o l x  
- 
+

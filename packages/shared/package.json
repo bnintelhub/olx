@@ -1,0 +1,22 @@
+{
+  "name": "@olx/shared",
+  "version": "1.0.0",
+  "description": "Shared types, utilities, RBAC, and error handlers for OLX Marketplace",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "dependencies": {
+    "@olx/database": "workspace:*",
+    "@fastify/jwt": "^8.0.1",
+    "bcrypt": "^5.1.1",
+    "fastify": "^4.28.1"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/node": "^22.10.2",
+    "typescript": "^7.0.2"
+  }
+}
+

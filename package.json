@@ -1,31 +1,35 @@
 {
-  "name": "bharatmarket-olx",
+  "name": "olx-monorepo",
   "version": "1.0.0",
-  "description": "OLX ORBIT — Production-Grade OLX India Classifieds Marketplace",
+  "description": "OLX Marketplace Monorepo with Turborepo & pnpm",
   "private": true,
+  "packageManager": "pnpm@11.25.0",
   "scripts": {
-    "dev:backend": "npm --prefix backend run dev",
-    "dev:frontend": "npm --prefix frontend run dev",
-    "build:backend": "npm --prefix backend run build",
-    "build:frontend": "npm --prefix frontend run build",
-    "build": "npm run build:backend && npm run build:frontend",
-    "test:e2e": "powershell -File tests/e2e_full_platform.ps1",
-    "docker:up": "docker compose up --build -d",
-    "docker:down": "docker compose down"
+    "dev": "turbo run dev",
+    "dev:client": "pnpm --filter @olx/client dev",
+    "dev:server": "pnpm --filter @olx/server dev",
+    "dev:workers": "pnpm --filter @olx/workers dev",
+    "build": "turbo run build",
+    "build:client": "pnpm --filter @olx/client build",
+    "build:server": "pnpm --filter @olx/server build",
+    "build:workers": "pnpm --filter @olx/workers build",
+    "build:packages": "pnpm --filter \"@olx/*\" build",
+    "start:server": "pnpm --filter @olx/server start",
+    "start:workers": "pnpm --filter @olx/workers start",
+    "test": "turbo run test",
+    "test:server": "pnpm --filter @olx/server test",
+    "db:generate": "pnpm --filter @olx/database db:generate",
+    "db:push": "pnpm --filter @olx/database db:push",
+    "db:studio": "pnpm --filter @olx/database db:studio",
+    "db:seed": "pnpm --filter @olx/database db:seed",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:db": "docker compose up -d postgres redis",
+    "docker:build": "docker compose build",
+    "docker:logs": "docker compose logs -f",
+    "docker:ps": "docker compose ps"
   },
-  "keywords": [
-    "olx",
-    "classifieds",
-    "marketplace",
-    "react",
-    "vite",
-    "pwa",
-    "nodejs",
-    "express",
-    "mysql",
-    "prisma",
-    "socketio"
-  ],
-  "author": "OLX ORBIT Team",
-  "license": "MIT"
+  "devDependencies": {
+    "turbo": "^2.4.4"
+  }
 }
