@@ -35,24 +35,51 @@ export interface ApiResponse<T> {
 export const authService = {
   // Primary admin authentication endpoint - sets secure HTTP-only cookies on reply
   async adminLogin(payload: AdminLoginPayload): Promise<AuthResponseData> {
-    const { data } = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/admin-login', {
+    const { data } = await apiClient.post<ApiResponse<any>>('/auth/admin-login', {
       username: payload.username.trim(),
       password: payload.password,
       role: payload.role || 'ADMIN',
     });
-    return data.data;
+    const rawUser = data.data.user;
+    const user: AdminUser = {
+      id: rawUser.id,
+      email: rawUser.email,
+      phoneNumber: rawUser.phoneNumber,
+      role: rawUser.role,
+      name: rawUser.name || rawUser.profile?.name || rawUser.email?.split('@')[0] || 'Admin',
+      permissions: rawUser.permissions || [],
+    };
+    return { user, tokens: data.data.tokens };
   },
 
   // Staff registration endpoint
   async register(payload: RegisterPayload): Promise<AuthResponseData> {
-    const { data } = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/register', payload);
-    return data.data;
+    const { data } = await apiClient.post<ApiResponse<any>>('/auth/register', payload);
+    const rawUser = data.data.user;
+    const user: AdminUser = {
+      id: rawUser.id,
+      email: rawUser.email,
+      phoneNumber: rawUser.phoneNumber,
+      role: rawUser.role,
+      name: rawUser.name || rawUser.profile?.name || rawUser.email?.split('@')[0] || 'Staff',
+      permissions: rawUser.permissions || [],
+    };
+    return { user, tokens: data.data.tokens };
   },
 
   // Standard user email/password login
   async login(payload: { email: string; password?: string }): Promise<AuthResponseData> {
-    const { data } = await apiClient.post<ApiResponse<AuthResponseData>>('/auth/login', payload);
-    return data.data;
+    const { data } = await apiClient.post<ApiResponse<any>>('/auth/login', payload);
+    const rawUser = data.data.user;
+    const user: AdminUser = {
+      id: rawUser.id,
+      email: rawUser.email,
+      phoneNumber: rawUser.phoneNumber,
+      role: rawUser.role,
+      name: rawUser.name || rawUser.profile?.name || rawUser.email?.split('@')[0] || 'User',
+      permissions: rawUser.permissions || [],
+    };
+    return { user, tokens: data.data.tokens };
   },
 
   // Silent refresh via HTTP-only cookie.
@@ -68,8 +95,16 @@ export const authService = {
 
   // Fetch authenticated admin profile using HTTP-only session cookie
   async getMe(): Promise<AdminUser> {
-    const { data } = await apiClient.get<ApiResponse<AdminUser>>('/auth/me');
-    return data.data;
+    const { data } = await apiClient.get<ApiResponse<any>>('/auth/me');
+    const rawUser = data.data;
+    return {
+      id: rawUser.id,
+      email: rawUser.email,
+      phoneNumber: rawUser.phoneNumber,
+      role: rawUser.role,
+      name: rawUser.name || rawUser.profile?.name || rawUser.email?.split('@')[0] || 'Admin',
+      permissions: rawUser.permissions || [],
+    };
   },
 
   // Terminate session and clear HTTP-only cookies on backend

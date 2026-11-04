@@ -3,15 +3,6 @@ import { AdminUser, AdminRole } from '../types';
 import { authService } from '../features/auth/service/auth.service';
 import { executeSilentRefresh } from '../lib/api-client';
 
-// Fallback demo user: rahul@gmail.com with ADMIN role (restricted from superadmin dashboards)
-const DEFAULT_DEMO_USER: AdminUser = {
-  id: 'admin_rahul',
-  name: 'Rahul Kumar',
-  email: 'rahul@gmail.com',
-  role: 'ADMIN',
-  permissions: ['users:*', 'listings:*', 'categories:*', 'reports:*', 'media:*'],
-};
-
 // Access token lifespan is 15 minutes (900 seconds)
 const ACCESS_TOKEN_LIFESPAN_MS = 15 * 60 * 1000;
 // Proactively refresh 1 minute before expiry (at 14 minutes)
@@ -54,10 +45,10 @@ interface AuthState {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: DEFAULT_DEMO_USER,
+  user: null,
   role: 'ADMIN',
-  isAuthenticated: true,
-  isLoading: false,
+  isAuthenticated: false,
+  isLoading: true, // starts in loading state while checking authentic server session cookie
 
   setAuth: (user: AdminUser) => {
     // Arm in-memory predictive timer on login (zero localStorage token usage)
@@ -112,6 +103,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   checkAuth: async () => {
+    set({ isLoading: true });
     try {
       // Validate session via HTTP-only cookie automatically sent with request
       const user = await authService.getMe();
@@ -123,6 +115,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+        return;
       }
     } catch {
       // If cookie expired during idle, attempt silent refresh before giving up
@@ -141,10 +134,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             return;
           }
         } catch {
-          // Fall through
+          // Silent refresh failed
         }
       }
-      // Retain demo user for offline development if not authenticated
     }
+
+    // No valid session on server - clear credentials and lock access
+    clearPredictiveTimer();
+    set({
+      user: null,
+      role: 'ADMIN',
+      isAuthenticated: false,
+      isLoading: false,
+    });
   },
 }));

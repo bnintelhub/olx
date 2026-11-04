@@ -11,7 +11,7 @@ import {
 import { useAuthStore } from '../../../stores/auth.store';
 import { AUTH_QUERY_KEY } from './useAuthQuery';
 
-// Mutation hook for Admin Sign-In using secure HTTP-only cookies
+// Mutation hook for Admin Sign-In using secure HTTP-only cookies from the backend server
 export function useLoginMutation() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -19,32 +19,11 @@ export function useLoginMutation() {
 
   return useMutation<AuthResponseData, Error, AdminLoginPayload>({
     mutationFn: async (payload: AdminLoginPayload) => {
-      try {
-        return await authService.adminLogin(payload);
-      } catch (err: any) {
-        // Fallback for local demo preview when backend is not actively running
-        const email = payload.username.trim().toLowerCase();
-        const isSuperAdmin = email === 'superadmin@gmail.com' || payload.role === 'SUPER_ADMIN';
-        const demoUser = isSuperAdmin
-          ? {
-              id: 'super_admin_1',
-              name: 'Super Admin',
-              email,
-              role: 'SUPER_ADMIN' as const,
-              permissions: ['*'],
-            }
-          : {
-              id: 'admin_rahul',
-              name: 'Rahul Kumar',
-              email: 'rahul@gmail.com',
-              role: 'ADMIN' as const,
-              permissions: ['users:*', 'listings:*', 'categories:*', 'reports:*', 'media:*'],
-            };
-        return { user: demoUser };
-      }
+      // Must authenticate strictly via server API - NO false login fallback
+      return await authService.adminLogin(payload);
     },
     onSuccess: (data) => {
-      // Update persistent Zustand auth state and arm predictive refresh timer
+      // Update persistent Zustand auth state with authentic server user data
       setAuth(data.user);
 
       // Populate TanStack Query cache with user data
@@ -54,7 +33,11 @@ export function useLoginMutation() {
       navigate('/dashboard');
     },
     onError: (error: any) => {
-      const message = error.response?.data?.message || error.message || 'Authentication failed';
+      const message =
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        error.message ||
+        'Authentication failed. Please verify credentials with server.';
       toast.error(message);
     },
   });

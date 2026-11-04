@@ -26,8 +26,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarFooter>
         <NavUser
           user={{
-            name: user?.name || (isSuperAdmin ? 'Super Admin' : 'Rahul Kumar'),
-            email: user?.email || (isSuperAdmin ? 'superadmin@gmail.com' : 'rahul@gmail.com'),
+            name: user?.name || (isSuperAdmin ? 'Super Admin' : 'Admin User'),
+            email: user?.email || (isSuperAdmin ? 'superadmin@gmail.com' : 'admin@gmail.com'),
             role: user?.role || 'ADMIN',
           }}
         />

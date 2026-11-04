@@ -65,15 +65,15 @@ export function AdminHeader() {
 
   const currentRoleMeta = ROLE_CONFIGS[effectiveRole] || ROLE_CONFIGS.ADMIN;
 
-  const displayName = user?.name || (isSuperAdmin ? 'Super Admin' : 'Rahul Kumar');
-  const displayEmail = user?.email || (isSuperAdmin ? 'superadmin@gmail.com' : 'rahul@gmail.com');
+  const displayName = user?.name || (isSuperAdmin ? 'Super Admin' : 'Admin User');
+  const displayEmail = user?.email || (isSuperAdmin ? 'superadmin@gmail.com' : 'admin@gmail.com');
   const initials = displayName
     .split(' ')
     .filter(Boolean)
     .map((w) => w[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase() || 'RK';
+    .toUpperCase() || 'AD';
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b bg-background text-foreground px-4 sm:px-6 shadow-2xs transition-colors duration-200">

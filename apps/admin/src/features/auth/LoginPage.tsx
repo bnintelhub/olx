@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../stores/auth.store';
 import { useLoginMutation, useRegisterMutation } from './hook/useAuthMutation';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -8,6 +10,17 @@ export function LoginPage() {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [email, setEmail] = useState('rahul@gmail.com');
   const [password, setPassword] = useState('rahul@123');
+
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isAuthChecking = useAuthStore((s) => s.isLoading);
+  const navigate = useNavigate();
+
+  // If already authenticated by server session cookie, redirect directly to dashboard
+  useEffect(() => {
+    if (!isAuthChecking && isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, isAuthChecking, navigate]);
 
   // TanStack Query mutation hooks for predictive auth lifecycle
   const loginMutation = useLoginMutation();
