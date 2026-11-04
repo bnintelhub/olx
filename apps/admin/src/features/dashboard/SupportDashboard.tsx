@@ -3,12 +3,19 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '../../components/ui/table';
+import {
   Headphones,
   CheckCircle2,
   Clock,
   Star,
   Search,
-  MessageSquare,
   AlertCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -197,71 +204,70 @@ export function SupportDashboard() {
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px] font-semibold tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Ticket ID</th>
-                  <th className="px-5 py-3">Customer</th>
-                  <th className="px-5 py-3">Subject / Issue</th>
-                  <th className="px-5 py-3">Priority</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Time</th>
-                  <th className="px-5 py-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredTickets.map((t) => (
-                  <tr key={t.id} className="hover:bg-muted/30 transition">
-                    <td className="px-5 py-3 font-mono font-bold text-primary">{t.ticketId}</td>
-                    <td className="px-5 py-3">
-                      <div className="font-semibold text-foreground">{t.user}</div>
-                      <div className="text-[11px] text-muted-foreground">{t.email}</div>
-                    </td>
-                    <td className="px-5 py-3 max-w-xs truncate text-foreground font-medium">{t.subject}</td>
-                    <td className="px-5 py-3">
-                      <Badge
-                        variant={t.priority === 'HIGH' ? 'destructive' : t.priority === 'MEDIUM' ? 'warning' : 'outline'}
-                        className="text-[10px]"
+          <Table>
+            <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider">
+              <TableRow>
+                <TableHead className="px-5 py-3">Ticket ID</TableHead>
+                <TableHead className="px-5 py-3">Customer</TableHead>
+                <TableHead className="px-5 py-3">Subject / Issue</TableHead>
+                <TableHead className="px-5 py-3">Priority</TableHead>
+                <TableHead className="px-5 py-3">Status</TableHead>
+                <TableHead className="px-5 py-3">Time</TableHead>
+                <TableHead className="px-5 py-3 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredTickets.map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell className="px-5 py-3 font-mono font-bold text-primary">{t.ticketId}</TableCell>
+                  <TableCell className="px-5 py-3">
+                    <div className="font-semibold text-foreground">{t.user}</div>
+                    <div className="text-[11px] text-muted-foreground">{t.email}</div>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 max-w-xs truncate text-foreground font-medium">{t.subject}</TableCell>
+                  <TableCell className="px-5 py-3">
+                    <Badge
+                      variant={t.priority === 'HIGH' ? 'destructive' : t.priority === 'MEDIUM' ? 'warning' : 'outline'}
+                      className="text-[10px]"
+                    >
+                      {t.priority}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        t.status === 'OPEN'
+                          ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                          : t.status === 'IN_PROGRESS'
+                          ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                      }`}
+                    >
+                      {t.status.replace('_', ' ')}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground">{t.time}</TableCell>
+                  <TableCell className="px-5 py-3 text-right">
+                    {t.status !== 'RESOLVED' ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleResolve(t.id, t.ticketId)}
+                        className="h-7 text-xs"
                       >
-                        {t.priority}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          t.status === 'OPEN'
-                            ? 'bg-rose-500/10 text-rose-600'
-                            : t.status === 'IN_PROGRESS'
-                            ? 'bg-amber-500/10 text-amber-600'
-                            : 'bg-emerald-500/10 text-emerald-600'
-                        }`}
-                      >
-                        {t.status.replace('_', ' ')}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-muted-foreground">{t.time}</td>
-                    <td className="px-5 py-3 text-right">
-                      {t.status !== 'RESOLVED' ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleResolve(t.id, t.ticketId)}
-                          className="h-7 text-xs"
-                        >
-                          Resolve
-                        </Button>
-                      ) : (
-                        <span className="text-emerald-600 text-xs font-semibold">Done ✓</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                        Resolve
+                      </Button>
+                    ) : (
+                      <span className="text-emerald-600 dark:text-emerald-400 text-xs font-semibold">Done ✓</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
   );
 }
+

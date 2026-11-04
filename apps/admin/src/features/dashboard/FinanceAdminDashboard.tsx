@@ -1,6 +1,14 @@
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '../../components/ui/table';
+import {
   IndianRupee,
   TrendingUp,
   CreditCard,
@@ -145,45 +153,44 @@ export function FinanceAdminDashboard() {
           <p className="text-xs text-muted-foreground">Audit log of payments, promotional ad purchases, and escrow payouts.</p>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px] font-semibold tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Transaction ID</th>
-                  <th className="px-5 py-3">User / Entity</th>
-                  <th className="px-5 py-3">Type</th>
-                  <th className="px-5 py-3">Amount</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {TRANSACTIONS.map((txn) => (
-                  <tr key={txn.id} className="hover:bg-muted/30 transition">
-                    <td className="px-5 py-3 font-mono font-bold text-foreground">{txn.id}</td>
-                    <td className="px-5 py-3 font-semibold text-foreground">{txn.user}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{txn.type}</td>
-                    <td className="px-5 py-3 font-bold text-foreground">{txn.amount}</td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          txn.status === 'SUCCESS'
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-rose-500/10 text-rose-600'
-                        }`}
-                      >
-                        {txn.status === 'SUCCESS' && <CheckCircle2 className="h-3 w-3" />}
-                        {txn.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-muted-foreground">{txn.date}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider">
+              <TableRow>
+                <TableHead className="px-5 py-3">Transaction ID</TableHead>
+                <TableHead className="px-5 py-3">User / Entity</TableHead>
+                <TableHead className="px-5 py-3">Type</TableHead>
+                <TableHead className="px-5 py-3">Amount</TableHead>
+                <TableHead className="px-5 py-3">Status</TableHead>
+                <TableHead className="px-5 py-3">Timestamp</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {TRANSACTIONS.map((txn) => (
+                <TableRow key={txn.id}>
+                  <TableCell className="px-5 py-3 font-mono font-bold text-foreground">{txn.id}</TableCell>
+                  <TableCell className="px-5 py-3 font-semibold text-foreground">{txn.user}</TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground">{txn.type}</TableCell>
+                  <TableCell className="px-5 py-3 font-bold text-foreground">{txn.amount}</TableCell>
+                  <TableCell className="px-5 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        txn.status === 'SUCCESS'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {txn.status === 'SUCCESS' && <CheckCircle2 className="h-3 w-3" />}
+                      {txn.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground">{txn.date}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
   );
 }
+

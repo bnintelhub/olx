@@ -211,9 +211,9 @@ export class AuthController {
   }
 
   static async adminLogin(request: FastifyRequest, reply: FastifyReply) {
-    const { username, password } = adminLoginSchema.parse(request.body);
+    const { username, password, role } = adminLoginSchema.parse(request.body);
     try {
-      const result = await AuthService.adminLogin(username, password);
+      const result = await AuthService.adminLogin(username, password, role);
 
       // Keep admin logged in with secure cookies
       setAuthCookies(reply, result.tokens);

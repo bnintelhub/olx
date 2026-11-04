@@ -2,13 +2,20 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '../../components/ui/table';
+import {
   Eye,
   MessageSquare,
   TrendingUp,
   Download,
   Lock,
   ArrowUpRight,
-  PieChart as PieIcon,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -168,32 +175,31 @@ export function AnalystDashboard() {
           <p className="text-xs text-muted-foreground">Breakdown of inquiry performance and lead yield across top verticals.</p>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px] font-semibold tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Category</th>
-                  <th className="px-5 py-3">Traffic (Views)</th>
-                  <th className="px-5 py-3">Leads Generated</th>
-                  <th className="px-5 py-3">Conversion Rate</th>
-                  <th className="px-5 py-3 text-right">Market Share</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {CATEGORY_CONVERSION.map((c) => (
-                  <tr key={c.category} className="hover:bg-muted/30 transition">
-                    <td className="px-5 py-3 font-bold text-foreground">{c.category}</td>
-                    <td className="px-5 py-3 font-medium text-foreground">{c.views}</td>
-                    <td className="px-5 py-3 font-medium text-foreground">{c.leads}</td>
-                    <td className="px-5 py-3 font-bold text-emerald-600">{c.conv}</td>
-                    <td className="px-5 py-3 text-right font-semibold text-foreground">{c.share}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider">
+              <TableRow>
+                <TableHead className="px-5 py-3">Category</TableHead>
+                <TableHead className="px-5 py-3">Traffic (Views)</TableHead>
+                <TableHead className="px-5 py-3">Leads Generated</TableHead>
+                <TableHead className="px-5 py-3">Conversion Rate</TableHead>
+                <TableHead className="px-5 py-3 text-right">Market Share</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {CATEGORY_CONVERSION.map((c) => (
+                <TableRow key={c.category}>
+                  <TableCell className="px-5 py-3 font-bold text-foreground">{c.category}</TableCell>
+                  <TableCell className="px-5 py-3 font-medium text-foreground">{c.views}</TableCell>
+                  <TableCell className="px-5 py-3 font-medium text-foreground">{c.leads}</TableCell>
+                  <TableCell className="px-5 py-3 font-bold text-emerald-600 dark:text-emerald-400">{c.conv}</TableCell>
+                  <TableCell className="px-5 py-3 text-right font-semibold text-foreground">{c.share}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
   );
 }
+

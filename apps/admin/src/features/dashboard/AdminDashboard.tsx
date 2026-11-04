@@ -3,15 +3,21 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '../../components/ui/table';
+import {
   Users,
   ShoppingBag,
   ShieldCheck,
   Activity,
   Search,
-  Filter,
   CheckCircle2,
   Ban,
-  MoreVertical,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -156,61 +162,60 @@ export function AdminDashboard() {
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px] font-semibold tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">User & Contact</th>
-                  <th className="px-5 py-3">Account Type</th>
-                  <th className="px-5 py-3">Listings</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Joined Date</th>
-                  <th className="px-5 py-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-muted/30 transition">
-                    <td className="px-5 py-3">
-                      <div className="font-bold text-foreground">{u.name}</div>
-                      <div className="text-[11px] text-muted-foreground">{u.email}</div>
-                    </td>
-                    <td className="px-5 py-3">
-                      <Badge variant="outline" className="font-mono text-[10px]">
-                        {u.role.replace('_', ' ')}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3 font-semibold text-foreground">{u.listingsCount} ads</td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          u.status === 'ACTIVE'
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-rose-500/10 text-rose-600'
-                        }`}
-                      >
-                        {u.status === 'ACTIVE' ? <CheckCircle2 className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
-                        {u.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-muted-foreground">{u.joined}</td>
-                    <td className="px-5 py-3 text-right">
-                      <Button
-                        size="sm"
-                        variant={u.status === 'ACTIVE' ? 'outline' : 'default'}
-                        onClick={() => toggleStatus(u.id)}
-                        className="h-7 text-xs"
-                      >
-                        {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider">
+              <TableRow>
+                <TableHead className="px-5 py-3">User & Contact</TableHead>
+                <TableHead className="px-5 py-3">Account Type</TableHead>
+                <TableHead className="px-5 py-3">Listings</TableHead>
+                <TableHead className="px-5 py-3">Status</TableHead>
+                <TableHead className="px-5 py-3">Joined Date</TableHead>
+                <TableHead className="px-5 py-3 text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredUsers.map((u) => (
+                <TableRow key={u.id}>
+                  <TableCell className="px-5 py-3">
+                    <div className="font-bold text-foreground">{u.name}</div>
+                    <div className="text-[11px] text-muted-foreground">{u.email}</div>
+                  </TableCell>
+                  <TableCell className="px-5 py-3">
+                    <Badge variant="outline" className="font-mono text-[10px]">
+                      {u.role.replace('_', ' ')}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 font-semibold text-foreground">{u.listingsCount} ads</TableCell>
+                  <TableCell className="px-5 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        u.status === 'ACTIVE'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                      }`}
+                    >
+                      {u.status === 'ACTIVE' ? <CheckCircle2 className="h-3 w-3" /> : <Ban className="h-3 w-3" />}
+                      {u.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground">{u.joined}</TableCell>
+                  <TableCell className="px-5 py-3 text-right">
+                    <Button
+                      size="sm"
+                      variant={u.status === 'ACTIVE' ? 'outline' : 'default'}
+                      onClick={() => toggleStatus(u.id)}
+                      className="h-7 text-xs"
+                    >
+                      {u.status === 'ACTIVE' ? 'Suspend' : 'Activate'}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
   );
 }
+

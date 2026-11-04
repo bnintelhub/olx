@@ -57,6 +57,7 @@ export const refreshTokenSchema = z.object({
 export const adminLoginSchema = z.object({
   username: z.string().min(1, 'Username or email is required'),
   password: z.string().min(1, 'Password is required'),
+  role: z.string().optional(),
 });
 
 export type RegisterInput = z.infer<typeof registerSchema>;

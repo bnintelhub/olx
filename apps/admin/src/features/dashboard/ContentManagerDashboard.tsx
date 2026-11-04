@@ -3,13 +3,19 @@ import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/ca
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from '../../components/ui/table';
+import {
   Image,
   Megaphone,
   FolderTree,
   Sparkles,
   Plus,
-  Eye,
-  MousePointerClick,
   CheckCircle2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -123,56 +129,55 @@ export function ContentManagerDashboard() {
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-muted/40 text-muted-foreground border-b uppercase text-[10px] font-semibold tracking-wider">
-                <tr>
-                  <th className="px-5 py-3">Campaign Name</th>
-                  <th className="px-5 py-3">Slot Placement</th>
-                  <th className="px-5 py-3">Impressions</th>
-                  <th className="px-5 py-3">Clicks</th>
-                  <th className="px-5 py-3">CTR</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {banners.map((b) => (
-                  <tr key={b.id} className="hover:bg-muted/30 transition">
-                    <td className="px-5 py-3 font-bold text-foreground">{b.name}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{b.slot}</td>
-                    <td className="px-5 py-3 font-semibold text-foreground">{b.views}</td>
-                    <td className="px-5 py-3 font-semibold text-foreground">{b.clicks}</td>
-                    <td className="px-5 py-3 font-bold text-emerald-600">{b.ctr}</td>
-                    <td className="px-5 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          b.status === 'ACTIVE'
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : 'bg-muted text-muted-foreground'
-                        }`}
-                      >
-                        {b.status === 'ACTIVE' && <CheckCircle2 className="h-3 w-3" />}
-                        {b.status}
-                      </span>
-                    </td>
-                    <td className="px-5 py-3 text-right">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => toggleBanner(b.id, b.name)}
-                        className="h-7 text-xs"
-                      >
-                        {b.status === 'ACTIVE' ? 'Pause' : 'Activate'}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider">
+              <TableRow>
+                <TableHead className="px-5 py-3">Campaign Name</TableHead>
+                <TableHead className="px-5 py-3">Slot Placement</TableHead>
+                <TableHead className="px-5 py-3">Impressions</TableHead>
+                <TableHead className="px-5 py-3">Clicks</TableHead>
+                <TableHead className="px-5 py-3">CTR</TableHead>
+                <TableHead className="px-5 py-3">Status</TableHead>
+                <TableHead className="px-5 py-3 text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {banners.map((b) => (
+                <TableRow key={b.id}>
+                  <TableCell className="px-5 py-3 font-bold text-foreground">{b.name}</TableCell>
+                  <TableCell className="px-5 py-3 text-muted-foreground">{b.slot}</TableCell>
+                  <TableCell className="px-5 py-3 font-semibold text-foreground">{b.views}</TableCell>
+                  <TableCell className="px-5 py-3 font-semibold text-foreground">{b.clicks}</TableCell>
+                  <TableCell className="px-5 py-3 font-bold text-emerald-600 dark:text-emerald-400">{b.ctr}</TableCell>
+                  <TableCell className="px-5 py-3">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                        b.status === 'ACTIVE'
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+                          : 'bg-muted text-muted-foreground'
+                      }`}
+                    >
+                      {b.status === 'ACTIVE' && <CheckCircle2 className="h-3 w-3" />}
+                      {b.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="px-5 py-3 text-right">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => toggleBanner(b.id, b.name)}
+                      className="h-7 text-xs"
+                    >
+                      {b.status === 'ACTIVE' ? 'Pause' : 'Activate'}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
     </div>
   );
 }
+
