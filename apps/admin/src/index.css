@@ -99,6 +99,15 @@
     @apply bg-background text-foreground transition-colors duration-200 antialiased overflow-x-hidden;
     -ms-overflow-style: none;
     scrollbar-width: none;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+
+  [data-sidebar="sidebar"],
+  [data-sidebar="header"],
+  [data-sidebar="content"],
+  [data-sidebar="footer"] {
+    background-color: hsl(var(--sidebar));
   }
 }
 

@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/auth.store';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
 import { LoginPage } from '../features/auth/LoginPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { ModeratorDashboard } from '../features/dashboard/ModeratorDashboard';
 import { UsersPage } from '../features/users/UsersPage';
 import { ListingsPage } from '../features/listings/ListingsPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
@@ -66,6 +67,10 @@ export const router = createBrowserRouter([
       {
         path: 'listings',
         element: <ListingsPage />,
+      },
+      {
+        path: 'moderation',
+        element: <ModeratorDashboard />,
       },
       {
         path: 'reports',

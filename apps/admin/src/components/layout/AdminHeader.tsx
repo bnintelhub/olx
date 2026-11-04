@@ -60,7 +60,7 @@ export function AdminHeader() {
   const currentRoleMeta = ROLE_CONFIGS[activeRole] || ROLE_CONFIGS.SUPER_ADMIN;
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b bg-background/95 px-4 sm:px-6 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b bg-background text-foreground px-4 sm:px-6 shadow-2xs transition-colors duration-200">
       {/* Left: Sidebar Trigger & Search Bar */}
       <div className="flex items-center gap-3 flex-1 max-w-lg">
         {/* Responsive shadcn Sidebar Trigger */}

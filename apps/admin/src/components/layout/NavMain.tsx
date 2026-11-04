@@ -62,15 +62,28 @@ export function NavMain() {
       {/* Grouped Navigation Sections */}
       {navGroups.map((group) => (
         <SidebarGroup key={group.label} className="py-1 px-2">
-          <SidebarGroupLabel className="text-[10px] font-bold text-sidebar-foreground/60 tracking-wider uppercase px-2 mb-1 group-data-[collapsible=icon]:hidden">
-            {group.label}
+          <SidebarGroupLabel className="text-[10px] font-extrabold text-sidebar-foreground/70 tracking-wider uppercase pl-3.5 pr-2 pt-3 pb-1 mb-0.5 group-data-[collapsible=icon]:hidden flex items-center gap-1.5">
+            <span className="w-1.5 h-1 rounded-full bg-primary/40 inline-block shrink-0" />
+            <span>{group.label}</span>
           </SidebarGroupLabel>
           <SidebarMenu>
             {group.items.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                location.pathname === item.href ||
-                (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+              const currentPath = location.pathname + location.search;
+              const isExactRoute =
+                item.href === '/dashboard' ||
+                item.href === '/reports' ||
+                item.href === '/moderation' ||
+                item.href === '/listings' ||
+                item.href === '/users' ||
+                item.href === '/payments' ||
+                item.href === '/promotions';
+
+              const isActive = item.href.includes('?')
+                ? currentPath === item.href
+                : isExactRoute
+                ? location.pathname === item.href
+                : location.pathname === item.href || location.pathname.startsWith(item.href + '/');
 
               return (
                 <SidebarMenuItem key={`${item.href}-${item.title}`}>
