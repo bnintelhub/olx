@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '../../stores/auth.store';
-import { apiClient } from '../../lib/api-client';
+import { useLoginMutation, useRegisterMutation } from './hook/useAuthMutation';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { AlertCircle, Command, Github } from 'lucide-react';
@@ -10,43 +8,34 @@ export function LoginPage() {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [email, setEmail] = useState('rahul@gmail.com');
   const [password, setPassword] = useState('rahul@123');
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
-  const navigate = useNavigate();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  // TanStack Query mutation hooks for predictive auth lifecycle
+  const loginMutation = useLoginMutation();
+  const registerMutation = useRegisterMutation(() => setIsRegisterMode(false));
+
+  const isLoading = loginMutation.isPending || registerMutation.isPending;
+  const errorMessage =
+    (loginMutation.error as any)?.response?.data?.message ||
+    loginMutation.error?.message ||
+    (registerMutation.error as any)?.response?.data?.message ||
+    registerMutation.error?.message ||
+    null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      const { data } = await apiClient.post('/auth/admin-login', {
-        username: email,
+    if (isRegisterMode) {
+      registerMutation.mutate({
+        name: email.split('@')[0] || 'Staff Member',
+        email: email.trim(),
+        password,
+      });
+    } else {
+      loginMutation.mutate({
+        username: email.trim(),
         password,
         role: 'SUPER_ADMIN',
       });
-
-      if (data.success && data.data) {
-        setAuth(data.data.user, data.data.tokens?.accessToken);
-        navigate('/dashboard');
-        return;
-      }
-    } catch {
-      // Allow seamless login for demo
     }
-
-    // Default Super Admin access granted for rahul@gmail.com
-    setAuth({
-      id: 'admin_rahul',
-      name: 'Rahul Kumar',
-      email: email.trim(),
-      role: 'SUPER_ADMIN',
-      permissions: ['*'],
-    });
-    navigate('/dashboard');
-    setIsLoading(false);
   };
 
   return (
@@ -98,10 +87,10 @@ export function LoginPage() {
             </p>
           </div>
 
-          {error && (
+          {errorMessage && (
             <div className="flex items-center gap-2 rounded-lg bg-rose-500/15 border border-rose-500/20 p-3 text-xs text-rose-400">
               <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{error}</span>
+              <span>{errorMessage}</span>
             </div>
           )}
 
