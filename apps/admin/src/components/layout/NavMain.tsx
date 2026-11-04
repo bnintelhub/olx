@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
 import { getGroupedNavForRole, ROLE_CONFIGS } from '../../lib/permissions';
 import {
@@ -19,6 +19,7 @@ export function NavMain() {
   const RoleIcon = roleMeta.icon;
   const navGroups = getGroupedNavForRole(activeRole);
   const { isMobile, setOpenMobile, state } = useSidebar();
+  const location = useLocation();
 
   const handleLinkClick = () => {
     if (isMobile) {
@@ -67,23 +68,28 @@ export function NavMain() {
           <SidebarMenu>
             {group.items.map((item) => {
               const Icon = item.icon;
+              const isActive =
+                location.pathname === item.href ||
+                (item.href !== '/dashboard' && location.pathname.startsWith(item.href));
+
               return (
                 <SidebarMenuItem key={`${item.href}-${item.title}`}>
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <NavLink
-                      to={item.href}
-                      onClick={handleLinkClick}
-                      className={({ isActive }) =>
-                        cn(
-                          'flex items-center gap-2.5 w-full rounded-lg transition-colors duration-150',
-                          isActive
-                            ? 'bg-primary text-primary-foreground font-semibold shadow-xs hover:bg-primary/90 hover:text-primary-foreground'
-                            : 'text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                        )
-                      }
-                    >
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive}
+                    tooltip={item.title}
+                    className={cn(
+                      'transition-colors duration-150',
+                      isActive
+                        ? 'bg-primary text-primary-foreground font-bold shadow-xs hover:bg-primary/90 hover:text-primary-foreground [&>svg]:text-primary-foreground'
+                        : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:text-sidebar-foreground/75'
+                    )}
+                  >
+                    <NavLink to={item.href} onClick={handleLinkClick}>
                       <Icon className="h-4 w-4 shrink-0 transition-colors" />
-                      <span className="truncate group-data-[collapsible=icon]:hidden">{item.title}</span>
+                      <span className="truncate group-data-[collapsible=icon]:hidden font-medium text-xs">
+                        {item.title}
+                      </span>
                       {item.badge && (
                         <SidebarMenuBadge
                           className={cn(
