@@ -7,8 +7,9 @@ The **Staff Invitation Flow** replaces insecure manual password sharing with a c
 ### Core Principles
 1. **Zero Shared Passwords**: Admins never create, view, or transmit temporary passwords.
 2. **Super Admin Authority**: Only authenticated `SUPER_ADMIN` users have permission to issue staff invitations.
-3. **Single-Use Crypto Token**: Each invitation has a 64-character random token expiring in 48 hours.
-4. **Instant Self-Activation**: When accepted, the user record is provisioned with the exact assigned role, session cookies are issued, and the token is revoked.
+3. **Single-Use Crypto Token**: Each invitation has a 64-character random token with configurable validity (2 days, 3 days, 7 days, no expiry, or manual date).
+4. **Persistent Active Links**: Pending links remain active and can be re-copied or shared directly from the Admin Console until expiration.
+5. **Instant Self-Activation**: When accepted, the user record is provisioned with the exact assigned role, session cookies are issued, and the token is revoked.
 
 ---
 

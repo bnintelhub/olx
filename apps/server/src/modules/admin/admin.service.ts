@@ -223,8 +223,13 @@ export class AdminService {
   }
 
   // Creates a cryptographically secure, single-use invitation link for staff onboarding.
-  // Revokes older pending invitations for the same email and enforces a strict 48-hour expiration.
-  static async createStaffInvitation(invitedById: string, email: string, role: UserRole) {
+  // Supports presets (2 days, 3 days, 7 days, no expiry) or manual date configuration.
+  static async createStaffInvitation(
+    invitedById: string,
+    email: string,
+    role: UserRole,
+    expiryOptions?: { expiryType?: string; customExpiresAt?: string | null }
+  ) {
     const cleanEmail = email.trim().toLowerCase();
 
     const staffRoles: UserRole[] = [
@@ -253,9 +258,29 @@ export class AdminService {
       data: { status: 'REVOKED' },
     });
 
-    // Generate single-use secure crypto token expiring in 48 hours
+    // Determine expiration timestamp based on selected expiry options
+    let expiresAt: Date;
+    const type = expiryOptions?.expiryType || '2_DAYS';
+
+    if (type === 'NO_EXPIRY') {
+      expiresAt = new Date('2099-12-31T23:59:59.999Z');
+    } else if (type === '3_DAYS') {
+      expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    } else if (type === '7_DAYS') {
+      expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    } else if (type === 'CUSTOM' && expiryOptions?.customExpiresAt) {
+      const parsedDate = new Date(expiryOptions.customExpiresAt);
+      if (isNaN(parsedDate.getTime()) || parsedDate.getTime() <= Date.now()) {
+        throw new AppError(400, 'INVALID_EXPIRY_DATE', 'Custom expiry date must be in the future');
+      }
+      expiresAt = parsedDate;
+    } else {
+      // Default: 2 days
+      expiresAt = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+    }
+
+    // Generate single-use secure crypto token
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
     const invitation = await (prisma as any).staffInvitation.create({
       data: {
@@ -282,16 +307,30 @@ export class AdminService {
     };
   }
 
-  // Returns all historical and active staff invitations ordered from newest to oldest.
-  // Includes details of the inviting administrator for security audit visibility.
+  // Returns all historical and active staff invitations with persistent share links.
+  // Computes active validity status so invitations can be re-copied anytime before expiry.
   static async getStaffInvitations() {
-    return (prisma as any).staffInvitation.findMany({
+    const list = await (prisma as any).staffInvitation.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
         invitedBy: {
           select: { id: true, email: true, profile: { select: { name: true } } },
         },
       },
+    });
+
+    const clientOrigin = env.CLIENT_URL || 'http://localhost:5174';
+
+    return list.map((inv: any) => {
+      const isLifetime = inv.expiresAt ? new Date(inv.expiresAt).getFullYear() >= 2099 : true;
+      const isExpired = inv.expiresAt && !isLifetime ? new Date() > new Date(inv.expiresAt) : false;
+
+      return {
+        ...inv,
+        inviteLink: `${clientOrigin}/accept-invite?token=${inv.token}`,
+        isLifetime,
+        isExpired,
+      };
     });
   }
 

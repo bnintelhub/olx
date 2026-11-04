@@ -644,7 +644,8 @@ export class AuthService {
       throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid token');
     }
 
-    const isExpired = new Date() > new Date(invitation.expiresAt);
+    const isLifetime = invitation.expiresAt ? new Date(invitation.expiresAt).getFullYear() >= 2099 : true;
+    const isExpired = invitation.expiresAt && !isLifetime ? new Date() > new Date(invitation.expiresAt) : false;
     if (invitation.status === 'REVOKED') {
       throw new AppError(400, 'INVITATION_REVOKED', 'This invitation was revoked by an administrator');
     }
@@ -659,7 +660,8 @@ export class AuthService {
       email: invitation.email,
       role: invitation.role,
       invitedBy: invitation.invitedBy?.profile?.name || invitation.invitedBy?.email || 'Super Admin',
-      expiresAt: invitation.expiresAt,
+      expiresAt: isLifetime ? null : invitation.expiresAt,
+      isLifetime,
     };
   }
 
@@ -674,7 +676,10 @@ export class AuthService {
     if (!invitation) {
       throw new AppError(404, 'INVITATION_NOT_FOUND', 'Invitation not found or invalid token');
     }
-    if (invitation.status !== 'PENDING' || new Date() > new Date(invitation.expiresAt)) {
+    const isLifetime = invitation.expiresAt ? new Date(invitation.expiresAt).getFullYear() >= 2099 : true;
+    const isExpired = invitation.expiresAt && !isLifetime ? new Date() > new Date(invitation.expiresAt) : false;
+
+    if (invitation.status !== 'PENDING' || isExpired) {
       throw new AppError(400, 'INVITATION_INVALID', 'Invitation is no longer valid or has expired');
     }
 

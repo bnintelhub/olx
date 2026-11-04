@@ -23,6 +23,8 @@ export const changeAdminPasswordSchema = z.object({
 export const createInvitationSchema = z.object({
   email: z.string().email('Valid email address required'),
   role: z.nativeEnum(UserRole),
+  expiryType: z.enum(['2_DAYS', '3_DAYS', '7_DAYS', 'NO_EXPIRY', 'CUSTOM']).optional().default('2_DAYS'),
+  customExpiresAt: z.string().optional().nullable(),
 });
 
 export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;

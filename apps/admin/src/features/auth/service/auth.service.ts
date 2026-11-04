@@ -32,6 +32,13 @@ export interface ApiResponse<T> {
   message?: string;
 }
 
+export interface CreateStaffInvitationPayload {
+  email: string;
+  role: AdminRole;
+  expiryType?: '2_DAYS' | '3_DAYS' | '7_DAYS' | 'NO_EXPIRY' | 'CUSTOM';
+  customExpiresAt?: string | null;
+}
+
 export interface StaffInvitationItem {
   id: string;
   email: string;
@@ -41,6 +48,9 @@ export interface StaffInvitationItem {
   expiresAt: string;
   acceptedAt?: string | null;
   createdAt: string;
+  inviteLink?: string;
+  isLifetime?: boolean;
+  isExpired?: boolean;
   invitedBy?: {
     id: string;
     email?: string;
@@ -52,7 +62,8 @@ export interface InvitationDetails {
   email: string;
   role: AdminRole;
   invitedBy: string;
-  expiresAt: string;
+  expiresAt: string | null;
+  isLifetime?: boolean;
 }
 
 export const authService = {
@@ -140,9 +151,9 @@ export const authService = {
     await apiClient.post('/auth/logout');
   },
 
-  // Generates a 48-hour onboarding invitation link for a target staff email.
+  // Generates a configurable onboarding invitation link for a target staff email.
   // Restricted strictly to super administrators with role management privileges.
-  async createStaffInvitation(payload: { email: string; role: AdminRole }): Promise<{ invitation: StaffInvitationItem; inviteLink: string }> {
+  async createStaffInvitation(payload: CreateStaffInvitationPayload): Promise<{ invitation: StaffInvitationItem; inviteLink: string }> {
     const { data } = await apiClient.post<ApiResponse<{ invitation: StaffInvitationItem; inviteLink: string }>>('/admin/invitations', payload);
     return data.data;
   },

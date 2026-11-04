@@ -149,7 +149,9 @@ export function AcceptInvitePage() {
                 Staff Invitation
               </Badge>
               <span className="text-[10px] text-zinc-500">
-                Expires {new Date(invite.expiresAt).toLocaleDateString()}
+                {invite.isLifetime || !invite.expiresAt || new Date(invite.expiresAt).getFullYear() >= 2099
+                  ? 'No Expiry (Lifetime)'
+                  : `Expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
               </span>
             </div>
             <CardTitle className="text-xl text-white font-bold pt-2">

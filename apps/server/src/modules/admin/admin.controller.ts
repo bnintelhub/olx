@@ -110,18 +110,21 @@ export class AdminController {
     return reply.status(200).send({ success: true, data: result });
   }
 
-  // Issues a 48-hour single-use onboarding token for new staff members.
-  // Logs the invitation event with assigned role for audit trail tracking.
+  // Issues a configurable-lifespan onboarding token for new staff members.
+  // Supports presets (2 days, 3 days, 7 days, no expiry) or manual date configuration.
   static async createStaffInvitation(request: FastifyRequest, reply: FastifyReply) {
-    const { email, role } = createInvitationSchema.parse(request.body);
-    const result = await AdminService.createStaffInvitation(request.user!.id, email, role);
+    const { email, role, expiryType, customExpiresAt } = createInvitationSchema.parse(request.body);
+    const result = await AdminService.createStaffInvitation(request.user!.id, email, role, {
+      expiryType,
+      customExpiresAt,
+    });
 
     await writeAuditLog({
       userId: request.user!.id,
       action: 'STAFF_INVITATION_SENT',
       entityType: 'INVITATION',
       entityId: result.invitation.id,
-      newData: { email, role },
+      newData: { email, role, expiryType, expiresAt: result.invitation.expiresAt },
       request,
     });
 
