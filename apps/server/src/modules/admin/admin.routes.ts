@@ -43,6 +43,11 @@ export async function adminRoutes(fastify: FastifyInstance) {
     { preHandler: [fastify.authenticate, requirePermission(Permissions.USERS_MANAGE)] },
     AdminController.updateUserAction
   );
+  fastify.patch(
+    '/users/:id/status',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.USERS_MANAGE)] },
+    AdminController.updateUserStatus
+  );
 
   // Listing Moderation & Operational Control
   fastify.get(

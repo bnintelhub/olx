@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { AdminService } from './admin.service';
 import {
   userActionSchema,
+  updateUserStatusSchema,
   updateAdminProfileSchema,
   changeAdminPasswordSchema,
   createInvitationSchema,
@@ -94,6 +95,52 @@ export class AdminController {
         newData: {
           attemptedRole: role,
           attemptedAction: action,
+          errorMessage: err.message,
+        },
+        request,
+      });
+
+      throw err;
+    }
+  }
+
+  // Updates user lifecycle status directly: ACTIVE, SUSPENDED, BANNED, DELETED
+  static async updateUserStatus(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const { status, reason } = updateUserStatusSchema.parse(request.body);
+
+    try {
+      const { updated, previous } = await AdminService.updateUserStatus(id, status, reason);
+
+      await writeAuditLog({
+        userId: request.user?.id,
+        action: `USER_STATUS_${status}`,
+        entityType: 'USER',
+        entityId: id,
+        status: 'SUCCESS',
+        reason,
+        oldData: {
+          status: previous.status,
+          email: previous.email,
+        },
+        newData: {
+          status: updated.status,
+          email: updated.email,
+        },
+        request,
+      });
+
+      return reply.status(200).send({ success: true, data: updated });
+    } catch (err: any) {
+      await writeAuditLog({
+        userId: request.user?.id,
+        action: `USER_STATUS_${status}_FAILED`,
+        entityType: 'USER',
+        entityId: id,
+        status: 'FAILED',
+        reason: reason || err.message,
+        newData: {
+          attemptedStatus: status,
           errorMessage: err.message,
         },
         request,

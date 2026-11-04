@@ -178,8 +178,8 @@ export class AdminService {
     }
   }
 
-  // Retrieves paginated user records with optional status, role, or text search filters.
-  // Returns user profile information along with counts of active listings and moderation reports.
+  // Retrieves paginated user records formatted for admin user management.
+  // Formats identity, role/tier, location, KYC trust, and marketplace activity.
   static async getUsers(params: {
     page: number;
     limit: number;
@@ -188,19 +188,33 @@ export class AdminService {
     role?: string;
   }) {
     const skip = (params.page - 1) * params.limit;
-    const where: Prisma.UserWhereInput = { status: { not: 'DELETED' } };
+    const where: Prisma.UserWhereInput = {};
 
-    if (params.status && ['ACTIVE', 'SUSPENDED', 'BANNED', 'DELETED'].includes(params.status)) {
+    if (params.status && params.status !== 'ALL') {
       where.status = params.status as any;
     }
-    if (params.role && Object.values(UserRole).includes(params.role as UserRole)) {
-      where.role = params.role as UserRole;
+
+    if (params.role && params.role !== 'ALL') {
+      if (params.role === 'BUSINESS_SELLER') {
+        where.profile = { accountType: 'BUSINESS' };
+      } else if (params.role === 'PRO_DEALER') {
+        where.profile = { accountType: 'DEALER' };
+      } else if (params.role === 'VERIFIED_USER') {
+        where.profile = { isIdentityVerified: true };
+      } else if (params.role === 'BUYER') {
+        where.role = 'USER';
+        where.profile = { accountType: 'INDIVIDUAL' };
+      } else if (Object.values(UserRole).includes(params.role as UserRole)) {
+        where.role = params.role as UserRole;
+      }
     }
+
     if (params.q) {
       where.OR = [
         { phoneNumber: { contains: params.q } },
         { email: { contains: params.q, mode: 'insensitive' } },
         { profile: { name: { contains: params.q, mode: 'insensitive' } } },
+        { profile: { businessName: { contains: params.q, mode: 'insensitive' } } },
       ];
     }
 
@@ -212,19 +226,125 @@ export class AdminService {
         take: params.limit,
         orderBy: { updatedAt: 'desc' },
         include: {
-          profile: { select: { name: true, avatarUrl: true, accountType: true, businessName: true } },
-          _count: { select: { ads: true, reportsFiled: true, reportsReceived: true } },
+          profile: {
+            include: {
+              location: {
+                include: {
+                  parent: true,
+                },
+              },
+            },
+          },
+          ads: {
+            select: {
+              status: true,
+            },
+          },
         },
       }),
     ]);
 
+    const formattedUsers = users.map((u) => {
+      let role = 'BUYER';
+      if (u.role === 'SUPER_ADMIN') {
+        role = 'SUPER_ADMIN';
+      } else if (u.role === 'ADMIN') {
+        role = 'ADMIN';
+      } else if (u.profile?.accountType === 'BUSINESS') {
+        role = 'BUSINESS_SELLER';
+      } else if (u.profile?.accountType === 'DEALER') {
+        role = 'PRO_DEALER';
+      } else if (u.profile?.isIdentityVerified) {
+        role = 'VERIFIED_USER';
+      }
+
+      const city = u.profile?.location?.name || 'New Delhi';
+      const state = u.profile?.location?.parent?.name || u.profile?.location?.name || 'Delhi NCR';
+      const kycVerified = Boolean(u.profile?.isIdentityVerified || (u.isPhoneVerified && u.isEmailVerified));
+      const activeAds = u.ads?.filter((a) => a.status === 'ACTIVE').length || 0;
+      const totalDeals = u.ads?.filter((a) => a.status === 'SOLD').length || 0;
+
+      const joinedDate = new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric',
+      }).format(u.createdAt);
+
+      const lastActiveTime = u.lastLoginAt || u.updatedAt;
+      const diffSec = Math.max(0, Math.floor((Date.now() - new Date(lastActiveTime).getTime()) / 1000));
+      let lastActive = 'Just now';
+      if (diffSec >= 60 && diffSec < 3600) {
+        lastActive = `${Math.floor(diffSec / 60)}m ago`;
+      } else if (diffSec >= 3600 && diffSec < 86400) {
+        lastActive = `${Math.floor(diffSec / 3600)}h ago`;
+      } else if (diffSec >= 86400 && diffSec < 2592000) {
+        lastActive = `${Math.floor(diffSec / 86400)}d ago`;
+      } else if (diffSec >= 2592000) {
+        lastActive = `${Math.floor(diffSec / 2592000)}mo ago`;
+      }
+
+      return {
+        id: u.id,
+        name: u.profile?.name || u.profile?.businessName || (u.email ? u.email.split('@')[0] : 'User'),
+        email: u.email || '',
+        phone: u.phoneNumber || '',
+        role,
+        city,
+        state,
+        kycVerified,
+        activeAds,
+        totalDeals,
+        status: u.status,
+        joinedDate,
+        lastActive,
+      };
+    });
+
     return {
-      users,
+      users: formattedUsers,
       pagination: {
         total,
         page: params.page,
         limit: params.limit,
         totalPages: Math.ceil(total / params.limit),
+      },
+    };
+  }
+
+  // Directly sets user status: ACTIVE, SUSPENDED, BANNED, or DELETED
+  static async updateUserStatus(
+    id: string,
+    status: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED',
+    reason?: string
+  ) {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account not found');
+
+    const updateData: Prisma.UserUpdateInput = { status };
+    if (status !== 'ACTIVE') {
+      updateData.refreshTokenHash = null;
+    }
+    if (status === 'DELETED') {
+      updateData.deletedAt = new Date();
+    } else if (user.deletedAt && status === 'ACTIVE') {
+      updateData.deletedAt = null;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id },
+      data: updateData,
+    });
+
+    await delCache(`user:${id}`);
+
+    return {
+      updated,
+      previous: {
+        role: user.role,
+        status: user.status,
+        capabilities: user.capabilities,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
       },
     };
   }
@@ -265,6 +385,10 @@ export class AdminService {
       updateData.refreshTokenHash = null;
     } else if (action === 'ACTIVATE') {
       updateData.status = 'ACTIVE';
+    } else if (action === 'DELETE') {
+      updateData.status = 'DELETED';
+      updateData.deletedAt = new Date();
+      updateData.refreshTokenHash = null;
     } else if (action === 'CHANGE_ROLE' && role) {
       updateData.role = role;
       updateData.refreshTokenHash = null; // Invalidate refresh token to force fresh session issuance

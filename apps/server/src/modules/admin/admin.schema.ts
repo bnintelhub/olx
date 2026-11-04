@@ -2,11 +2,16 @@ import { z } from 'zod';
 import { UserRole } from '@prisma/client';
 
 export const userActionSchema = z.object({
-  action: z.enum(['SUSPEND', 'BAN', 'ACTIVATE', 'CHANGE_ROLE', 'UPDATE_CAPABILITIES']),
+  action: z.enum(['SUSPEND', 'BAN', 'ACTIVATE', 'CHANGE_ROLE', 'UPDATE_CAPABILITIES', 'DELETE']),
   role: z.nativeEnum(UserRole).optional(),
   capabilities: z.array(z.string()).optional(),
   reason: z.string().optional(),
   ticketReference: z.string().optional(),
+});
+
+export const updateUserStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'BANNED', 'DELETED']),
+  reason: z.string().optional(),
 });
 
 export const updateAdminProfileSchema = z.object({
@@ -41,3 +46,4 @@ export const auditLogQuerySchema = z.object({
 
 export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
 export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
+export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
