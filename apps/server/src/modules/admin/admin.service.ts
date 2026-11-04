@@ -7,6 +7,8 @@ import { HashUtil } from '../../shared/utils/hash.util';
 import { delCache } from '../../config/redis';
 
 export class AdminService {
+  // Aggregates high-level marketplace metrics for the admin overview dashboard.
+  // Queries non-deleted users, active/pending ads, and unresolved reports concurrently.
   static async getStats() {
     const [totalUsers, totalAds, pendingAds, activeAds, totalReports] = await Promise.all([
       prisma.user.count({ where: { status: { not: 'DELETED' } } }),
@@ -25,6 +27,8 @@ export class AdminService {
     };
   }
 
+  // Retrieves paginated user records with optional status, role, or text search filters.
+  // Returns user profile information along with counts of active listings and moderation reports.
   static async getUsers(params: {
     page: number;
     limit: number;
@@ -74,6 +78,8 @@ export class AdminService {
     };
   }
 
+  // Fetches full user details including location, up to 50 active ads, and received abuse reports.
+  // Throws a 404 AppError if the target user account does not exist.
   static async getUserDetail(id: string) {
     const user = await prisma.user.findUnique({
       where: { id },
@@ -93,6 +99,8 @@ export class AdminService {
     return user;
   }
 
+  // Executes administrative lifecycle updates on an account such as suspension, role promotion, or bans.
+  // Wipes refreshTokenHash and evicts Redis cache to trigger immediate session revocation.
   static async updateUserAction(id: string, action: string, role?: UserRole, capabilities?: string[]) {
     const user = await prisma.user.findUnique({ where: { id } });
     if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User account not found');
@@ -122,6 +130,8 @@ export class AdminService {
     return updated;
   }
 
+  // Retrieves paginated classified ads for content moderation and review.
+  // Supports filtering by publication status and keyword matching in title or description.
   static async getAds(params: { page: number; limit: number; status?: AdStatus; q?: string }) {
     const skip = (params.page - 1) * params.limit;
     const where: Prisma.AdWhereInput = { deletedAt: null };
@@ -161,6 +171,8 @@ export class AdminService {
     };
   }
 
+  // Soft-deletes a classified listing by recording the current timestamp in deletedAt.
+  // Preserves ad record data in the database for auditing and dispute resolution.
   static async deleteAd(id: string) {
     const ad = await prisma.ad.findUnique({ where: { id } });
     if (!ad) throw new AppError(404, 'AD_NOT_FOUND', 'Listing not found');
@@ -171,6 +183,8 @@ export class AdminService {
     });
   }
 
+  // Updates an administrator's account information such as contact email and profile bio.
+  // Evicts cached session data so changes take effect across all microservices immediately.
   static async updateProfile(adminId: string, data: any) {
     if (data.email) {
       await prisma.user.update({
@@ -189,6 +203,8 @@ export class AdminService {
     return prisma.user.findUnique({ where: { id: adminId }, include: { profile: true } });
   }
 
+  // Verifies the administrator's existing password before hashing and saving the replacement password.
+  // Guards against unauthorized password resets if an active session is left unattended.
   static async changePassword(adminId: string, currentPass: string, newPass: string) {
     const user = await prisma.user.findUnique({ where: { id: adminId } });
     if (!user) throw new AppError(404, 'USER_NOT_FOUND', 'User not found');
@@ -206,10 +222,8 @@ export class AdminService {
     return { message: 'Password changed successfully' };
   }
 
-  // ==========================================
-  // STAFF INVITATION WORKFLOW
-  // ==========================================
-
+  // Creates a cryptographically secure, single-use invitation link for staff onboarding.
+  // Revokes older pending invitations for the same email and enforces a strict 48-hour expiration.
   static async createStaffInvitation(invitedById: string, email: string, role: UserRole) {
     const cleanEmail = email.trim().toLowerCase();
 
@@ -268,6 +282,8 @@ export class AdminService {
     };
   }
 
+  // Returns all historical and active staff invitations ordered from newest to oldest.
+  // Includes details of the inviting administrator for security audit visibility.
   static async getStaffInvitations() {
     return (prisma as any).staffInvitation.findMany({
       orderBy: { createdAt: 'desc' },
@@ -279,6 +295,8 @@ export class AdminService {
     });
   }
 
+  // Revokes a pending staff invitation so that the token can no longer be used for onboarding.
+  // Rejects requests to revoke invitations that have already been accepted or expired.
   static async revokeStaffInvitation(id: string) {
     const invitation = await (prisma as any).staffInvitation.findUnique({ where: { id } });
     if (!invitation) throw new AppError(404, 'INVITATION_NOT_FOUND', 'Staff invitation not found');

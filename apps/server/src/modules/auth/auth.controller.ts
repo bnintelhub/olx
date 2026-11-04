@@ -17,9 +17,9 @@ import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/app-error';
 import { AuthTokens } from './auth.types';
 
-// Sets secure HTTP-only cookies on reply to keep the user logged in across page reloads
+// Sets secure HTTP-only cookies on reply to keep the user logged in across page reloads.
+// Configures short-lived access token and 30-day refresh token with CSRF-safe SameSite.
 function setAuthCookies(reply: FastifyReply, tokens: AuthTokens) {
-  // Access token cookie (short-lived, 15 minutes)
   reply.setCookie('access_token', tokens.accessToken, {
     path: '/',
     httpOnly: true,
@@ -28,7 +28,6 @@ function setAuthCookies(reply: FastifyReply, tokens: AuthTokens) {
     maxAge: 15 * 60,
   });
 
-  // Refresh token cookie (long-lived, 30 days)
   reply.setCookie('refresh_token', tokens.refreshToken, {
     path: '/',
     httpOnly: true,
@@ -38,17 +37,16 @@ function setAuthCookies(reply: FastifyReply, tokens: AuthTokens) {
   });
 }
 
-// Clears authentication cookies on user logout
+// Clears authentication cookies from the client browser on user logout.
+// Ensures expired or terminated sessions cannot be replayed from the browser.
 function clearAuthCookies(reply: FastifyReply) {
   reply.clearCookie('access_token', { path: '/' });
   reply.clearCookie('refresh_token', { path: '/' });
 }
 
 export class AuthController {
-  // ==========================================
-  // EMAIL AUTH
-  // ==========================================
-
+  // Registers a new user account with email and password, hashing credentials securely.
+  // Records an immutable registration event in the audit trail for compliance.
   static async register(request: FastifyRequest, reply: FastifyReply) {
     const body = registerSchema.parse(request.body);
     const result = await AuthService.register(body);
@@ -67,14 +65,14 @@ export class AuthController {
     });
   }
 
+  // Authenticates email/password credentials and issues fresh access and refresh tokens.
+  // Sets secure HTTP-only cookies and logs the login attempt in the audit log.
   static async login(request: FastifyRequest, reply: FastifyReply) {
     const body = loginSchema.parse(request.body);
     const result = await AuthService.login(body);
 
-    // Keep user logged in by setting secure HTTP-only cookies
     setAuthCookies(reply, result.tokens);
 
-    // Record login in audit trail
     await writeAuditLog({
       userId: result.user.id,
       action: 'USER_EMAIL_LOGIN',
@@ -89,11 +87,12 @@ export class AuthController {
     });
   }
 
+  // Validates a 6-digit email verification code sent during signup or password recovery.
+  // Activates the session upon successful verification and sets session cookies.
   static async verifyEmailOtp(request: FastifyRequest, reply: FastifyReply) {
     const body = verifyEmailOtpSchema.parse(request.body);
     const result = await AuthService.verifyEmailOtp(body);
 
-    // Keep user logged in by setting secure HTTP-only cookies
     setAuthCookies(reply, result.tokens);
 
     await writeAuditLog({
@@ -110,6 +109,8 @@ export class AuthController {
     });
   }
 
+  // Initiates password recovery by generating and emailing a time-limited OTP code.
+  // Enforces cooldown periods to protect against email enumeration and abuse.
   static async forgotPassword(request: FastifyRequest, reply: FastifyReply) {
     const body = forgotPasswordSchema.parse(request.body);
     const result = await AuthService.forgotPassword(body);
@@ -127,6 +128,8 @@ export class AuthController {
     });
   }
 
+  // Confirms the password reset OTP code and updates the user's password in the database.
+  // Invalidates existing active sessions to prevent continued access with old credentials.
   static async resetPassword(request: FastifyRequest, reply: FastifyReply) {
     const body = resetPasswordSchema.parse(request.body);
     const result = await AuthService.resetPassword(body);
@@ -144,6 +147,8 @@ export class AuthController {
     });
   }
 
+  // Issues a fresh OTP code when a prior verification code has expired or failed delivery.
+  // Applies strict rate-limiting cooldowns in production environments.
   static async resendOtp(request: FastifyRequest, reply: FastifyReply) {
     const body = resendOtpSchema.parse(request.body);
     const result = await AuthService.resendOtp(body);
@@ -154,10 +159,8 @@ export class AuthController {
     });
   }
 
-  // ==========================================
-  // MOBILE OTP & ADMIN
-  // ==========================================
-
+  // Generates and sends a 6-digit SMS verification code to the provided mobile number.
+  // Creates an ephemeral OTP session in Redis with a 5-minute time-to-live.
   static async sendOtp(request: FastifyRequest, reply: FastifyReply) {
     const { phoneNumber } = sendOtpSchema.parse(request.body);
     const result = await AuthService.sendOtp(phoneNumber);
@@ -169,11 +172,12 @@ export class AuthController {
     });
   }
 
+  // Verifies the submitted mobile OTP code against the active Redis session.
+  // Automatically provisions a new user record if the phone number is not registered.
   static async verifyOtp(request: FastifyRequest, reply: FastifyReply) {
     const { phoneNumber, sessionId, otp } = verifyOtpSchema.parse(request.body);
     const result = await AuthService.verifyOtp(sessionId, phoneNumber, otp);
 
-    // Keep user logged in by setting secure HTTP-only cookies
     setAuthCookies(reply, result.tokens);
 
     await writeAuditLog({
@@ -191,8 +195,9 @@ export class AuthController {
     });
   }
 
+  // Exchanges a valid long-lived refresh token for a newly minted access token pair.
+  // Reads refresh token from request body with fallback to HTTP-only cookie.
   static async refreshTokens(request: FastifyRequest, reply: FastifyReply) {
-    // Read refresh token from request body or fall back to HTTP-only cookie
     const bodyToken = (request.body as { refreshToken?: string })?.refreshToken;
     const refreshToken = bodyToken || request.cookies?.refresh_token;
 
@@ -201,8 +206,6 @@ export class AuthController {
     }
 
     const tokens = await AuthService.refreshTokens(refreshToken);
-
-    // Keep session active by setting updated cookies
     setAuthCookies(reply, tokens);
 
     return reply.status(200).send({
@@ -211,12 +214,13 @@ export class AuthController {
     });
   }
 
+  // Authenticates administrative staff and verifies their assigned access privileges.
+  // Sets secure HTTP-only session cookies and logs failure attempts to audit.
   static async adminLogin(request: FastifyRequest, reply: FastifyReply) {
     const { username, password, role } = adminLoginSchema.parse(request.body);
     try {
       const result = await AuthService.adminLogin(username, password, role);
 
-      // Keep admin logged in with secure cookies
       setAuthCookies(reply, result.tokens);
 
       await writeAuditLog({
@@ -243,6 +247,8 @@ export class AuthController {
     }
   }
 
+  // Fetches current authenticated user details, permissions, and listing counts.
+  // Reads session identity directly from the verified JWT payload.
   static async getMe(request: FastifyRequest, reply: FastifyReply) {
     const user = await AuthService.getMe(request.user!.id);
     return reply.status(200).send({
@@ -251,10 +257,10 @@ export class AuthController {
     });
   }
 
+  // Terminates the authenticated user session by clearing refresh token hashes in Postgres.
+  // Clears HTTP-only browser cookies and records an audit log entry.
   static async logout(request: FastifyRequest, reply: FastifyReply) {
     await AuthService.logout(request.user!.id);
-
-    // Clear auth cookies on logout
     clearAuthCookies(reply);
 
     await writeAuditLog({
@@ -271,21 +277,20 @@ export class AuthController {
     });
   }
 
-  // ==========================================
-  // STAFF INVITATION WORKFLOW
-  // ==========================================
-
+  // Validates a staff invitation token and returns associated metadata.
+  // Used by the public onboarding page to confirm role and email before submission.
   static async getInvitation(request: FastifyRequest, reply: FastifyReply) {
     const { token } = request.params as { token: string };
     const details = await AuthService.getInvitationByToken(token);
     return reply.status(200).send({ success: true, data: details });
   }
 
+  // Completes staff onboarding by validating token, setting user password, and granting role.
+  // Automatically signs the user in by setting secure HTTP-only cookies on response.
   static async acceptInvitation(request: FastifyRequest, reply: FastifyReply) {
     const body = acceptInvitationSchema.parse(request.body);
     const result = await AuthService.acceptStaffInvitation(body);
 
-    // Set HTTP-only session cookies
     setAuthCookies(reply, result.tokens);
 
     await writeAuditLog({

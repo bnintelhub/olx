@@ -124,6 +124,8 @@ export function RolesPage() {
     },
   });
 
+  // Copies the complete invitation onboarding URL to the user clipboard.
+  // Temporarily highlights the copied button state for instant visual feedback.
   const handleCopyLink = (token: string, id: string) => {
     const origin = window.location.origin;
     const link = `${origin}/accept-invite?token=${token}`;
@@ -133,6 +135,8 @@ export function RolesPage() {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
+  // Validates target email and triggers backend staff invitation generation.
+  // Sends role assignment and generates a cryptographically secure 48h token.
   const handleSendInvite = (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) {

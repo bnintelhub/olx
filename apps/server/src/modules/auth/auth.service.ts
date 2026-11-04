@@ -20,6 +20,8 @@ import {
 } from './auth.schema';
 
 export class AuthService {
+  // Normalizes mobile input to E.164 compliant format with +91 country prefix.
+  // Throws 400 AppError if the phone number does not match standard 10-digit format.
   static sanitizePhoneNumber(phone: string): string {
     const cleaned = phone.replace(/[^0-9]/g, '');
     if (cleaned.length === 10) {
@@ -32,6 +34,8 @@ export class AuthService {
     throw new AppError(400, 'INVALID_PHONE_NUMBER', 'Please enter a valid 10-digit Indian mobile number');
   }
 
+  // Generates short-lived signed JWT access token and cryptographically random refresh token.
+  // Returns token pair along with access token expiration interval for client sync.
   static generateTokens(payload: TokenPayload): AuthTokens {
     const accessToken = jwt.sign(payload, env.JWT_ACCESS_SECRET, {
       expiresIn: env.JWT_ACCESS_EXPIRES_IN as any,
@@ -44,6 +48,8 @@ export class AuthService {
     };
   }
 
+  // Generates a 6-digit numeric OTP code for identity verification workflows.
+  // In development and test with mock SMS provider, returns the deterministic mock code.
   private static generateOtpCode(): string {
     const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
     return isDevOrTest && env.SMS_PROVIDER === 'MOCK'
@@ -51,10 +57,8 @@ export class AuthService {
       : Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  // ==========================================
-  // EMAIL REGISTER & LOGIN
-  // ==========================================
-
+  // Registers a new user with email and hashed password, then sends verification OTP.
+  // Prevents duplicate account creation if an account with existing credentials exists.
   static async register(data: RegisterInput) {
     const cleanEmail = data.email.toLowerCase().trim();
 
@@ -106,6 +110,8 @@ export class AuthService {
     };
   }
 
+  // Authenticates an active user using email and password credentials.
+  // Rejects deleted/suspended accounts and generates fresh JWT and refresh tokens.
   static async login(data: LoginInput) {
     const cleanEmail = data.email.toLowerCase().trim();
     const user = await AuthRepository.findUserByEmail(cleanEmail);
@@ -148,6 +154,8 @@ export class AuthService {
     };
   }
 
+  // Confirms the 6-digit email verification OTP and marks the account email as verified.
+  // Enforces max 3 attempts per session to guard against brute force attacks.
   static async verifyEmailOtp(data: VerifyEmailOtpInput) {
     const cleanEmail = data.email.toLowerCase().trim();
     const session = await AuthRepository.findOtpSession(data.sessionId);
@@ -206,10 +214,8 @@ export class AuthService {
     };
   }
 
-  // ==========================================
-  // FORGOT PASSWORD, RESET & RESEND
-  // ==========================================
-
+  // Generates a time-limited OTP for password recovery and sends it via email queue.
+  // Applies a Redis cooldown timer to prevent spam and rate-limit abuse.
   static async forgotPassword(data: ForgotPasswordInput) {
     const cleanEmail = data.email.toLowerCase().trim();
     const user = await AuthRepository.findUserByEmail(cleanEmail);
@@ -255,6 +261,8 @@ export class AuthService {
     };
   }
 
+  // Validates the password reset OTP code and updates the user's password hash.
+  // Evicts cached user data so the new credentials take effect immediately.
   static async resetPassword(data: ResetPasswordInput) {
     const cleanEmail = data.email.toLowerCase().trim();
     const session = await AuthRepository.findOtpSession(data.sessionId);
@@ -296,6 +304,8 @@ export class AuthService {
     };
   }
 
+  // Dispatches a fresh OTP code to either email or mobile number after cooldown checks.
+  // Stores the new session in the database and updates rate-limit cache.
   static async resendOtp(data: ResendOtpInput) {
     const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
     const otpCode = this.generateOtpCode();
@@ -368,10 +378,8 @@ export class AuthService {
     throw new AppError(400, 'BAD_REQUEST', 'Please provide either an email or mobile number.');
   }
 
-  // ==========================================
-  // MOBILE OTP LOGIN & ADMIN
-  // ==========================================
-
+  // Sends an SMS OTP to the given phone number with database and Redis rate limiting.
+  // Persists an OTP session hash with a 5-minute expiration window.
   static async sendOtp(rawPhone: string, purpose = OtpPurpose.LOGIN): Promise<SendOtpResult> {
     const phoneNumber = this.sanitizePhoneNumber(rawPhone);
     const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
@@ -418,6 +426,8 @@ export class AuthService {
     };
   }
 
+  // Verifies the mobile OTP against the stored session and marks it used.
+  // Automatically creates a user profile on first login and issues authentication tokens.
   static async verifyOtp(sessionId: string, rawPhone: string, submittedOtp: string) {
     const phoneNumber = this.sanitizePhoneNumber(rawPhone);
     const session = await AuthRepository.findOtpSession(sessionId);
@@ -476,6 +486,8 @@ export class AuthService {
     };
   }
 
+  // Rotates the refresh token and issues a new access token for active sessions.
+  // Updates the token hash in PostgreSQL to ensure single-use token rotation.
   static async refreshTokens(refreshToken: string) {
     const tokenHash = HashUtil.sha256(refreshToken);
     const user = await AuthRepository.findUserByRefreshTokenHash(tokenHash);
@@ -497,6 +509,8 @@ export class AuthService {
     return tokens;
   }
 
+  // Authenticates staff into the admin portal using email/phone and password.
+  // Enforces administrative role verification and allows role context for Super Admins.
   static async adminLogin(username: string, password: string, requestedRole?: string) {
     const cleanUsername = String(username).trim();
     const cleanPassword = String(password).trim();
@@ -583,11 +597,15 @@ export class AuthService {
     };
   }
 
+  // Invalidates the active refresh token hash and evicts Redis cache.
+  // Guarantees immediate session revocation across all backend instances.
   static async logout(userId: string) {
     await AuthRepository.updateUserTokens(userId, null);
     await delCache(`user:${userId}`);
   }
 
+  // Loads current user profile, resolved granular capabilities, and role permissions.
+  // Provides all client-side access control state needed by dashboard route guards.
   static async getMe(userId: string) {
     const user = await AuthRepository.findUserById(userId);
     if (!user) {
@@ -609,10 +627,8 @@ export class AuthService {
     };
   }
 
-  // ==========================================
-  // STAFF INVITATION ACCEPTANCE
-  // ==========================================
-
+  // Validates an onboarding token and checks for expiration or prior revocation.
+  // Returns invitation context including invited email, role, and inviter name.
   static async getInvitationByToken(token: string) {
     const cleanToken = String(token).trim();
     const invitation = await (prisma as any).staffInvitation.findUnique({
@@ -647,6 +663,8 @@ export class AuthService {
     };
   }
 
+  // Provisions or upgrades the invited staff user with their assigned administrative role.
+  // Marks the invitation ACCEPTED, sets their password, and issues initial auth tokens.
   static async acceptStaffInvitation(data: { token: string; name: string; password: string; phoneNumber?: string }) {
     const cleanToken = String(data.token).trim();
     const invitation = await (prisma as any).staffInvitation.findUnique({

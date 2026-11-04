@@ -56,7 +56,8 @@ export interface InvitationDetails {
 }
 
 export const authService = {
-  // Primary admin authentication endpoint - sets secure HTTP-only cookies on reply
+  // Authenticates administrative staff via username/password and role.
+  // The server issues secure HTTP-only cookies to maintain session persistence.
   async adminLogin(payload: AdminLoginPayload): Promise<AuthResponseData> {
     const { data } = await apiClient.post<ApiResponse<any>>('/auth/admin-login', {
       username: payload.username.trim(),
@@ -75,7 +76,8 @@ export const authService = {
     return { user, tokens: data.data.tokens };
   },
 
-  // Staff registration endpoint
+  // Registers a new user account with credentials and optional phone number.
+  // Returns user profile data and initial session tokens.
   async register(payload: RegisterPayload): Promise<AuthResponseData> {
     const { data } = await apiClient.post<ApiResponse<any>>('/auth/register', payload);
     const rawUser = data.data.user;
@@ -90,7 +92,8 @@ export const authService = {
     return { user, tokens: data.data.tokens };
   },
 
-  // Standard user email/password login
+  // Authenticates standard users using email and password credentials.
+  // Sets session cookies and returns profile information.
   async login(payload: { email: string; password?: string }): Promise<AuthResponseData> {
     const { data } = await apiClient.post<ApiResponse<any>>('/auth/login', payload);
     const rawUser = data.data.user;
@@ -105,8 +108,8 @@ export const authService = {
     return { user, tokens: data.data.tokens };
   },
 
-  // Silent refresh via HTTP-only cookie.
-  // Fastify reads 'refresh_token' cookie automatically and issues fresh cookies on reply.
+  // Requests fresh authentication tokens using the HTTP-only refresh cookie.
+  // Fastify verifies the cookie against the database hash and rotates tokens.
   async refreshToken(): Promise<AuthTokens> {
     const { data } = await axios.post<ApiResponse<AuthTokens>>(
       '/api/v1/auth/refresh',
@@ -116,7 +119,8 @@ export const authService = {
     return data.data;
   },
 
-  // Fetch authenticated admin profile using HTTP-only session cookie
+  // Fetches current authenticated staff identity and role permissions.
+  // Automatically called on app launch to populate user session state.
   async getMe(): Promise<AdminUser> {
     const { data } = await apiClient.get<ApiResponse<any>>('/auth/me');
     const rawUser = data.data;
@@ -130,39 +134,42 @@ export const authService = {
     };
   },
 
-  // Terminate session and clear HTTP-only cookies on backend
+  // Ends current session by invalidating refresh tokens on the backend.
+  // Clears HTTP-only cookies and resets local client application state.
   async logout(): Promise<void> {
     await apiClient.post('/auth/logout');
   },
 
-  // ==========================================
-  // STAFF INVITATIONS (Super Admin Actions)
-  // ==========================================
-
+  // Generates a 48-hour onboarding invitation link for a target staff email.
+  // Restricted strictly to super administrators with role management privileges.
   async createStaffInvitation(payload: { email: string; role: AdminRole }): Promise<{ invitation: StaffInvitationItem; inviteLink: string }> {
     const { data } = await apiClient.post<ApiResponse<{ invitation: StaffInvitationItem; inviteLink: string }>>('/admin/invitations', payload);
     return data.data;
   },
 
+  // Retrieves all staff invitations with their current lifecycle statuses.
+  // Used in the Roles & Permissions dashboard to track pending invites.
   async getStaffInvitations(): Promise<StaffInvitationItem[]> {
     const { data } = await apiClient.get<ApiResponse<StaffInvitationItem[]>>('/admin/invitations');
     return data.data;
   },
 
+  // Cancels an active pending staff invitation so it can no longer be claimed.
+  // Prevents unauthorized onboarding if an invitation was sent by mistake.
   async revokeStaffInvitation(id: string): Promise<StaffInvitationItem> {
     const { data } = await apiClient.delete<ApiResponse<StaffInvitationItem>>(`/admin/invitations/${id}`);
     return data.data;
   },
 
-  // ==========================================
-  // STAFF INVITATION ACCEPTANCE (Public Flow)
-  // ==========================================
-
+  // Validates an invitation token and returns the invited email and role.
+  // Allows the public invite acceptance screen to display team context.
   async getInvitationDetails(token: string): Promise<InvitationDetails> {
     const { data } = await apiClient.get<ApiResponse<InvitationDetails>>(`/auth/invitation/${token}`);
     return data.data;
   },
 
+  // Completes staff onboarding by establishing account password and user profile.
+  // Activates the staff user in the database and returns authenticated session cookies.
   async acceptStaffInvitation(payload: { token: string; name: string; password: string; phoneNumber?: string }): Promise<AuthResponseData> {
     const { data } = await apiClient.post<ApiResponse<any>>('/auth/accept-invitation', payload);
     const rawUser = data.data.user;

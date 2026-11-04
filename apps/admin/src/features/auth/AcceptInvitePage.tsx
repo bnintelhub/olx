@@ -44,6 +44,8 @@ export function AcceptInvitePage() {
     },
   });
 
+  // Validates user input matching and sends the staff onboarding acceptance request.
+  // Stores password hash, activates the staff role, and sets session cookies upon completion.
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (password !== confirmPassword) {
