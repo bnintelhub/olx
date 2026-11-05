@@ -188,7 +188,7 @@ export class S3StorageAdapter implements IStorageAdapter {
   }
 
   async deleteMediaDirectory(dirPath: string): Promise<void> {
-    const cleanPrefix = dirPath.replace(/^[/\\]+/, '');
+    const cleanPrefix = dirPath.replace(/^s3:\/\/[^/]+\//, '').replace(/^[/\\]+/, '');
     const prefix = cleanPrefix.endsWith('/') ? cleanPrefix : `${cleanPrefix}/`;
 
     try {

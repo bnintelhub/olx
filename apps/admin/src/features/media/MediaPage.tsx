@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent } from '../../components/ui/card';
+import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -8,262 +8,277 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '../../components/ui/dialog';
 import {
   Image as ImageIcon,
   Trash2,
   ShieldCheck,
-  ShieldAlert,
   Search,
-  Filter,
   Eye,
-  CheckCircle2,
   HardDrive,
-  FileCheck2,
   Layers,
   ZoomIn,
-  Download,
+  RefreshCw,
+  ExternalLink,
+  Edit,
+  Upload,
   AlertTriangle,
+  LayoutGrid,
+  List,
+  Sparkles,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { toast } from 'sonner';
-
-export interface MediaAsset {
-  id: string;
-  name: string;
-  category: 'VEHICLES' | 'ELECTRONICS' | 'REAL_ESTATE' | 'KYC_DOCS';
-  url: string;
-  size: string;
-  resolution: string;
-  uploadDate: string;
-  uploader: string;
-  listingId: string;
-  status: 'Clean' | 'Flagged' | 'Under Review';
-  aiConfidence: number;
-}
-
-const INITIAL_MEDIA: MediaAsset[] = [
-  {
-    id: 'med_1',
-    name: 'creta_front_angle.jpg',
-    category: 'VEHICLES',
-    url: 'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=800&auto=format&fit=crop&q=80',
-    size: '2.4 MB',
-    resolution: '2400 x 1600',
-    uploadDate: '2026-03-02',
-    uploader: 'Vikram Motors',
-    listingId: 'LST-88291',
-    status: 'Clean',
-    aiConfidence: 99.4,
-  },
-  {
-    id: 'med_2',
-    name: 'iphone15_box_imei.jpg',
-    category: 'ELECTRONICS',
-    url: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=800&auto=format&fit=crop&q=80',
-    size: '1.8 MB',
-    resolution: '1920 x 1440',
-    uploadDate: '2026-03-01',
-    uploader: 'Priya Verma',
-    listingId: 'LST-90142',
-    status: 'Clean',
-    aiConfidence: 98.7,
-  },
-  {
-    id: 'med_3',
-    name: 'flat_hall_balcony.png',
-    category: 'REAL_ESTATE',
-    url: 'https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&auto=format&fit=crop&q=80',
-    size: '4.2 MB',
-    resolution: '3200 x 2133',
-    uploadDate: '2026-03-01',
-    uploader: 'Sharma Real Estate',
-    listingId: 'LST-77402',
-    status: 'Clean',
-    aiConfidence: 99.9,
-  },
-  {
-    id: 'med_4',
-    name: 'bike_yamaha_r15.jpg',
-    category: 'VEHICLES',
-    url: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=800&auto=format&fit=crop&q=80',
-    size: '3.1 MB',
-    resolution: '2560 x 1700',
-    uploadDate: '2026-02-28',
-    uploader: 'Rohit Deshmukh',
-    listingId: 'LST-66319',
-    status: 'Clean',
-    aiConfidence: 99.1,
-  },
-  {
-    id: 'med_5',
-    name: 'macbook_pro_m3.jpg',
-    category: 'ELECTRONICS',
-    url: 'https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=800&auto=format&fit=crop&q=80',
-    size: '2.9 MB',
-    resolution: '2880 x 1800',
-    uploadDate: '2026-02-28',
-    uploader: 'TechHub Store',
-    listingId: 'LST-99120',
-    status: 'Clean',
-    aiConfidence: 97.8,
-  },
-  {
-    id: 'med_6',
-    name: 'living_sofa_set.jpg',
-    category: 'REAL_ESTATE',
-    url: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&auto=format&fit=crop&q=80',
-    size: '3.6 MB',
-    resolution: '2400 x 1600',
-    uploadDate: '2026-02-27',
-    uploader: 'Ankit Patel',
-    listingId: 'LST-55210',
-    status: 'Clean',
-    aiConfidence: 99.5,
-  },
-  {
-    id: 'med_7',
-    name: 'canon_eos_lens.jpg',
-    category: 'ELECTRONICS',
-    url: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800&auto=format&fit=crop&q=80',
-    size: '2.1 MB',
-    resolution: '2048 x 1365',
-    uploadDate: '2026-02-26',
-    uploader: 'Studio 4K',
-    listingId: 'LST-44109',
-    status: 'Under Review',
-    aiConfidence: 84.2,
-  },
-  {
-    id: 'med_8',
-    name: 'scam_ad_duplicate.jpg',
-    category: 'ELECTRONICS',
-    url: 'https://images.unsplash.com/photo-1580927752452-89d86da3fa0a?w=800&auto=format&fit=crop&q=80',
-    size: '1.2 MB',
-    resolution: '1280 x 720',
-    uploadDate: '2026-02-25',
-    uploader: 'Spam Actor 99',
-    listingId: 'LST-11002',
-    status: 'Flagged',
-    aiConfidence: 42.1,
-  },
-];
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuCheckboxItem,
+} from '../../components/ui/dropdown-menu';
+import {
+  useMediaOverviewQuery,
+  useMediaListQuery,
+  useMediaDetailQuery,
+} from './hook/useMediaQuery';
+import {
+  useDeleteMediaMutation,
+  useUpdateMediaMetadataMutation,
+  useReplaceMediaFileMutation,
+  useCleanupOrphansMutation,
+} from './hook/useMediaMutation';
+import { MediaItem, MediaEntityScope } from './service/media.service';
 
 export function MediaPage() {
-  const [mediaList, setMediaList] = useState<MediaAsset[]>(INITIAL_MEDIA);
-  const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  // Query parameters state
+  const [page, setPage] = useState(1);
+  const [limit] = useState(20);
+  const [selectedScope, setSelectedScope] = useState<string>('ALL');
+  const [selectedStatus, setSelectedStatus] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [previewAsset, setPreviewAsset] = useState<MediaAsset | null>(null);
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
 
-  const filteredMedia = mediaList.filter((item) => {
-    const matchesCategory = selectedCategory === 'ALL' || item.category === selectedCategory;
-    const matchesSearch =
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.uploader.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.listingId.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
+  // Column selection state (4-5 images in row default for grid, column visibility for table)
+  const [gridColumns, setGridColumns] = useState<number>(4);
+  const [visibleColumns, setVisibleColumns] = useState({
+    preview: true,
+    name: true,
+    uploader: true,
+    size: true,
+    scope: true,
+    status: true,
+    storage: true,
+    date: false,
+    actions: true,
   });
 
-  const handleDelete = (id: string, name: string) => {
-    setMediaList((prev) => prev.filter((item) => item.id !== id));
-    toast.success(`Asset "${name}" removed from storage.`);
-    if (previewAsset?.id === id) {
-      setPreviewAsset(null);
+  // Modals state
+  const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
+  const [editMedia, setEditMedia] = useState<MediaItem | null>(null);
+  const [deleteConfirmMedia, setDeleteConfirmMedia] = useState<MediaItem | null>(null);
+  const [showCleanupDialog, setShowCleanupDialog] = useState(false);
+
+  // Edit form state
+  const [editOriginalName, setEditOriginalName] = useState('');
+  const [editScope, setEditScope] = useState<MediaEntityScope>('UNATTACHED');
+  const [replacementFile, setReplacementFile] = useState<File | null>(null);
+
+  // Queries
+  const { data: overview, isLoading: isOverviewLoading, refetch: refetchOverview } = useMediaOverviewQuery();
+  const { data: listData, isLoading: isListLoading, isFetching: isListFetching, refetch: refetchList } = useMediaListQuery({
+    page,
+    limit,
+    scope: selectedScope,
+    status: selectedStatus,
+    search: searchQuery,
+  });
+
+  const { data: detailData, isLoading: isDetailLoading } = useMediaDetailQuery(previewMediaId);
+
+  // Mutations
+  const deleteMutation = useDeleteMediaMutation();
+  const updateMutation = useUpdateMediaMetadataMutation();
+  const replaceMutation = useReplaceMediaFileMutation();
+  const cleanupMutation = useCleanupOrphansMutation();
+
+  const handleRefresh = () => {
+    refetchOverview();
+    refetchList();
+  };
+
+  const handleOpenEdit = (media: MediaItem) => {
+    setEditMedia(media);
+    setEditOriginalName(media.originalName);
+    setEditScope(media.scope);
+    setReplacementFile(null);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editMedia) return;
+
+    if (replacementFile) {
+      // Replace physical file with automatic old file purge
+      await replaceMutation.mutateAsync({
+        id: editMedia.id,
+        file: replacementFile,
+      });
+    }
+
+    if (editOriginalName !== editMedia.originalName || editScope !== editMedia.scope) {
+      await updateMutation.mutateAsync({
+        id: editMedia.id,
+        payload: {
+          originalName: editOriginalName,
+          scope: editScope,
+        },
+      });
+    }
+
+    setEditMedia(null);
+    setReplacementFile(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmMedia) return;
+    await deleteMutation.mutateAsync(deleteConfirmMedia.id);
+    setDeleteConfirmMedia(null);
+    if (previewMediaId === deleteConfirmMedia.id) {
+      setPreviewMediaId(null);
     }
   };
 
-  const handleUpdateStatus = (id: string, newStatus: MediaAsset['status']) => {
-    setMediaList((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
-    );
-    if (previewAsset?.id === id) {
-      setPreviewAsset((prev) => (prev ? { ...prev, status: newStatus } : null));
-    }
-    toast.success(`Asset updated to: ${newStatus}`);
+  const handleRunCleanup = async () => {
+    await cleanupMutation.mutateAsync(24);
+    setShowCleanupDialog(false);
   };
 
   return (
     <div className="space-y-6">
       {/* Title & Top Bar */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Media & Asset Review</h2>
-          <p className="text-xs text-muted-foreground">
-            Inspect uploaded product pictures, KYC documents, and auto-scanned media assets.
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Media & Storage Observability</h2>
+            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
+              Live S3 / MinIO
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Monitor real-time storage metrics, inspect uploaded assets, and enforce zero-leak physical disk space reclamation.
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           <Button
             size="sm"
-            onClick={() => toast.success('Vision AI batch scanning completed: All assets synchronized.')}
-            className="text-xs h-8 gap-1.5 font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={isListFetching}
+            className="text-xs h-8 gap-1.5"
           >
-            <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Run AI Safety Scan</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${isListFetching ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={() => setShowCleanupDialog(true)}
+            className="text-xs h-8 gap-1.5 font-semibold"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>Clean Orphaned Files</span>
           </Button>
         </div>
       </div>
 
       {/* KPI Stats Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4 flex items-center justify-between">
+        {/* Card 1: Total Media Files */}
+        <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
             <div className="text-xs font-medium text-muted-foreground">Total Media Files</div>
-            <div className="text-2xl font-bold text-foreground mt-1">42,890</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">S3 & CDN synchronized</div>
+            <div className="text-2xl font-bold text-foreground mt-1">
+              {isOverviewLoading ? '...' : overview?.totalFilesFormatted || '0'}
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              {overview?.storageInfrastructure?.syncStatusText || 'S3 & CDN synchronized'}
+            </div>
           </div>
           <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
             <ImageIcon className="h-5 w-5" />
           </div>
         </Card>
 
-        <Card className="p-4 flex items-center justify-between">
-          <div>
-            <div className="text-xs font-medium text-muted-foreground">AI Scanned Clean</div>
-            <div className="text-2xl font-bold text-emerald-600 mt-1">41,200</div>
-            <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">96.1% passing safe filters</div>
-          </div>
-          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-            <FileCheck2 className="h-5 w-5" />
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center justify-between">
-          <div>
-            <div className="text-xs font-medium text-muted-foreground">Flagged / Quarantined</div>
-            <div className="text-2xl font-bold text-rose-600 mt-1">28</div>
-            <div className="text-[11px] text-rose-600 font-semibold mt-0.5">Watermark / duplicate alerts</div>
-          </div>
-          <div className="h-10 w-10 rounded-lg bg-rose-500/10 text-rose-600 flex items-center justify-center">
-            <ShieldAlert className="h-5 w-5" />
-          </div>
-        </Card>
-
-        <Card className="p-4 flex items-center justify-between">
+        {/* Card 2: Storage Consumed */}
+        <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
             <div className="text-xs font-medium text-muted-foreground">Storage Consumed</div>
-            <div className="text-2xl font-bold text-foreground mt-1">184.2 GB</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">WebP optimized tier</div>
+            <div className="text-2xl font-bold text-foreground mt-1">
+              {isOverviewLoading ? '...' : overview?.storageConsumed.formatted || '0 Bytes'}
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">
+              {overview?.optimizationTier.tier || 'WebP optimized tier'}
+            </div>
           </div>
           <div className="h-10 w-10 rounded-lg bg-purple-500/10 text-purple-600 flex items-center justify-center">
             <HardDrive className="h-5 w-5" />
           </div>
         </Card>
+
+        {/* Card 3: S3 Sync Tier */}
+        <Card className="p-4 flex items-center justify-between shadow-xs">
+          <div>
+            <div className="text-xs font-medium text-muted-foreground">S3 Storage Tier</div>
+            <div className="text-2xl font-bold text-emerald-600 mt-1">
+              {isOverviewLoading ? '...' : `${overview?.storageInfrastructure.synchronizedPercentage || 100}%`}
+            </div>
+            <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
+              {overview?.storageInfrastructure.driver === 'S3'
+                ? `Bucket: ${overview?.storageInfrastructure.bucket}`
+                : 'Local Disk mode'}
+            </div>
+          </div>
+          <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+        </Card>
+
+        {/* Card 4: Orphaned Media */}
+        <Card className="p-4 flex items-center justify-between shadow-xs">
+          <div>
+            <div className="text-xs font-medium text-muted-foreground">Unattached Orphans</div>
+            <div className="text-2xl font-bold text-amber-600 mt-1">
+              {isOverviewLoading ? '...' : overview?.orphanedMedia.count || 0}
+            </div>
+            <div className="text-[11px] text-amber-600 font-semibold mt-0.5">
+              {overview?.orphanedMedia.cleanupRecommended ? 'Cleanup recommended' : 'Storage healthy'}
+            </div>
+          </div>
+          <div className="h-10 w-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center">
+            <Layers className="h-5 w-5" />
+          </div>
+        </Card>
       </div>
 
-      {/* Filter Tabs and Search Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b pb-3">
+      {/* Filter Tabs, Search Bar, and Controls */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b pb-3">
+        {/* Scope Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
-            { id: 'ALL', label: 'All Assets' },
-            { id: 'VEHICLES', label: 'Vehicles' },
-            { id: 'ELECTRONICS', label: 'Electronics' },
-            { id: 'REAL_ESTATE', label: 'Properties' },
+            { id: 'ALL', label: 'All Scopes' },
+            { id: 'LISTING_IMAGE', label: 'Listing Ads' },
+            { id: 'USER_AVATAR', label: 'Avatars' },
+            { id: 'CATEGORY_BANNER', label: 'Categories' },
+            { id: 'UNATTACHED', label: 'Unattached' },
           ].map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
+              onClick={() => {
+                setSelectedScope(cat.id);
+                setPage(1);
+              }}
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                selectedCategory === cat.id
+                selectedScope === cat.id
                   ? 'bg-primary text-primary-foreground font-semibold shadow-2xs'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
@@ -273,229 +288,770 @@ export function MediaPage() {
           ))}
         </div>
 
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by file or seller..."
-            className="h-8 pl-8 text-xs bg-muted/40"
-          />
+        {/* Status Dropdown, Search, and View Mode Toggle */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={selectedStatus}
+            onChange={(e) => {
+              setSelectedStatus(e.target.value);
+              setPage(1);
+            }}
+            className="h-8 text-xs rounded-md border border-input bg-background px-2.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="READY">Ready</option>
+            <option value="PROCESSING">Processing</option>
+            <option value="PENDING">Pending</option>
+            <option value="FAILED">Failed</option>
+          </select>
+
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search filename, id, user..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
+              className="pl-8 text-xs h-8"
+            />
+          </div>
+
+          {/* Column Selection Controls */}
+          {viewMode === 'grid' && (
+            <div className="flex items-center gap-1 text-xs border rounded-md px-1.5 py-0.5 bg-muted/20">
+              <span className="text-[11px] font-medium text-muted-foreground mr-0.5">Columns:</span>
+              <button
+                type="button"
+                onClick={() => setGridColumns(4)}
+                className={`px-2 py-0.5 rounded text-xs font-semibold transition cursor-pointer ${
+                  gridColumns === 4
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                4 / row
+              </button>
+              <button
+                type="button"
+                onClick={() => setGridColumns(5)}
+                className={`px-2 py-0.5 rounded text-xs font-semibold transition cursor-pointer ${
+                  gridColumns === 5
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                5 / row
+              </button>
+              <button
+                type="button"
+                onClick={() => setGridColumns(3)}
+                className={`px-2 py-0.5 rounded text-xs font-semibold transition cursor-pointer hidden md:inline-block ${
+                  gridColumns === 3
+                    ? 'bg-primary text-primary-foreground shadow-2xs'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                3 / row
+              </button>
+            </div>
+          )}
+
+          {viewMode === 'table' && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
+                  <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Columns</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.preview}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, preview: checked }))}
+                >
+                  Preview
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.name}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, name: checked }))}
+                >
+                  File Name / ID
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.uploader}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, uploader: checked }))}
+                >
+                  Uploader
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.size}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, size: checked }))}
+                >
+                  Size & Res
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.scope}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, scope: checked }))}
+                >
+                  Scope
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.status}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, status: checked }))}
+                >
+                  Status
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.storage}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, storage: checked }))}
+                >
+                  Storage Location
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.date}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, date: checked }))}
+                >
+                  Upload Date
+                </DropdownMenuCheckboxItem>
+                <DropdownMenuCheckboxItem
+                  checked={visibleColumns.actions}
+                  onCheckedChange={(checked) => setVisibleColumns((prev) => ({ ...prev, actions: checked }))}
+                >
+                  Actions
+                </DropdownMenuCheckboxItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
+          <div className="flex items-center border rounded-md p-0.5 bg-muted/30">
+            <Button
+              size="icon"
+              variant={viewMode === 'grid' ? 'secondary' : 'ghost'}
+              className="h-7 w-7"
+              onClick={() => setViewMode('grid')}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+              className="h-7 w-7"
+              onClick={() => setViewMode('table')}
+            >
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* Media Asset Grid */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {filteredMedia.map((item) => (
-          <Card key={item.id} className="overflow-hidden group hover:shadow-md transition duration-200 flex flex-col justify-between">
-            {/* Image Preview Container */}
-            <div className="relative h-44 bg-muted overflow-hidden cursor-pointer" onClick={() => setPreviewAsset(item)}>
-              <img
-                src={item.url}
-                alt={item.name}
-                loading="lazy"
-                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-              />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <Button size="sm" variant="secondary" className="h-8 text-xs gap-1 shadow-md">
-                  <ZoomIn className="h-3.5 w-3.5" />
-                  <span>Inspect</span>
-                </Button>
-              </div>
-
-              {/* Status Badge */}
-              <div className="absolute top-2 left-2">
-                {item.status === 'Clean' && (
-                  <Badge className="bg-emerald-600/90 hover:bg-emerald-600 text-white text-[10px] gap-1 shadow-sm">
-                    <ShieldCheck className="h-3 w-3" />
-                    <span>Safe ({item.aiConfidence}%)</span>
-                  </Badge>
-                )}
-                {item.status === 'Under Review' && (
-                  <Badge className="bg-amber-600/90 hover:bg-amber-600 text-white text-[10px] gap-1 shadow-sm">
-                    <AlertTriangle className="h-3 w-3" />
-                    <span>Review ({item.aiConfidence}%)</span>
-                  </Badge>
-                )}
-                {item.status === 'Flagged' && (
-                  <Badge className="bg-rose-600/90 hover:bg-rose-600 text-white text-[10px] gap-1 shadow-sm">
-                    <ShieldAlert className="h-3 w-3" />
-                    <span>Flagged</span>
-                  </Badge>
-                )}
-              </div>
-
-              {/* Resolution Tag */}
-              <div className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[9px] font-mono text-white">
-                {item.resolution}
-              </div>
-            </div>
-
-            {/* Content & Metadata */}
-            <CardContent className="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
-              <div>
-                <div className="text-xs font-bold text-foreground truncate" title={item.name}>
-                  {item.name}
-                </div>
-                <div className="text-[11px] text-muted-foreground flex items-center justify-between mt-1">
-                  <span>Seller: {item.uploader}</span>
-                  <span className="font-mono">{item.listingId}</span>
-                </div>
-              </div>
-
-              <div className="pt-2 border-t flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-medium">{item.size}</span>
-                  <span className="text-[10px]">&bull;</span>
-                  <span className="text-[10px]">{item.uploadDate}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => setPreviewAsset(item)}
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground cursor-pointer"
-                    title="Quick Preview"
-                  >
-                    <Eye className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    onClick={() => handleDelete(item.id, item.name)}
-                    className="h-7 w-7 text-muted-foreground hover:text-rose-600 cursor-pointer"
-                    title="Delete Asset"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Asset Preview & Moderation Dialog */}
-      {previewAsset && (
-        <Dialog
-          open={!!previewAsset}
-          onOpenChange={(open) => !open && setPreviewAsset(null)}
-          className="max-w-3xl p-0 overflow-hidden bg-card text-card-foreground"
+      {/* Main Content Area */}
+      {isListLoading ? (
+        <div className="py-20 text-center space-y-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto" />
+          <div className="text-xs text-muted-foreground font-medium">Loading media assets from storage...</div>
+        </div>
+      ) : !listData || listData.items.length === 0 ? (
+        <div className="py-16 text-center border rounded-lg bg-card/40 space-y-2">
+          <ImageIcon className="h-10 w-10 text-muted-foreground/60 mx-auto" />
+          <div className="text-sm font-semibold text-foreground">No media assets found</div>
+          <div className="text-xs text-muted-foreground max-w-sm mx-auto">
+            {searchQuery || selectedScope !== 'ALL' || selectedStatus !== 'ALL'
+              ? 'Try adjusting your search query or filters.'
+              : 'Uploaded files will appear here once users post ad photos.'}
+          </div>
+        </div>
+      ) : viewMode === 'grid' ? (
+        /* Grid View: 4-5 images per row configurable */
+        <div
+          className={
+            gridColumns === 5
+              ? 'grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'
+              : gridColumns === 3
+              ? 'grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+              : 'grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4'
+          }
         >
-          <div className="grid md:grid-cols-12 max-h-[80vh]">
-            {/* Media Image Showcase */}
-            <div className="md:col-span-7 bg-black/95 flex items-center justify-center p-2 relative min-h-[300px]">
-              <img
-                src={previewAsset.url}
-                alt={previewAsset.name}
-                className="max-h-full max-w-full object-contain rounded"
-              />
-            </div>
+          {listData.items.map((item) => (
+            <Card
+              key={item.id}
+              className="group overflow-hidden rounded-xl border bg-card hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+            >
+              <div className="relative aspect-4/3 w-full bg-muted/40 overflow-hidden cursor-pointer" onClick={() => setPreviewMediaId(item.id)}>
+                {item.thumbnailUrl || item.displayUrl ? (
+                  <img
+                    src={item.thumbnailUrl || item.displayUrl!}
+                    alt={item.originalName}
+                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="h-full w-full flex items-center justify-center text-muted-foreground">
+                    <ImageIcon className="h-8 w-8 opacity-40" />
+                  </div>
+                )}
 
-            {/* Inspector Panel */}
-            <div className="md:col-span-5 p-5 flex flex-col justify-between overflow-y-auto">
-              <div className="space-y-4">
-                <DialogHeader className="p-0 text-left">
-                  <DialogTitle className="text-base font-bold truncate text-foreground">
-                    {previewAsset.name}
-                  </DialogTitle>
-                  <DialogDescription className="text-xs text-muted-foreground">
-                    Associated with Listing ID: <span className="font-mono font-semibold text-foreground">{previewAsset.listingId}</span>
-                  </DialogDescription>
-                </DialogHeader>
+                {/* Status Badge */}
+                <div className="absolute top-2 left-2">
+                  <Badge
+                    variant={item.status === 'READY' ? 'default' : item.status === 'FAILED' ? 'destructive' : 'secondary'}
+                    className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
+                  >
+                    {item.status}
+                  </Badge>
+                </div>
 
-                <div className="space-y-2 text-xs border-y py-3">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Seller / Partner:</span>
-                    <span className="font-semibold text-foreground">{previewAsset.uploader}</span>
+                {/* File size & Resolution Tag */}
+                <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-sm">
+                  <span>{item.fileSizeFormatted}</span>
+                  <span>{item.width && item.height ? `${item.width}x${item.height}` : 'WebP'}</span>
+                </div>
+              </div>
+
+              {/* Information & Action buttons */}
+              <div className="p-3 space-y-2">
+                <div>
+                  <div className="text-xs font-semibold text-foreground truncate" title={item.originalName}>
+                    {item.originalName}
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Resolution:</span>
-                    <span className="font-mono text-foreground">{previewAsset.resolution}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">File Size:</span>
-                    <span className="font-mono text-foreground">{previewAsset.size}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Upload Timestamp:</span>
-                    <span className="text-foreground">{previewAsset.uploadDate}</span>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Vision AI Verdict:</span>
-                    <Badge
-                      variant={previewAsset.status === 'Clean' ? 'success' : 'destructive'}
-                      className="text-[10px]"
-                    >
-                      {previewAsset.status} ({previewAsset.aiConfidence}%)
-                    </Badge>
+                  <div className="text-[11px] text-muted-foreground truncate" title={item.uploader?.email}>
+                    {item.uploader?.email || 'System Upload'}
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <div className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                    Automated Safety Filters
+                <div className="flex items-center justify-between pt-1 border-t text-[11px] text-muted-foreground">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                    {item.scope}
+                  </Badge>
+                  <span>{item.storageLocation}</span>
+                </div>
+
+                <div className="flex items-center gap-1.5 pt-1">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs flex-1 gap-1"
+                    onClick={() => setPreviewMediaId(item.id)}
+                  >
+                    <Eye className="h-3 w-3" />
+                    <span>View</span>
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-7 w-7"
+                    onClick={() => handleOpenEdit(item)}
+                    title="Edit Metadata / Replace Image"
+                  >
+                    <Edit className="h-3 w-3 text-muted-foreground" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="outline"
+                    className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                    onClick={() => setDeleteConfirmMedia(item)}
+                    title="Delete and Purge Storage"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        /* Table View with Column Selection (Responsive horizontal scroll container) */
+        <div className="border rounded-lg overflow-x-auto bg-card shadow-xs">
+          <table className="w-full min-w-[720px] text-left text-xs">
+            <thead className="bg-muted/50 border-b text-muted-foreground font-semibold">
+              <tr>
+                {visibleColumns.preview && <th className="p-3">Preview</th>}
+                {visibleColumns.name && <th className="p-3">File Name / ID</th>}
+                {visibleColumns.uploader && <th className="p-3">Uploader</th>}
+                {visibleColumns.size && <th className="p-3">Size & Res</th>}
+                {visibleColumns.scope && <th className="p-3">Scope</th>}
+                {visibleColumns.status && <th className="p-3">Status</th>}
+                {visibleColumns.storage && <th className="p-3">Storage</th>}
+                {visibleColumns.date && <th className="p-3">Date</th>}
+                {visibleColumns.actions && <th className="p-3 text-right">Actions</th>}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {listData.items.map((item) => (
+                <tr key={item.id} className="hover:bg-muted/20 transition-colors">
+                  {visibleColumns.preview && (
+                    <td className="p-3">
+                      <div
+                        className="h-10 w-10 rounded-md overflow-hidden bg-muted cursor-pointer"
+                        onClick={() => setPreviewMediaId(item.id)}
+                      >
+                        {item.thumbnailUrl || item.displayUrl ? (
+                          <img src={item.thumbnailUrl || item.displayUrl!} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center">
+                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                  )}
+                  {visibleColumns.name && (
+                    <td className="p-3">
+                      <div className="font-semibold text-foreground truncate max-w-44">{item.originalName}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">{item.id}</div>
+                    </td>
+                  )}
+                  {visibleColumns.uploader && (
+                    <td className="p-3">
+                      <div className="text-foreground">{item.uploader?.email || 'N/A'}</div>
+                      <div className="text-[10px] text-muted-foreground">{item.uploader?.phoneNumber || ''}</div>
+                    </td>
+                  )}
+                  {visibleColumns.size && (
+                    <td className="p-3">
+                      <div className="font-medium text-foreground">{item.fileSizeFormatted}</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        {item.width && item.height ? `${item.width} x ${item.height}` : 'WebP Auto'}
+                      </div>
+                    </td>
+                  )}
+                  {visibleColumns.scope && (
+                    <td className="p-3">
+                      <Badge variant="outline" className="text-[10px]">
+                        {item.scope}
+                      </Badge>
+                    </td>
+                  )}
+                  {visibleColumns.status && (
+                    <td className="p-3">
+                      <Badge
+                        variant={item.status === 'READY' ? 'default' : item.status === 'FAILED' ? 'destructive' : 'secondary'}
+                        className="text-[10px]"
+                      >
+                        {item.status}
+                      </Badge>
+                    </td>
+                  )}
+                  {visibleColumns.storage && (
+                    <td className="p-3 text-muted-foreground">{item.storageLocation}</td>
+                  )}
+                  {visibleColumns.date && (
+                    <td className="p-3 text-muted-foreground text-[11px]">
+                      {new Date(item.createdAt).toLocaleDateString()}
+                    </td>
+                  )}
+                  {visibleColumns.actions && (
+                    <td className="p-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPreviewMediaId(item.id)}>
+                          <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleOpenEdit(item)}>
+                          <Edit className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7 text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteConfirmMedia(item)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Pagination Bar */}
+      {listData && listData.pagination.totalPages > 1 && (
+        <div className="flex items-center justify-between border-t pt-4 text-xs text-muted-foreground">
+          <div>
+            Showing Page <span className="font-semibold text-foreground">{listData.pagination.page}</span> of{' '}
+            <span className="font-semibold text-foreground">{listData.pagination.totalPages}</span> ({listData.pagination.totalItems} total items)
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!listData.pagination.hasPrev}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-8 text-xs"
+              disabled={!listData.pagination.hasNext}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* 1. Preview & Detail Inspection Modal (Side-by-Side Responsive Layout) */}
+      <Dialog
+        open={Boolean(previewMediaId)}
+        onOpenChange={(open) => !open && setPreviewMediaId(null)}
+        className="max-w-4xl lg:max-w-5xl w-full max-h-[92vh] overflow-y-auto"
+      >
+        <DialogHeader>
+          <div className="flex items-center justify-between pr-6">
+            <DialogTitle className="text-base font-bold text-foreground">Asset Deep Inspection</DialogTitle>
+            {detailData && (
+              <Badge variant="outline" className="text-xs font-mono bg-muted/40">
+                {detailData.storageLocation}
+              </Badge>
+            )}
+          </div>
+          <DialogDescription className="text-xs">
+            Inspect optimized WebP multi-tier variants, uploader details, and physical storage metadata.
+          </DialogDescription>
+        </DialogHeader>
+
+        {isDetailLoading || !detailData ? (
+          <div className="py-16 text-center">
+            <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
+            <div className="text-xs text-muted-foreground mt-2">Loading asset details...</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-3 text-xs">
+            {/* Left Side: Image Preview & Variant Links */}
+            <div className="flex flex-col gap-3">
+              <div className="relative aspect-4/3 w-full bg-black/95 rounded-xl overflow-hidden flex items-center justify-center border border-border/40 shadow-inner">
+                <img
+                  src={detailData.largeUrl || detailData.displayUrl || detailData.thumbnailUrl || ''}
+                  alt={detailData.originalName}
+                  className="max-h-full max-w-full object-contain"
+                />
+                <a
+                  href={detailData.largeUrl || detailData.displayUrl || '#'}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="absolute top-2.5 right-2.5 bg-black/70 hover:bg-black/90 text-white px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 transition backdrop-blur-xs font-medium"
+                >
+                  <ZoomIn className="h-3.5 w-3.5" />
+                  <span>Full Res</span>
+                </a>
+              </div>
+
+              {/* Quick Image Specs Banner */}
+              <div className="flex items-center justify-between px-3 py-2 bg-muted/30 rounded-lg border text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Dimensions:</span>
+                  <span className="font-semibold text-foreground">
+                    {detailData.width && detailData.height ? `${detailData.width} × ${detailData.height} px` : 'Auto WebP'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Size:</span>
+                  <span className="font-semibold text-emerald-600">{detailData.fileSizeFormatted}</span>
+                </div>
+              </div>
+
+              {/* 4-Tier WebP Variants Pill Links */}
+              <div className="bg-muted/20 p-3 rounded-lg border space-y-2">
+                <div className="text-xs font-semibold flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    <span>WebP Optimization Tiers</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-1 text-[11px]">
-                    <span className="rounded bg-muted/60 p-1.5 text-foreground flex items-center justify-between">
-                      <span>Adult / NSFW:</span>
-                      <span className="text-emerald-600 font-bold">0.1%</span>
+                  <span className="text-[10px] text-muted-foreground">Direct CDN / S3 Links</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {Object.entries(detailData.variants || {}).map(([key, url]) => (
+                    <a
+                      key={key}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-background border hover:border-primary text-foreground transition group"
+                    >
+                      <span className="capitalize font-medium">{key}</span>
+                      <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Side: Metadata & Technical Information */}
+            <div className="flex flex-col justify-between space-y-4">
+              <div className="space-y-3">
+                {/* Media Header */}
+                <div>
+                  <div className="text-[11px] text-muted-foreground font-mono">{detailData.id}</div>
+                  <h3 className="text-base font-bold text-foreground break-all">{detailData.originalName}</h3>
+                </div>
+
+                {/* Badges Bar */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge
+                    variant={
+                      detailData.status === 'READY'
+                        ? 'default'
+                        : detailData.status === 'FAILED'
+                        ? 'destructive'
+                        : 'secondary'
+                    }
+                    className="text-xs uppercase tracking-wider font-semibold"
+                  >
+                    {detailData.status}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs">
+                    {detailData.scope}
+                  </Badge>
+                  <Badge variant="outline" className="text-xs bg-muted/40 font-mono">
+                    {detailData.storageLocation}
+                  </Badge>
+                </div>
+
+                {/* Technical Attributes Table */}
+                <div className="rounded-lg border divide-y text-xs">
+                  <div className="flex items-center justify-between p-2.5 bg-muted/10">
+                    <span className="text-muted-foreground">MIME Type</span>
+                    <span className="font-medium text-foreground">{detailData.mimeType}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5">
+                    <span className="text-muted-foreground">Uploader</span>
+                    <div className="text-right">
+                      <div className="font-medium text-foreground">{detailData.uploader?.email || 'System'}</div>
+                      {detailData.uploader?.phoneNumber && (
+                        <div className="text-[11px] text-muted-foreground">{detailData.uploader.phoneNumber}</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between p-2.5 bg-muted/10">
+                    <span className="text-muted-foreground">Attachment State</span>
+                    <span className="font-medium text-foreground">
+                      {detailData.isAttached
+                        ? `Attached (ID: ${detailData.attachedToId || 'N/A'})`
+                        : 'Unattached Draft'}
                     </span>
-                    <span className="rounded bg-muted/60 p-1.5 text-foreground flex items-center justify-between">
-                      <span>Violence:</span>
-                      <span className="text-emerald-600 font-bold">0.0%</span>
-                    </span>
-                    <span className="rounded bg-muted/60 p-1.5 text-foreground flex items-center justify-between">
-                      <span>Spoof / Fake:</span>
-                      <span className="text-emerald-600 font-bold">0.4%</span>
-                    </span>
-                    <span className="rounded bg-muted/60 p-1.5 text-foreground flex items-center justify-between">
-                      <span>Watermarks:</span>
-                      <span className="text-emerald-600 font-bold">Clean</span>
-                    </span>
+                  </div>
+                  {detailData.attachedAd && (
+                    <div className="flex items-center justify-between p-2.5">
+                      <span className="text-muted-foreground">Attached Ad</span>
+                      <div className="text-right">
+                        <div className="font-medium text-foreground truncate max-w-44">{detailData.attachedAd.title}</div>
+                        <div className="text-[11px] text-emerald-600 font-semibold">₹{detailData.attachedAd.price}</div>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between p-2.5 bg-muted/10">
+                    <span className="text-muted-foreground">Upload Timestamp</span>
+                    <span className="text-foreground">{new Date(detailData.createdAt).toLocaleString()}</span>
+                  </div>
+                  <div className="p-2.5">
+                    <span className="text-muted-foreground block text-[11px] mb-1">Physical Storage URI</span>
+                    <div className="font-mono text-[11px] bg-muted/50 p-1.5 rounded-md text-foreground break-all select-all">
+                      {detailData.diskPath}
+                    </div>
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-4 border-t flex items-center justify-between gap-2">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t">
                 <Button
-                  size="sm"
                   variant="outline"
-                  onClick={() => handleDelete(previewAsset.id, previewAsset.name)}
-                  className="text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  size="sm"
+                  className="text-xs gap-1.5"
+                  onClick={() => {
+                    setPreviewMediaId(null);
+                    handleOpenEdit(detailData);
+                  }}
                 >
-                  <Trash2 className="h-3.5 w-3.5 mr-1" />
-                  Delete
+                  <Edit className="h-3.5 w-3.5" />
+                  <span>Edit / Replace</span>
                 </Button>
-                <div className="flex gap-2">
-                  {previewAsset.status !== 'Clean' && (
-                    <Button
-                      size="sm"
-                      onClick={() => handleUpdateStatus(previewAsset.id, 'Clean')}
-                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
-                      Approve
-                    </Button>
-                  )}
-                  {previewAsset.status === 'Clean' && (
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      onClick={() => handleUpdateStatus(previewAsset.id, 'Flagged')}
-                      className="text-xs"
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5 mr-1" />
-                      Flag Asset
-                    </Button>
-                  )}
-                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="text-xs gap-1.5 font-semibold"
+                  onClick={() => {
+                    setPreviewMediaId(null);
+                    setDeleteConfirmMedia(detailData);
+                  }}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  <span>Purge Storage</span>
+                </Button>
               </div>
             </div>
           </div>
-        </Dialog>
-      )}
+        )}
+
+        <DialogFooter className="pt-2">
+          <Button variant="outline" size="sm" onClick={() => setPreviewMediaId(null)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* 2. Edit & Replacement Modal */}
+      <Dialog open={Boolean(editMedia)} onOpenChange={(open) => !open && setEditMedia(null)}>
+        <DialogHeader>
+          <DialogTitle>Edit Media & Replace Asset</DialogTitle>
+          <DialogDescription className="text-xs">
+            Update metadata or upload a new image. When replacing, old files are purged immediately from disk/S3.
+          </DialogDescription>
+        </DialogHeader>
+
+        {editMedia && (
+          <div className="space-y-4 pt-2 text-xs">
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground">Original File Name</label>
+              <Input
+                value={editOriginalName}
+                onChange={(e) => setEditOriginalName(e.target.value)}
+                className="text-xs h-8"
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="font-semibold text-foreground">Entity Scope</label>
+              <select
+                value={editScope}
+                onChange={(e) => setEditScope(e.target.value as MediaEntityScope)}
+                className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="LISTING_IMAGE">Listing Ad Image (LISTING_IMAGE)</option>
+                <option value="USER_AVATAR">User Avatar (USER_AVATAR)</option>
+                <option value="CATEGORY_BANNER">Category Icon (CATEGORY_BANNER)</option>
+                <option value="BANNER">Platform Banner (BANNER)</option>
+                <option value="UNATTACHED">Unattached / Draft (UNATTACHED)</option>
+              </select>
+            </div>
+
+            {/* Replacement Upload Box */}
+            <div className="border border-dashed rounded-lg p-3 space-y-2 bg-muted/20">
+              <div className="flex items-center gap-2">
+                <Upload className="h-4 w-4 text-primary" />
+                <span className="font-semibold text-foreground">Replace Physical Image (Optional)</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Select a new JPG, PNG, or WebP image (max 10MB, up to 5000x5000px).
+              </p>
+              <Input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/jpg"
+                onChange={(e) => setReplacementFile(e.target.files?.[0] || null)}
+                className="text-xs h-8"
+              />
+              {replacementFile && (
+                <div className="flex items-center gap-1.5 text-amber-600 bg-amber-500/10 p-2 rounded text-[11px]">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    Warning: Old physical variants on disk & S3 will be permanently deleted upon saving.
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <DialogFooter className="pt-2">
+          <Button variant="outline" size="sm" onClick={() => setEditMedia(null)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSaveEdit}
+            disabled={updateMutation.isPending || replaceMutation.isPending}
+            className="font-semibold"
+          >
+            {updateMutation.isPending || replaceMutation.isPending ? 'Updating...' : 'Save Changes'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* 3. Delete Confirmation Dialog */}
+      <Dialog open={Boolean(deleteConfirmMedia)} onOpenChange={(open) => !open && setDeleteConfirmMedia(null)}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <Trash2 className="h-4 w-4" />
+            <span>Confirm Permanent Storage Deletion</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            This action deletes the database record AND purges all 4 WebP variants from disk & S3 to reclaim space.
+          </DialogDescription>
+        </DialogHeader>
+
+        {deleteConfirmMedia && (
+          <div className="py-2 text-xs space-y-2">
+            <div className="p-3 border rounded-lg bg-muted/30 space-y-1 font-mono text-[11px]">
+              <div><span className="text-muted-foreground font-sans">File:</span> {deleteConfirmMedia.originalName}</div>
+              <div><span className="text-muted-foreground font-sans">Storage Path:</span> {deleteConfirmMedia.diskPath}</div>
+              <div><span className="text-muted-foreground font-sans">Reclaimed Space:</span> <span className="text-emerald-600 font-bold">{deleteConfirmMedia.fileSizeFormatted}</span></div>
+            </div>
+            <p className="text-muted-foreground text-[11px]">
+              Once purged, this image cannot be restored and any attached listing will lose this photo.
+            </p>
+          </div>
+        )}
+
+        <DialogFooter className="pt-2">
+          <Button variant="outline" size="sm" onClick={() => setDeleteConfirmMedia(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleConfirmDelete}
+            disabled={deleteMutation.isPending}
+            className="font-semibold"
+          >
+            {deleteMutation.isPending ? 'Deleting...' : 'Delete & Purge Storage'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
+
+      {/* 4. Cleanup Orphans Confirmation Dialog */}
+      <Dialog open={showCleanupDialog} onOpenChange={setShowCleanupDialog}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-amber-600">
+            <AlertTriangle className="h-4 w-4" />
+            <span>Clean Up Orphaned Media</span>
+          </DialogTitle>
+          <DialogDescription className="text-xs">
+            Purge unattached and abandoned media files older than 24 hours to reclaim disk & S3 space.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="py-2 text-xs space-y-2">
+          <p className="text-muted-foreground">
+            This routine identifies draft uploads that were never attached to an active ad listing and permanently deletes both their database records and physical files on storage.
+          </p>
+          <div className="p-3 border rounded-lg bg-amber-500/10 text-amber-900 dark:text-amber-200">
+            Currently detected unattached files:{' '}
+            <span className="font-bold">{overview?.orphanedMedia.count || 0}</span>
+          </div>
+        </div>
+
+        <DialogFooter className="pt-2">
+          <Button variant="outline" size="sm" onClick={() => setShowCleanupDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleRunCleanup}
+            disabled={cleanupMutation.isPending}
+            className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+          >
+            {cleanupMutation.isPending ? 'Reclaiming Storage...' : 'Start Reclamation'}
+          </Button>
+        </DialogFooter>
+      </Dialog>
     </div>
   );
 }

@@ -174,7 +174,10 @@ export class DiskStorageAdapter implements IStorageAdapter {
   }
 
   async deleteMediaDirectory(dirPath: string): Promise<void> {
-    const fullDir = path.join(this.uploadDir, ...dirPath.replace(/^[/\\]+/, '').split('/'));
+    const cleanDir = dirPath.replace(/^s3:\/\/[^/]+\//, '').replace(/^[/\\]+/, '');
+    const fullDir = path.isAbsolute(cleanDir)
+      ? cleanDir
+      : path.join(this.uploadDir, ...cleanDir.split('/'));
     if (fs.existsSync(fullDir)) {
       await fs.promises.rm(fullDir, { recursive: true, force: true }).catch(() => {});
     }

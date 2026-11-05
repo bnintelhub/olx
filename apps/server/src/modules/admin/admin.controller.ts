@@ -9,6 +9,7 @@ import {
   auditLogQuerySchema,
 } from './admin.schema';
 import { AdStatus } from '@prisma/client';
+import { AppError } from '../../shared/errors/app-error';
 import { writeAuditLog } from '../../shared/utils/audit.util';
 
 export class AdminController {
@@ -151,16 +152,40 @@ export class AdminController {
   }
 
   // Fetches paginated classified listings for moderation and content safety review.
-  // Supports filtering by review status and keyword search across title and description.
+  // Supports filtering by review status, category, and keyword search.
   static async getAds(request: FastifyRequest, reply: FastifyReply) {
     const query = request.query as any;
     const ads = await AdminService.getAds({
       page: Math.max(1, Number(query?.page) || 1),
       limit: Math.min(100, Math.max(1, Number(query?.limit) || 20)),
-      status: query?.status as AdStatus | undefined,
+      status: query?.status && query.status !== 'ALL' ? (query.status as AdStatus) : undefined,
+      category: query?.category && query.category !== 'ALL' ? query.category : undefined,
       q: query?.q,
     });
     return reply.status(200).send({ success: true, data: ads });
+  }
+
+  // Updates an ad's moderation status (ACTIVE, REJECTED, etc.)
+  static async updateAdStatus(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const { status, rejectionReason } = (request.body as any) || {};
+
+    if (!status || !Object.values(AdStatus).includes(status)) {
+      throw new AppError(400, 'INVALID_STATUS', 'Valid ad status is required');
+    }
+
+    const updated = await AdminService.updateAdStatus(id, status, rejectionReason);
+
+    await writeAuditLog({
+      userId: request.user?.id,
+      action: 'ADMIN_UPDATE_AD_STATUS',
+      entityType: 'AD',
+      entityId: id,
+      status: 'SUCCESS',
+      request,
+    });
+
+    return reply.status(200).send({ success: true, data: updated });
   }
 
   // Soft-deletes a listing violating marketplace policies and preserves it for audit.

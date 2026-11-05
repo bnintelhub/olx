@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { AdminController } from './admin.controller';
+import { AdminMediaController } from './admin.media.controller';
 import { requirePermission, authorizeRoles } from '../../plugins/auth.plugin';
 import { Permissions } from '../../shared/auth/rbac';
 import { UserRole } from '@prisma/client';
@@ -55,6 +56,16 @@ export async function adminRoutes(fastify: FastifyInstance) {
     { preHandler: [fastify.authenticate, requirePermission(Permissions.LISTINGS_READ)] },
     AdminController.getAds
   );
+  fastify.patch(
+    '/ads/:id/status',
+    {
+      preHandler: [
+        fastify.authenticate,
+        authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MODERATOR),
+      ],
+    },
+    AdminController.updateAdStatus
+  );
   fastify.delete(
     '/ads/:id',
     { preHandler: [fastify.authenticate, requirePermission(Permissions.LISTINGS_DELETE)] },
@@ -88,5 +99,42 @@ export async function adminRoutes(fastify: FastifyInstance) {
     '/audit-logs',
     { preHandler: [fastify.authenticate, requirePermission(Permissions.AUDIT_READ)] },
     AdminController.getAuditLogs
+  );
+
+  // Media Management & Storage Observability (Super Admin, Admin)
+  fastify.get(
+    '/media/overview',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.getOverview
+  );
+  fastify.get(
+    '/media',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.getAllMedia
+  );
+  fastify.get(
+    '/media/:id',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.getMediaById
+  );
+  fastify.put(
+    '/media/:id',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.updateMedia
+  );
+  fastify.patch(
+    '/media/:id',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.updateMedia
+  );
+  fastify.delete(
+    '/media/:id',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.deleteMedia
+  );
+  fastify.post(
+    '/media/cleanup-orphans',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.cleanupOrphanedMedia
   );
 }

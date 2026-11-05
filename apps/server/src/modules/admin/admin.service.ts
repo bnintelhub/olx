@@ -415,16 +415,34 @@ export class AdminService {
   }
 
   // Retrieves paginated classified ads for content moderation and review.
-  // Supports filtering by publication status and keyword matching in title or description.
-  static async getAds(params: { page: number; limit: number; status?: AdStatus; q?: string }) {
+  // Supports filtering by publication status, category name/slug, and keyword matching.
+  static async getAds(params: {
+    page: number;
+    limit: number;
+    status?: AdStatus;
+    category?: string;
+    q?: string;
+  }) {
     const skip = (params.page - 1) * params.limit;
     const where: Prisma.AdWhereInput = { deletedAt: null };
 
-    if (params.status) where.status = params.status;
+    if (params.status && (params.status as any) !== 'ALL') {
+      where.status = params.status;
+    }
+    if (params.category && params.category !== 'ALL') {
+      where.category = {
+        OR: [
+          { name: { equals: params.category, mode: 'insensitive' } },
+          { slug: { equals: params.category, mode: 'insensitive' } },
+        ],
+      };
+    }
     if (params.q) {
       where.OR = [
         { title: { contains: params.q, mode: 'insensitive' } },
         { description: { contains: params.q, mode: 'insensitive' } },
+        { user: { profile: { name: { contains: params.q, mode: 'insensitive' } } } },
+        { location: { name: { contains: params.q, mode: 'insensitive' } } },
       ];
     }
 
@@ -436,10 +454,18 @@ export class AdminService {
         take: params.limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          category: { select: { name: true } },
-          location: { select: { name: true } },
-          user: { select: { id: true, phoneNumber: true, profile: { select: { name: true } } } },
-          images: { take: 1, orderBy: { sortOrder: 'asc' } },
+          category: { select: { id: true, name: true, slug: true } },
+          location: { select: { id: true, name: true, slug: true } },
+          user: {
+            select: {
+              id: true,
+              phoneNumber: true,
+              email: true,
+              role: true,
+              profile: { select: { name: true, isIdentityVerified: true, avatarUrl: true } },
+            },
+          },
+          images: { orderBy: { sortOrder: 'asc' } },
         },
       }),
     ]);
@@ -453,6 +479,27 @@ export class AdminService {
         totalPages: Math.ceil(total / params.limit),
       },
     };
+  }
+
+  // Updates an ad's moderation status (ACTIVE, REJECTED, etc.) and audit state.
+  static async updateAdStatus(id: string, status: AdStatus, rejectionReason?: string) {
+    const ad = await prisma.ad.findUnique({ where: { id } });
+    if (!ad) throw new AppError(404, 'AD_NOT_FOUND', 'Listing not found');
+
+    return prisma.ad.update({
+      where: { id },
+      data: {
+        status,
+        rejectionReason: status === AdStatus.REJECTED ? rejectionReason || 'Violates community guidelines' : null,
+        renewedAt: status === AdStatus.ACTIVE ? new Date() : undefined,
+        expiresAt: status === AdStatus.ACTIVE ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) : undefined,
+      },
+      include: {
+        category: { select: { name: true } },
+        location: { select: { name: true } },
+        user: { select: { id: true, phoneNumber: true, profile: { select: { name: true } } } },
+      },
+    });
   }
 
   // Soft-deletes a classified listing by recording the current timestamp in deletedAt.
