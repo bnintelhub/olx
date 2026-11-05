@@ -21,6 +21,7 @@
 - [Backend & Authentication Architecture](#backend--authentication-architecture)
   - [👉 Detailed Auth Workflow & API Payloads Documentation (Clickable)](docs/AUTH_WORKFLOW.md)
   - [👉 RBAC & Account Capabilities Architecture Documentation (Clickable)](docs/RBAC_WORKFLOW.md)
+  - [👉 Universal Media & Smart Crop Pipeline Architecture (Clickable)](docs/media.md)
 - [Features](#features)
   - [Marketplace and Ads](#marketplace-and-ads)
   - [Search and Discovery](#search-and-discovery)
@@ -94,7 +95,10 @@ All commands can be executed from the monorepo root:
 
 ## Backend & Authentication Architecture
 
-> 🔗 **Quick Link**: [Click here to open the full Authentication & BullMQ Workflow Documentation](docs/AUTH_WORKFLOW.md) for request/response payloads, error codes, and complete specifications.
+> 🔗 **Architecture & Workflow Documentation**:
+> - [👉 Detailed Auth Workflow & BullMQ OTP Documentation](docs/AUTH_WORKFLOW.md)
+> - [👉 RBAC & Account Capabilities Architecture Documentation](docs/RBAC_WORKFLOW.md)
+> - [👉 Universal Media Upload, Optimization & Smart Crop Pipeline](docs/media.md)
 
 The backend is built with **Fastify v4** following clean modular architecture (`backend/src/modules`), backed by **PostgreSQL 16**, **Redis 7.0**, and **BullMQ 5.x** for background job processing:
 

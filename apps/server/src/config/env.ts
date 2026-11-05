@@ -22,6 +22,15 @@ const envSchema = z.object({
   ADMIN_PASSWORD_HASH: z.string().optional(),
   ADMIN_LOGIN_WINDOW_MS: z.string().transform(Number).default('900000'),
   ADMIN_LOGIN_MAX_ATTEMPTS: z.string().transform(Number).default('10'),
+  // Storage configuration
+  STORAGE_DRIVER: z.enum(['disk', 's3']).default('disk'),
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().default('olx-media'),
+  S3_ACCESS_KEY: z.string().optional(),
+  S3_SECRET_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: z.string().transform((v) => v === 'true').default('true'),
+  S3_PUBLIC_URL: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

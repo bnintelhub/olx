@@ -10,6 +10,8 @@ build/
 .turbo/
 
 # Uploaded media files
+uploads/*
+!uploads/.gitkeep
 apps/server/uploads/*
 !apps/server/uploads/.gitkeep
 

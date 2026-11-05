@@ -1,5 +1,6 @@
 import fastify, { FastifyInstance } from 'fastify';
 import path from 'path';
+import fs from 'fs';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyMultipart from '@fastify/multipart';
@@ -24,8 +25,10 @@ import { reportRoutes } from './modules/reports/reports.routes';
 import { paymentRoutes } from './modules/payments/payments.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
 import { uploadRoutes } from './modules/uploads/uploads.routes';
+import { mediaRoutes } from './modules/media/media.routes';
 import { notificationRoutes } from './modules/notifications/notifications.routes';
 import { ListingsController } from './modules/listings/listings.controller';
+import { defaultStorage } from './integrations/storage/storage.adapter';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({
@@ -53,16 +56,29 @@ export async function buildApp(): Promise<FastifyInstance> {
   // File Uploads & Static files
   await app.register(fastifyMultipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024,
-      files: 12,
+      fileSize: 10 * 1024 * 1024, // 10MB max per file
+      files: 10, // max 10 images per upload
     },
   });
 
-  const uploadDir = path.join(process.cwd(), 'uploads');
+  const sharedUploadDir = defaultStorage.getUploadDir();
+  const uploadRoots = [
+    sharedUploadDir,
+    path.resolve(process.cwd(), 'uploads'),
+    path.resolve(sharedUploadDir, 'apps/workers/uploads'),
+    path.resolve(process.cwd(), '../workers/uploads'),
+  ].filter((p, i, a) => fs.existsSync(p) && a.indexOf(p) === i);
+
   await app.register(fastifyStatic, {
-    root: uploadDir,
+    root: uploadRoots.length > 1 ? uploadRoots : sharedUploadDir,
     prefix: '/uploads/',
     decorateReply: false,
+    setHeaders: (res, pathName) => {
+      // Long-lived immutable caching for pre-processed image variants
+      if (pathName.endsWith('.webp') || pathName.endsWith('.avif') || pathName.includes('variants')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
   });
 
   // Authentication & Errors
@@ -106,12 +122,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(categoryRoutes, { prefix: '/categories' });
     await api.register(locationRoutes, { prefix: '/locations' });
     await api.register(listingRoutes, { prefix: '/ads' });
+    await api.register(listingRoutes, { prefix: '/listings' });
     await api.register(userRoutes, { prefix: '/user' });
     await api.register(chatRoutes, { prefix: '/chat' });
     await api.register(reportRoutes, { prefix: '/moderation' });
     await api.register(paymentRoutes, { prefix: '/payments' });
     await api.register(adminRoutes, { prefix: '/admin' });
     await api.register(uploadRoutes, { prefix: '/uploads' });
+    await api.register(mediaRoutes, { prefix: '/media' });
     await api.register(notificationRoutes, { prefix: '/notifications' });
   }, { prefix: '/api/v1' });
 

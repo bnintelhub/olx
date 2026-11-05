@@ -126,6 +126,29 @@ enum TicketPriority {
   URGENT
 }
 
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+}
+
+enum MediaStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+enum MediaEntityScope {
+  LISTING_IMAGE
+  USER_AVATAR
+  CATEGORY_BANNER
+  BANNER
+  REVIEW_IMAGE
+  SUPPORT_ATTACHMENT
+  UNATTACHED
+}
+
 // ============================================================================
 // USER & IDENTITY MODELS
 // ============================================================================
@@ -168,6 +191,7 @@ model User {
   reviewsReceived Review[]       @relation("ReviewTarget")
   auditLogs       AuditLog[]
   staffInvitations StaffInvitation[] @relation("StaffInvitationsSent")
+  media           Media[]
 
   @@index([phoneNumber])
   @@index([email])
@@ -342,6 +366,7 @@ model Ad {
 model AdImage {
   id           String    @id @default(uuid()) @db.VarChar(36)
   adId         String    @map("ad_id") @db.VarChar(36)
+  mediaId      String?   @map("media_id") @db.VarChar(36)
   originalUrl  String    @map("original_url") @db.VarChar(500)
   displayUrl   String    @map("display_url") @db.VarChar(500)
   thumbnailUrl String    @map("thumbnail_url") @db.VarChar(500)
@@ -350,9 +375,41 @@ model AdImage {
   createdAt    DateTime  @default(now()) @map("created_at")
 
   ad           Ad        @relation(fields: [adId], references: [id], onDelete: Cascade)
+  media        Media?    @relation(fields: [mediaId], references: [id], onDelete: SetNull)
 
   @@index([adId, sortOrder])
+  @@index([mediaId])
   @@map("ad_images")
+}
+
+model Media {
+  id           String           @id @default(uuid()) @db.VarChar(36)
+  userId       String           @map("user_id") @db.VarChar(36)
+  type         MediaType        @default(IMAGE)
+  status       MediaStatus      @default(PENDING)
+  scope        MediaEntityScope @default(UNATTACHED)
+  originalName String           @map("original_name") @db.VarChar(255)
+  mimeType     String           @map("mime_type") @db.VarChar(100)
+  fileSize     Int              @map("file_size")
+  width        Int?
+  height       Int?
+  diskPath     String           @map("disk_path") @db.VarChar(500)
+  focalPoint   Json?            @map("focal_point")
+  variants     Json?
+  blurhash     String?          @db.VarChar(100)
+  errorMessage String?          @map("error_message") @db.VarChar(255)
+  isAttached   Boolean          @default(false) @map("is_attached")
+  attachedToId String?          @map("attached_to_id") @db.VarChar(36)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  adImages     AdImage[]
+
+  @@index([userId, isAttached])
+  @@index([status, createdAt])
+  @@index([scope, attachedToId])
+  @@map("media")
 }
 
 model AdAttributeValue {

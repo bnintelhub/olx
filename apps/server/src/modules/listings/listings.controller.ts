@@ -4,6 +4,7 @@ import {
   createListingSchema,
   updateListingSchema,
   updateListingStatusSchema,
+  reorderListingImagesSchema,
 } from './listings.schema';
 import { AdStatus } from '@prisma/client';
 
@@ -63,5 +64,25 @@ export class ListingsController {
     const status = query?.status as AdStatus | undefined;
     const data = await ListingsService.getMyAds(request.user!.id, status);
     return reply.status(200).send({ success: true, data });
+  }
+
+  static async updateImages(request: FastifyRequest, reply: FastifyReply) {
+    const { listingId } = request.params as { listingId: string };
+    const { images } = reorderListingImagesSchema.parse(request.body);
+    const data = await ListingsService.updateListingImages(request.user!.id, listingId, images);
+    return reply.status(200).send({
+      success: true,
+      data,
+      message: 'Listing images updated successfully',
+    });
+  }
+
+  static async removeImage(request: FastifyRequest, reply: FastifyReply) {
+    const { listingId, mediaId } = request.params as { listingId: string; mediaId: string };
+    await ListingsService.removeListingImage(request.user!.id, listingId, mediaId);
+    return reply.status(200).send({
+      success: true,
+      message: 'Image removed from listing successfully',
+    });
   }
 }

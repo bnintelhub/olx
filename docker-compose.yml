@@ -41,7 +41,23 @@ services:
     networks:
       - bharatmarket_net
 
-  # ========================================================
+  # MinIO S3-Compatible Object Storage
+  minio:
+    image: cgr.dev/chainguard/minio:latest
+    container_name: bharatmarket_minio
+    restart: unless-stopped
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin_olx}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-SuperSecurePassword123}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - bharatmarket_net
+
   # Backend API Server (Fastify + Prisma + Socket.IO + Redis)
   # ========================================================
   server:
@@ -90,6 +106,9 @@ services:
       NODE_ENV: production
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
+      UPLOAD_DIR: "/app/uploads"
+    volumes:
+      - backend_uploads:/app/uploads
     networks:
       - bharatmarket_net
 
@@ -129,6 +148,8 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
+    driver: local
+  minio_data:
     driver: local
   backend_uploads:
     driver: local

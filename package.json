@@ -29,6 +29,9 @@
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down",
     "docker:db": "docker compose up -d postgres redis",
+    "docker:storage": "docker compose up -d minio",
+    "docker:infra": "docker compose up -d postgres redis minio",
+    "infra": "docker compose up -d postgres redis minio",
     "docker:build": "docker compose build",
     "docker:logs": "docker compose logs -f",
     "docker:ps": "docker compose ps"
