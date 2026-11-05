@@ -273,22 +273,28 @@ model Location {
 
 model Category {
   id           String              @id @default(uuid()) @db.VarChar(36)
-  name         String              @db.VarChar(100)
-  slug         String              @unique @db.VarChar(120)
-  description  String?             @db.VarChar(500)
-  iconUrl      String?             @map("icon_url") @db.VarChar(500)
   parentId     String?             @map("parent_id") @db.VarChar(36)
-  displayOrder Int                 @default(0) @map("display_order")
+  name         String              @db.VarChar(100)
+  slug         String              @db.VarChar(120)
+  description  String?             @db.VarChar(500)
+  sortOrder    Int                 @default(0) @map("sort_order")
+  level        Int                 @default(0)
+  imageMediaId String?             @map("image_media_id") @db.VarChar(36)
+  iconUrl      String?             @map("icon_url") @db.VarChar(500)
   isActive     Boolean             @default(true) @map("is_active")
   createdAt    DateTime            @default(now()) @map("created_at")
   updatedAt    DateTime            @updatedAt @map("updated_at")
 
   parent       Category?           @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
   children     Category[]          @relation("CategoryHierarchy")
+  imageMedia   Media?              @relation(fields: [imageMediaId], references: [id], onDelete: SetNull)
   attributes   CategoryAttribute[]
   ads          Ad[]
 
-  @@index([parentId, isActive, displayOrder])
+  @@unique([parentId, slug])
+  @@index([parentId, sortOrder])
+  @@index([parentId, isActive])
+  @@index([slug])
   @@map("categories")
 }
 
@@ -405,6 +411,7 @@ model Media {
 
   user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   adImages     AdImage[]
+  categories   Category[]
 
   @@index([userId, isAttached])
   @@index([status, createdAt])

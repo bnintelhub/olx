@@ -224,11 +224,24 @@ async function main() {
     const { attributes, subcategories, ...catFields } = catData;
 
     // 1. Upsert Parent Category
-    const parent = await prisma.category.upsert({
-      where: { slug: catFields.slug },
-      update: { name: catFields.name, displayOrder: catFields.displayOrder, iconUrl: catFields.iconUrl },
-      create: { ...catFields, parentId: null },
+    const existingParent = await prisma.category.findFirst({
+      where: { parentId: null, slug: catFields.slug },
     });
+    const parent = existingParent
+      ? await prisma.category.update({
+          where: { id: existingParent.id },
+          data: { name: catFields.name, sortOrder: catFields.displayOrder, iconUrl: catFields.iconUrl, level: 0 },
+        })
+      : await prisma.category.create({
+          data: {
+            name: catFields.name,
+            slug: catFields.slug,
+            sortOrder: catFields.displayOrder,
+            iconUrl: catFields.iconUrl,
+            level: 0,
+            parentId: null,
+          },
+        });
 
     // 2. Upsert Attributes for Parent
     if (attributes && attributes.length > 0) {
@@ -261,20 +274,25 @@ async function main() {
     // 3. Upsert Subcategories
     if (subcategories && subcategories.length > 0) {
       for (const sub of subcategories) {
-        await prisma.category.upsert({
-          where: { slug: sub.slug },
-          update: {
-            name: sub.name,
-            parentId: parent.id,
-            displayOrder: sub.displayOrder,
-          },
-          create: {
-            name: sub.name,
-            slug: sub.slug,
-            parentId: parent.id,
-            displayOrder: sub.displayOrder,
-          },
+        const existingSub = await prisma.category.findFirst({
+          where: { parentId: parent.id, slug: sub.slug },
         });
+        if (existingSub) {
+          await prisma.category.update({
+            where: { id: existingSub.id },
+            data: { name: sub.name, sortOrder: sub.displayOrder, level: 1 },
+          });
+        } else {
+          await prisma.category.create({
+            data: {
+              name: sub.name,
+              slug: sub.slug,
+              parentId: parent.id,
+              sortOrder: sub.displayOrder,
+              level: 1,
+            },
+          });
+        }
       }
     }
   }

@@ -181,7 +181,7 @@ export class SearchService {
       const defaultCategories = await prisma.category.findMany({
         where: { isActive: true, parentId: null },
         take: 6,
-        orderBy: { displayOrder: 'asc' },
+        orderBy: { sortOrder: 'asc' },
         select: { id: true, name: true, slug: true },
       });
       return defaultCategories.map((cat) => ({
