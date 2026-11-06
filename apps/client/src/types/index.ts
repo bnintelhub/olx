@@ -28,12 +28,22 @@ export interface Category {
   name: string;
   slug: string;
   iconUrl?: string;
+  image?: {
+    mediaId?: string | null;
+    url?: string | null;
+    thumbnailUrl?: string | null;
+    displayUrl?: string | null;
+    variants?: Record<string, string>;
+  } | null;
   description?: string;
-  displayOrder: number;
+  displayOrder?: number;
+  sortOrder?: number;
   parentId?: string | null;
   isActive?: boolean;
   subcategories?: Category[];
+  children?: Category[];
   attributes?: any[];
+  adsCount?: number;
 }
 
 export interface LocationItem {

@@ -17,21 +17,9 @@ import {
   Phone,
   AlertCircle,
   Sparkles,
-  Layers,
-  Car,
-  Home,
-  Smartphone,
-  Briefcase,
-  Bike,
-  Tv,
-  Truck,
-  Armchair,
-  Shirt,
-  BookOpen,
-  Dog,
-  Wrench,
   Search,
   IndianRupee,
+  ImageIcon,
 } from 'lucide-react';
 import { Category, LocationItem } from '../types';
 import { categoriesService } from '../features/categories/service/categories.service';
@@ -40,73 +28,19 @@ import { adsService } from '../features/ads/service/ads.service';
 import { useAuthStore } from '../features/auth/stores/useAuthStore';
 import { ADS_QUERY_KEYS } from '../features/ads/hook/useAdsQuery';
 
-// Dynamic icon mapping for categories
-const getCategoryIcon = (name: string, slug?: string) => {
-  const text = (name + ' ' + (slug || '')).toLowerCase();
-  if (text.includes('car') || text.includes('vehicle') || text.includes('auto')) return Car;
-  if (
-    text.includes('propert') ||
-    text.includes('house') ||
-    text.includes('flat') ||
-    text.includes('plot') ||
-    text.includes('rent') ||
-    text.includes('real estate')
-  )
-    return Home;
-  if (text.includes('mobile') || text.includes('phone') || text.includes('tablet')) return Smartphone;
-  if (text.includes('job')) return Briefcase;
-  if (
-    text.includes('bike') ||
-    text.includes('motorcycle') ||
-    text.includes('scooter') ||
-    text.includes('two wheeler')
-  )
-    return Bike;
-  if (
-    text.includes('electronic') ||
-    text.includes('appliance') ||
-    text.includes('tv') ||
-    text.includes('laptop') ||
-    text.includes('camera')
-  )
-    return Tv;
-  if (
-    text.includes('commercial') ||
-    text.includes('truck') ||
-    text.includes('spares')
-  )
-    return Truck;
-  if (
-    text.includes('furnitur') ||
-    text.includes('sofa') ||
-    text.includes('bed') ||
-    text.includes('chair')
-  )
-    return Armchair;
-  if (
-    text.includes('fashion') ||
-    text.includes('cloth') ||
-    text.includes('dress') ||
-    text.includes('shoes')
-  )
-    return Shirt;
-  if (
-    text.includes('book') ||
-    text.includes('sport') ||
-    text.includes('hobb') ||
-    text.includes('game')
-  )
-    return BookOpen;
-  if (
-    text.includes('pet') ||
-    text.includes('animal') ||
-    text.includes('dog') ||
-    text.includes('cat')
-  )
-    return Dog;
-  if (text.includes('service') || text.includes('repair')) return Wrench;
-  return Layers;
-};
+// Helper to extract category image URL with multi-variant and iconUrl fallback
+function getCategoryImageUrl(cat: Category): string | null {
+  return (
+    cat.image?.thumbnailUrl ||
+    (cat.image?.variants as any)?.card ||
+    cat.image?.displayUrl ||
+    cat.image?.url ||
+    (cat.iconUrl && (cat.iconUrl.startsWith('http://') || cat.iconUrl.startsWith('https://') || cat.iconUrl.startsWith('/'))
+      ? cat.iconUrl
+      : null) ||
+    null
+  );
+}
 
 // Formats numbers to Indian numbering system (e.g. 1,50,000)
 function formatIndianNumber(num: number): string {
@@ -558,7 +492,7 @@ export const PostAdModal: React.FC<{
                   </div>
                 ) : (
                   filteredCategories.map((cat) => {
-                    const IconComp = getCategoryIcon(cat.name, cat.slug);
+                    const categoryImage = getCategoryImageUrl(cat);
                     const subList = cat.subcategories || (cat as any).children || [];
                     const hasSubs = subList.length > 0;
 
@@ -575,8 +509,21 @@ export const PostAdModal: React.FC<{
                         className="flex items-center justify-between px-6 py-4 hover:bg-[#F5F7F8] transition-colors cursor-pointer group"
                       >
                         <div className="flex items-center gap-4">
-                          <div className="h-10 w-10 rounded-full bg-[#EBF1F3] group-hover:bg-[#002f34] group-hover:text-white text-[#002f34] flex items-center justify-center transition-colors">
-                            <IconComp size={20} strokeWidth={1.8} />
+                          <div className="h-11 w-11 rounded-xl bg-[#F0F4F6] border border-[#D8DFE2] overflow-hidden flex items-center justify-center shrink-0 group-hover:border-[#002f34] transition-colors shadow-2xs">
+                            {categoryImage ? (
+                              <img
+                                src={categoryImage}
+                                alt={cat.name}
+                                className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-200"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="h-full w-full bg-[#EBF1F3] text-[#002f34] font-black text-sm flex items-center justify-center uppercase">
+                                {cat.name.slice(0, 2)}
+                              </div>
+                            )}
                           </div>
                           <div>
                             <span className="text-sm sm:text-[15px] font-bold text-[#002f34] group-hover:text-[#008581] transition-colors">
@@ -620,21 +567,42 @@ export const PostAdModal: React.FC<{
 
                 <div className="divide-y divide-[#EBF1F3] max-h-[60vh] overflow-y-auto">
                   {(selectedParentCategory.subcategories || (selectedParentCategory as any).children || []).map(
-                    (sub: Category) => (
-                      <div
-                        key={sub.id}
-                        onClick={() => handleSelectLeafCategory(sub)}
-                        className="flex items-center justify-between px-6 py-4 hover:bg-[#F5F7F8] transition-colors cursor-pointer group"
-                      >
-                        <span className="text-sm sm:text-[15px] font-medium text-[#002f34] group-hover:text-[#008581] transition-colors">
-                          {sub.name}
-                        </span>
-                        <ChevronRight
-                          size={18}
-                          className="text-[#70808C] group-hover:text-[#002f34] transition-colors"
-                        />
-                      </div>
-                    )
+                    (sub: Category) => {
+                      const subImage = getCategoryImageUrl(sub);
+                      return (
+                        <div
+                          key={sub.id}
+                          onClick={() => handleSelectLeafCategory(sub)}
+                          className="flex items-center justify-between px-6 py-3.5 hover:bg-[#F5F7F8] transition-colors cursor-pointer group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-[#F0F4F6] border border-[#D8DFE2] overflow-hidden flex items-center justify-center shrink-0">
+                              {subImage ? (
+                                <img
+                                  src={subImage}
+                                  alt={sub.name}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    (e.currentTarget as HTMLElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-xs font-bold text-[#002f34] uppercase">
+                                  {sub.name.slice(0, 2)}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-sm sm:text-[15px] font-medium text-[#002f34] group-hover:text-[#008581] transition-colors">
+                              {sub.name}
+                            </span>
+                          </div>
+                          <ChevronRight
+                            size={18}
+                            className="text-[#70808C] group-hover:text-[#002f34] transition-colors"
+                          />
+                        </div>
+                      );
+                    }
                   )}
                 </div>
               </div>
@@ -650,12 +618,33 @@ export const PostAdModal: React.FC<{
             onSubmit={handleSubmitAd}
             className="w-full max-w-3xl space-y-6"
           >
-            {/* 1. Selected Category Card */}
+            {/* 1. Selected Category Card with Real Category Image */}
             <div className="bg-white rounded-xl border border-[#D8DFE2] p-4 sm:p-5 shadow-xs flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="h-10 w-10 rounded-full bg-[#EBF1F3] text-[#002f34] flex items-center justify-center font-bold">
-                  <Tag size={20} />
-                </div>
+                {(() => {
+                  const selImg = selectedCategory
+                    ? getCategoryImageUrl(selectedCategory) ||
+                      (selectedParentCategory ? getCategoryImageUrl(selectedParentCategory) : null)
+                    : null;
+                  return (
+                    <div className="h-11 w-11 rounded-xl bg-[#F0F4F6] border border-[#D8DFE2] overflow-hidden flex items-center justify-center shrink-0 shadow-2xs">
+                      {selImg ? (
+                        <img
+                          src={selImg}
+                          alt={selectedCategory?.name}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="h-full w-full bg-[#EBF1F3] text-[#002f34] font-black text-sm flex items-center justify-center uppercase">
+                          {selectedCategory?.name?.slice(0, 2) || <Tag size={20} />}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
                 <div>
                   <span className="text-[11px] font-bold uppercase text-[#70808C] tracking-wider block">
                     Selected Category
