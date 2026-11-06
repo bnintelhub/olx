@@ -16,7 +16,7 @@ export const createCategorySchema = z
       .optional(),
     description: z.string().trim().max(500, 'Description cannot exceed 500 characters').nullable().optional(),
     parentId: z.string().uuid('Invalid parent category UUID format').nullable().optional(),
-    sortOrder: z.coerce.number().int().min(0).default(0),
+    sortOrder: z.coerce.number().int().min(0).optional(),
     displayOrder: z.coerce.number().int().min(0).optional(), // Backward-compatible alias
     imageMediaId: z.string().uuid('Invalid media UUID format').nullable().optional(),
     iconUrl: z.string().url('Invalid URL').max(500).nullable().optional(),
@@ -24,7 +24,7 @@ export const createCategorySchema = z
   })
   .transform((data) => ({
     ...data,
-    sortOrder: data.sortOrder ?? data.displayOrder ?? 0,
+    sortOrder: data.sortOrder ?? data.displayOrder ?? undefined,
   }));
 
 export const updateCategorySchema = z

@@ -417,7 +417,7 @@ export class CategoriesService {
 
     // Determine default sortOrder as next available sibling sequence if not provided
     let sortOrder = input.sortOrder;
-    if (sortOrder === 0) {
+    if (sortOrder === undefined || sortOrder === null) {
       const highestSort = await prisma.category.findFirst({
         where: { parentId },
         orderBy: { sortOrder: 'desc' },
@@ -607,7 +607,7 @@ export class CategoriesService {
       slug: fields.slug || undefined,
       description: fields.description || undefined,
       parentId: fields.parentId && fields.parentId !== '' ? fields.parentId : null,
-      sortOrder: fields.sortOrder !== undefined && fields.sortOrder !== '' ? Number(fields.sortOrder) : 0,
+      sortOrder: fields.sortOrder !== undefined && fields.sortOrder !== '' ? Number(fields.sortOrder) : undefined,
       isActive: fields.isActive !== undefined ? fields.isActive === 'true' || fields.isActive === true : true,
     });
 
@@ -641,7 +641,7 @@ export class CategoriesService {
     }
 
     let sortOrder = parsed.sortOrder;
-    if (sortOrder === 0) {
+    if (sortOrder === undefined || sortOrder === null) {
       const highestSort = await prisma.category.findFirst({
         where: { parentId },
         orderBy: { sortOrder: 'desc' },

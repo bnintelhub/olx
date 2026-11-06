@@ -504,10 +504,10 @@ export function CategoriesPage() {
 
   // Flattens tree into a flat list for select dropdowns & parent options
   const flatCategoryList = useMemo(() => {
-    const list: Array<{ id: string; name: string; level: number; parentId: string | null }> = [];
+    const list: Array<{ id: string; name: string; level: number; parentId: string | null; sortOrder: number }> = [];
     const traverse = (items: CategoryItem[]) => {
       items.forEach((item) => {
-        list.push({ id: item.id, name: item.name, level: item.level, parentId: item.parentId });
+        list.push({ id: item.id, name: item.name, level: item.level, parentId: item.parentId, sortOrder: item.sortOrder ?? 0 });
         if (item.children && item.children.length > 0) {
           traverse(item.children);
         }
@@ -529,12 +529,22 @@ export function CategoriesPage() {
     });
   };
 
+  // Automatically calculate next sort order among siblings (max + 1)
+  const getNextSortOrder = (parentId: string | null) => {
+    const siblings = flatCategoryList.filter((c) =>
+      parentId ? c.parentId === parentId : !c.parentId
+    );
+    if (siblings.length === 0) return 0;
+    const maxOrder = Math.max(...siblings.map((s) => s.sortOrder ?? 0));
+    return maxOrder + 1;
+  };
+
   const handleOpenCreate = (parentId: string | null = null) => {
     setFormName('');
     setFormSlug('');
     setFormParentId(parentId);
     setFormDescription('');
-    setFormSortOrder(0);
+    setFormSortOrder(getNextSortOrder(parentId));
     handleClearSelectedFile();
     setRemoveExistingImage(false);
     setIsCreateOpen(true);
@@ -912,7 +922,11 @@ export function CategoriesPage() {
             <label className="font-semibold text-foreground block mb-1">Parent Category</label>
             <select
               value={formParentId || ''}
-              onChange={(e) => setFormParentId(e.target.value || null)}
+              onChange={(e) => {
+                const nextParentId = e.target.value || null;
+                setFormParentId(nextParentId);
+                setFormSortOrder(getNextSortOrder(nextParentId));
+              }}
               className="w-full text-xs h-9 border rounded-md px-2.5 bg-background text-foreground"
             >
               <option value="">(None - Root Category Level 0)</option>
@@ -937,13 +951,21 @@ export function CategoriesPage() {
           </div>
 
           <div>
-            <label className="font-semibold text-foreground block mb-1">Sort Order</label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="font-semibold text-foreground">Sort Order</label>
+              <span className="text-[11px] font-medium text-emerald-600 bg-emerald-500/10 dark:text-emerald-400 px-2 py-0.5 rounded font-mono">
+                Auto-assigned: #{formSortOrder}
+              </span>
+            </div>
             <Input
               type="number"
               value={formSortOrder}
               onChange={(e) => setFormSortOrder(Number(e.target.value) || 0)}
               className="text-xs h-9 font-mono"
             />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Automatically prefilled with the next available order (#{formSortOrder}) among siblings.
+            </p>
           </div>
 
           <ImageDropzone
