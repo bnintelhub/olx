@@ -37,8 +37,12 @@ export function useMediaListQuery(params: GetMediaParams) {
   return useQuery<GetMediaResponse>({
     queryKey: MEDIA_QUERY_KEYS.list(params),
     queryFn: () => mediaService.getMediaList(params),
-    staleTime: 15000,
+    staleTime: 5000,
     refetchOnWindowFocus: false,
+    refetchInterval: (query) => {
+      const hasProcessing = query.state.data?.items?.some((item) => item.status === 'PROCESSING');
+      return hasProcessing ? 1500 : false;
+    },
   });
 }
 
@@ -47,7 +51,11 @@ export function useMediaDetailQuery(id: string | null) {
     queryKey: MEDIA_QUERY_KEYS.detail(id || ''),
     queryFn: () => mediaService.getMediaDetail(id!),
     enabled: Boolean(id),
-    staleTime: 60000,
+    staleTime: 2000,
+    refetchInterval: (query) => {
+      const item = query.state.data;
+      return item?.status === 'PROCESSING' ? 1500 : false;
+    },
   });
 }
 

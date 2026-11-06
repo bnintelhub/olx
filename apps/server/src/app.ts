@@ -1,6 +1,7 @@
 import fastify, { FastifyInstance } from 'fastify';
 import path from 'path';
 import fs from 'fs';
+import querystring from 'querystring';
 import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyMultipart from '@fastify/multipart';
@@ -46,6 +47,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fastifyCookie, {
     secret: env.JWT_ACCESS_SECRET,
     hook: 'onRequest',
+  });
+
+  // Support application/x-www-form-urlencoded payloads for payment provider callbacks & webhooks
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, defaultDone) => {
+    try {
+      const parsed = querystring.parse(typeof body === 'string' ? body : body.toString('utf-8'));
+      defaultDone(null, parsed);
+    } catch (err: any) {
+      defaultDone(err, undefined);
+    }
   });
 
   // Plugins

@@ -81,6 +81,7 @@ export interface MediaItem {
   thumbnailUrl: string | null;
   displayUrl: string | null;
   largeUrl: string | null;
+  errorMessage?: string | null;
   uploader?: {
     id: string;
     email: string;

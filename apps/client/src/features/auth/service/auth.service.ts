@@ -18,13 +18,23 @@ export interface RegisterDto {
 export const authService = {
   // Send OTP to phone or email
   async sendOtp(target: string, type: 'PHONE' | 'EMAIL' = 'PHONE') {
-    const { data } = await apiClient.post('/auth/otp/send', { target, type });
+    const { data } = await apiClient.post('/auth/otp/send', {
+      phoneNumber: target,
+      target,
+      type,
+    });
     return data;
   },
 
   // Verify OTP
-  async verifyOtp(target: string, code: string) {
-    const { data } = await apiClient.post('/auth/otp/verify', { target, code });
+  async verifyOtp(target: string, code: string, sessionId?: string) {
+    const { data } = await apiClient.post('/auth/otp/verify', {
+      phoneNumber: target,
+      target,
+      otp: code,
+      code,
+      sessionId,
+    });
     return data;
   },
 

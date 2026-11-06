@@ -89,6 +89,7 @@ export const AuthModal: React.FC = () => {
       return;
     }
 
+    const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
     setIsSubmitting(true);
     setError(null);
 
@@ -98,6 +99,9 @@ export const AuthModal: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
+          phoneNumber: cleanPhone,
+          target: cleanPhone,
+          otp: code,
           code,
         }),
       });

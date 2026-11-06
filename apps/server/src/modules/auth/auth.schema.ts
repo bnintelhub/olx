@@ -40,15 +40,34 @@ export const resendOtpSchema = resendOtpBaseSchema.refine((data) => data.email |
 });
 
 // Existing mobile OTP & Admin schemas
-export const sendOtpSchema = z.object({
+export const sendOtpSchema = z.preprocess((val: any) => {
+  if (val && typeof val === 'object') {
+    const phone = val.phoneNumber || val.target || val.phone;
+    return { ...val, phoneNumber: phone };
+  }
+  return val;
+}, z.object({
   phoneNumber: z.string().min(10, 'Valid 10-digit mobile number required'),
-});
+}));
 
-export const verifyOtpSchema = z.object({
-  phoneNumber: z.string().min(10, 'Valid mobile number required'),
-  sessionId: z.string().uuid('Valid sessionId required'),
+export const verifyOtpSchema = z.preprocess((val: any) => {
+  if (val && typeof val === 'object') {
+    const phone = val.phoneNumber || val.target || val.phone;
+    const otpCode = val.otp || val.code;
+    return {
+      ...val,
+      phoneNumber: phone,
+      otp: otpCode,
+    };
+  }
+  return val;
+}, z.object({
+  phoneNumber: z.string().min(10, 'Valid mobile number required').optional(),
+  sessionId: z.string().uuid('Valid sessionId required').optional(),
   otp: z.string().length(6, 'OTP must be 6 digits'),
-});
+}).refine((data) => data.sessionId || data.phoneNumber, {
+  message: 'Either sessionId or phoneNumber must be provided',
+}));
 
 export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(10, 'Refresh token required'),

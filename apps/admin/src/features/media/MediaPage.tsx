@@ -480,12 +480,25 @@ export function MediaPage() {
               className="group overflow-hidden rounded-xl border bg-card hover:shadow-md transition-all duration-200 flex flex-col justify-between"
             >
               <div className="relative aspect-4/3 w-full bg-muted/40 overflow-hidden cursor-pointer" onClick={() => setPreviewMediaId(item.id)}>
-                {item.thumbnailUrl || item.displayUrl ? (
+                {item.status === 'PROCESSING' ? (
+                  <div className="h-full w-full flex flex-col items-center justify-center gap-1.5 bg-muted/60 text-muted-foreground p-2 text-center">
+                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <span className="text-[10px] font-medium text-foreground">Converting WebP...</span>
+                  </div>
+                ) : item.status === 'FAILED' ? (
+                  <div className="h-full w-full flex flex-col items-center justify-center gap-1 text-destructive bg-destructive/5 p-2 text-center">
+                    <AlertTriangle className="h-5 w-5" />
+                    <span className="text-[10px] font-medium">Failed</span>
+                  </div>
+                ) : item.thumbnailUrl || item.displayUrl ? (
                   <img
                     src={item.thumbnailUrl || item.displayUrl!}
                     alt={item.originalName}
                     className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
                     loading="lazy"
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
                   />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-muted-foreground">
@@ -587,8 +600,23 @@ export function MediaPage() {
                         className="h-10 w-10 rounded-md overflow-hidden bg-muted cursor-pointer"
                         onClick={() => setPreviewMediaId(item.id)}
                       >
-                        {item.thumbnailUrl || item.displayUrl ? (
-                          <img src={item.thumbnailUrl || item.displayUrl!} alt="" className="h-full w-full object-cover" />
+                        {item.status === 'PROCESSING' ? (
+                          <div className="h-full w-full flex items-center justify-center bg-muted/60">
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                          </div>
+                        ) : item.status === 'FAILED' ? (
+                          <div className="h-full w-full flex items-center justify-center bg-destructive/10 text-destructive">
+                            <AlertTriangle className="h-4 w-4" />
+                          </div>
+                        ) : item.thumbnailUrl || item.displayUrl ? (
+                          <img
+                            src={item.thumbnailUrl || item.displayUrl!}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
                         ) : (
                           <div className="h-full w-full flex items-center justify-center">
                             <ImageIcon className="h-4 w-4 text-muted-foreground" />
@@ -729,20 +757,51 @@ export function MediaPage() {
             {/* Left Side: Image Preview & Variant Links */}
             <div className="flex flex-col gap-3">
               <div className="relative aspect-4/3 w-full bg-black/95 rounded-xl overflow-hidden flex items-center justify-center border border-border/40 shadow-inner">
-                <img
-                  src={detailData.largeUrl || detailData.displayUrl || detailData.thumbnailUrl || ''}
-                  alt={detailData.originalName}
-                  className="max-h-full max-w-full object-contain"
-                />
-                <a
-                  href={detailData.largeUrl || detailData.displayUrl || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="absolute top-2.5 right-2.5 bg-black/70 hover:bg-black/90 text-white px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 transition backdrop-blur-xs font-medium"
-                >
-                  <ZoomIn className="h-3.5 w-3.5" />
-                  <span>Full Res</span>
-                </a>
+                {detailData.status === 'PROCESSING' ? (
+                  <div className="flex flex-col items-center justify-center p-6 text-center text-muted-foreground gap-3">
+                    <div className="relative">
+                      <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      <Sparkles className="h-4 w-4 text-primary absolute inset-0 m-auto animate-pulse" />
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-foreground">Processing WebP Variants...</p>
+                      <p className="text-[11px] text-muted-foreground max-w-xs">
+                        Generating multi-tier WebP variants (Thumbnail, Card, Medium, Large) via Sharp Libvips and syncing to storage.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] animate-pulse bg-primary/10 text-primary border-primary/20">
+                      Auto-refreshing live...
+                    </Badge>
+                  </div>
+                ) : detailData.status === 'FAILED' ? (
+                  <div className="flex flex-col items-center justify-center p-6 text-center text-destructive gap-2">
+                    <AlertTriangle className="h-8 w-8 text-destructive" />
+                    <p className="text-xs font-semibold">Processing Failed</p>
+                    <p className="text-[11px] text-muted-foreground max-w-xs">
+                      {detailData.errorMessage || 'Sharp failed to process image variants. Check dead-letter queue.'}
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <img
+                      src={detailData.largeUrl || detailData.displayUrl || detailData.thumbnailUrl || ''}
+                      alt={detailData.originalName}
+                      className="max-h-full max-w-full object-contain"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                    <a
+                      href={detailData.largeUrl || detailData.displayUrl || '#'}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute top-2.5 right-2.5 bg-black/70 hover:bg-black/90 text-white px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 transition backdrop-blur-xs font-medium"
+                    >
+                      <ZoomIn className="h-3.5 w-3.5" />
+                      <span>Full Res</span>
+                    </a>
+                  </>
+                )}
               </div>
 
               {/* Quick Image Specs Banner */}
@@ -770,16 +829,26 @@ export function MediaPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(detailData.variants || {}).map(([key, url]) => (
-                    <a
-                      key={key}
-                      href={url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-background border hover:border-primary text-foreground transition group"
-                    >
-                      <span className="capitalize font-medium">{key}</span>
-                      <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition" />
-                    </a>
+                    detailData.status === 'PROCESSING' ? (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-muted/40 border text-muted-foreground opacity-60 cursor-not-allowed"
+                      >
+                        <span className="capitalize font-medium">{key}</span>
+                        <span className="text-[10px] italic">generating...</span>
+                      </div>
+                    ) : (
+                      <a
+                        key={key}
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-background border hover:border-primary text-foreground transition group"
+                      >
+                        <span className="capitalize font-medium">{key}</span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition" />
+                      </a>
+                    )
                   ))}
                 </div>
               </div>

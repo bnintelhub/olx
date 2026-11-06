@@ -192,6 +192,7 @@ model User {
   auditLogs       AuditLog[]
   staffInvitations StaffInvitation[] @relation("StaffInvitationsSent")
   media           Media[]
+  paymentOrders   PaymentOrder[]
 
   @@index([phoneNumber])
   @@index([email])
@@ -360,6 +361,7 @@ model Ad {
   conversations     Conversation[]
   reports           Report[]
   featuredBoosts    FeaturedAd[]
+  paymentOrders     PaymentOrder[]
 
   @@index([status, categoryId, createdAt])
   @@index([status, locationId, createdAt])
@@ -722,4 +724,77 @@ model StaffInvitation {
   @@index([token])
   @@index([status])
   @@map("staff_invitations")
+}
+
+// ============================================================================
+// PAYMENTS & TRANSACTIONS (PayU Hosted Checkout & Providers)
+// ============================================================================
+
+enum PaymentPurpose {
+  LISTING_BOOST
+  FEATURED_LISTING
+  TOP_LISTING
+  SELLER_SUBSCRIPTION
+  OTHER
+}
+
+enum PaymentStatus {
+  CREATED
+  INITIATED
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+  REFUND_REQUESTED
+  REFUNDED
+}
+
+model PaymentOrder {
+  id        String         @id @default(uuid()) @db.VarChar(36)
+  userId    String         @map("user_id") @db.VarChar(36)
+  listingId String?        @map("listing_id") @db.VarChar(36)
+  purpose   PaymentPurpose @default(OTHER)
+  productId String         @map("product_id") @db.VarChar(100)
+  amount    Decimal        @db.Decimal(12, 2)
+  currency  String         @default("INR") @db.VarChar(10)
+  status    PaymentStatus  @default(CREATED)
+  metadata  Json?
+  expiresAt DateTime       @map("expires_at")
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  user         User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing      Ad?                  @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  transactions PaymentTransaction[]
+
+  @@index([userId, status])
+  @@index([listingId, status])
+  @@index([status, createdAt])
+  @@map("payment_orders")
+}
+
+model PaymentTransaction {
+  id                    String        @id @default(uuid()) @db.VarChar(36)
+  paymentOrderId        String        @map("payment_order_id") @db.VarChar(36)
+  provider              String        @default("PAYU") @db.VarChar(50)
+  merchantTransactionId String        @map("merchant_transaction_id") @db.VarChar(100)
+  providerTransactionId String?       @map("provider_transaction_id") @db.VarChar(100)
+  amount                Decimal       @db.Decimal(12, 2)
+  currency              String        @default("INR") @db.VarChar(10)
+  status                PaymentStatus @default(INITIATED)
+  paymentMethod         String?       @map("payment_method") @db.VarChar(50)
+  providerResponse      Json?         @map("provider_response")
+  paidAt                DateTime?     @map("paid_at")
+  refundedAmount        Decimal?      @map("refunded_amount") @db.Decimal(12, 2)
+  refundReason          String?       @map("refund_reason") @db.VarChar(255)
+  createdAt             DateTime      @default(now()) @map("created_at")
+  updatedAt             DateTime      @updatedAt @map("updated_at")
+
+  order PaymentOrder @relation(fields: [paymentOrderId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, merchantTransactionId])
+  @@index([paymentOrderId, status])
+  @@index([merchantTransactionId])
+  @@index([providerTransactionId])
+  @@map("payment_transactions")
 }

@@ -464,10 +464,24 @@ export class AdminMediaService {
     // 2. CRUCIAL: Delete old image and variants from physical storage so disk space is reclaimed
     await deletePhysicalMedia(existing);
 
-    // 3. Build paths for new variants
-    const resource: MediaResource = 'ads';
-    const resourceId = existing.attachedToId || 'drafts';
-    const mediaType = 'images';
+    // 3. Build paths for new variants based on entity scope
+    let resource: MediaResource = 'ads';
+    let mediaType = 'images';
+    let resourceId = existing.attachedToId || 'drafts';
+
+    if (existing.scope === 'CATEGORY_BANNER') {
+      resource = 'categories';
+      mediaType = 'icon';
+      resourceId = existing.attachedToId || id;
+    } else if (existing.scope === 'USER_AVATAR') {
+      resource = 'users';
+      mediaType = 'avatar';
+      resourceId = existing.attachedToId || existing.userId;
+    } else if (existing.scope === 'BANNER') {
+      resource = 'system';
+      mediaType = 'banner';
+      resourceId = existing.attachedToId || id;
+    }
 
     const largePath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'large', format: 'webp' });
     const mediumPath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'medium', format: 'webp' });
@@ -483,7 +497,11 @@ export class AdminMediaService {
       medium: defaultStorage.buildPublicUrl(mediumPath, cleanHost),
       large: defaultStorage.buildPublicUrl(largePath, cleanHost),
     };
-    const newDiskPath = buildMediaDirectory({ resource, resourceId, mediaType, mediaId: id });
+    const relativeDir = buildMediaDirectory({ resource, resourceId, mediaType, mediaId: id });
+    const newDiskPath =
+      (env.STORAGE_DRIVER || 's3') === 's3'
+        ? `s3://${env.S3_BUCKET || 'olx-media'}/${relativeDir}`
+        : relativeDir;
 
     // 4. Update database record with new metadata and status PROCESSING
     const updated = await prisma.media.update({

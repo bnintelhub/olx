@@ -441,11 +441,31 @@ export class AuthService {
 
   // Verifies the mobile OTP against the stored session and marks it used.
   // Automatically creates a user profile on first login and issues authentication tokens.
-  static async verifyOtp(sessionId: string, rawPhone: string, submittedOtp: string) {
-    const phoneNumber = this.sanitizePhoneNumber(rawPhone);
-    const session = await AuthRepository.findOtpSession(sessionId);
+  static async verifyOtp(sessionId?: string, rawPhone?: string, submittedOtp?: string) {
+    if (!submittedOtp) {
+      throw new AppError(400, 'INCORRECT_OTP', 'OTP code is required');
+    }
 
-    if (!session || session.phoneNumber !== phoneNumber) {
+    let phoneNumber = rawPhone ? this.sanitizePhoneNumber(rawPhone) : '';
+    let session = null;
+
+    if (sessionId) {
+      session = await AuthRepository.findOtpSession(sessionId);
+      if (session && !phoneNumber && session.phoneNumber) {
+        phoneNumber = session.phoneNumber;
+      }
+    } else if (phoneNumber) {
+      session = await prisma.otpSession.findFirst({
+        where: {
+          phoneNumber,
+          isUsed: false,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    if (!session || (phoneNumber && session.phoneNumber && session.phoneNumber !== phoneNumber)) {
       throw new AppError(400, 'INVALID_SESSION', 'Invalid or expired OTP session. Please request a new OTP.');
     }
 
@@ -463,11 +483,11 @@ export class AuthService {
 
     const submittedHash = HashUtil.sha256(submittedOtp);
     if (submittedHash !== session.otpHash) {
-      await AuthRepository.incrementOtpAttempts(sessionId);
+      await AuthRepository.incrementOtpAttempts(session.id);
       throw new AppError(400, 'INCORRECT_OTP', 'Incorrect OTP entered. Please try again.');
     }
 
-    await AuthRepository.markOtpSessionUsed(sessionId);
+    await AuthRepository.markOtpSessionUsed(session.id);
 
     let isNewUser = false;
     let user = await AuthRepository.findUserByPhone(phoneNumber);
