@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, ArrowRight, RefreshCw, AlertCircle } from 'lucide-react';
-import { CategoriesRibbon } from '@/features/categories/components/CategoriesRibbon';
 import { CategoryGrid } from '@/features/categories/components/CategoryGrid';
 import { HeroBanner } from '../components/HeroBanner';
 import { AdCard } from '@/features/ads/components/AdCard';
@@ -23,9 +22,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenPostAd }) => {
 
   return (
     <div className="min-h-screen bg-[#F5F7F8] pb-16">
-      {/* Category Ribbon */}
-      <CategoriesRibbon />
-
       {/* Hero Banner */}
       <HeroBanner onOpenPostAd={onOpenPostAd} />
 

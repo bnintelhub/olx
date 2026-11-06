@@ -26,6 +26,7 @@ import { useAuth } from '../context/AuthContext';
 import { LocationItem } from '../types';
 import { getWishlistIds, WISHLIST_EVENT } from '../utils/wishlist';
 import { UserFeatureType } from './UserFeatureModal';
+import { CategoriesRibbon } from './CategoriesRibbon';
 
 interface SuggestionItem {
   id: string;
@@ -794,6 +795,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Row 2: Categories Ribbon with ALL CATEGORIES dropdown */}
+      <CategoriesRibbon />
     </header>
   );
 };
