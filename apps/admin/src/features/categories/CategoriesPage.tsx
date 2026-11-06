@@ -117,6 +117,70 @@ function CategoryThumbnail({
   );
 }
 
+// Image shown in the category detail modal — reuses the same retry logic as CategoryThumbnail
+// so freshly-uploaded images that are still PROCESSING become visible without a manual reload
+function DetailModalImage({
+  src,
+  alt,
+  href,
+}: {
+  src?: string | null;
+  alt: string;
+  href?: string | null;
+}) {
+  const [retryCount, setRetryCount] = useState(0);
+  const [hasError, setHasError] = useState(false);
+
+  useEffect(() => {
+    setRetryCount(0);
+    setHasError(false);
+  }, [src]);
+
+  const handleError = () => {
+    if (retryCount < 3) {
+      setTimeout(() => {
+        setRetryCount((prev) => prev + 1);
+        setHasError(false);
+      }, 1000);
+    } else {
+      setHasError(true);
+    }
+  };
+
+  const imageSrc = src
+    ? retryCount > 0
+      ? `${src}${src.includes('?') ? '&' : '?'}retry=${retryCount}`
+      : src
+    : null;
+
+  return (
+    <div className="relative group rounded-lg overflow-hidden border bg-background shrink-0 h-28 w-28 flex items-center justify-center">
+      {imageSrc && !hasError ? (
+        <img
+          key={imageSrc}
+          src={imageSrc}
+          alt={alt}
+          onError={handleError}
+          className="h-full w-full object-cover"
+        />
+      ) : (
+        <FolderTree className="h-8 w-8 text-muted-foreground/60" />
+      )}
+      {href && (
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[11px] font-medium gap-1"
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          View Full
+        </a>
+      )}
+    </div>
+  );
+}
+
 // Convenient interactive Drag & Drop and click-to-upload image component
 interface ImageDropzoneProps {
   previewUrl: string | null;
@@ -1129,22 +1193,11 @@ export function CategoriesPage() {
 
               {detailsCategory.image?.url || detailsCategory.image?.thumbnailUrl ? (
                 <div className="flex flex-col sm:flex-row items-start gap-4">
-                  <div className="relative group rounded-lg overflow-hidden border bg-background shrink-0 h-28 w-28 flex items-center justify-center">
-                    <img
-                      src={detailsCategory.image.url || detailsCategory.image.thumbnailUrl || ''}
-                      alt={detailsCategory.name}
-                      className="h-full w-full object-cover"
-                    />
-                    <a
-                      href={detailsCategory.image.url || detailsCategory.image.thumbnailUrl || '#'}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-[11px] font-medium gap-1"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" />
-                      View Full
-                    </a>
-                  </div>
+                  <DetailModalImage
+                    src={detailsCategory.image.url || detailsCategory.image.thumbnailUrl}
+                    alt={detailsCategory.name}
+                    href={detailsCategory.image.url || detailsCategory.image.thumbnailUrl}
+                  />
 
                   <div className="space-y-2 flex-1 min-w-0">
                     <div>

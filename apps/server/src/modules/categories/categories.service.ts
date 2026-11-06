@@ -737,19 +737,6 @@ export class CategoriesService {
           where: { id: mediaData.mediaId },
           data: { attachedToId: createdCategory.id },
         });
-
-        await queueMediaProcessingJob({
-          mediaId: mediaData.mediaId,
-          tempPath: filePart.tempPath,
-          userId,
-          originalName: path.basename(filePart.filename || 'category-icon.jpg'),
-          mimeType: mediaData.validated.mimeType,
-          fileSize: filePart.size,
-          baseUrl: mediaData.cleanHost,
-          resource: 'categories',
-          resourceId: mediaData.mediaId,
-          mediaType: 'icon',
-        });
       }
 
       return tx.category.findUniqueOrThrow({
@@ -759,6 +746,23 @@ export class CategoriesService {
         },
       });
     });
+
+    // Queue BullMQ job AFTER transaction commits — prevents the worker from racing with
+    // an uncommitted media record (which would cause "Record not found" and stuck PROCESSING state)
+    if (mediaData) {
+      await queueMediaProcessingJob({
+        mediaId: mediaData.mediaId,
+        tempPath: filePart.tempPath,
+        userId,
+        originalName: path.basename(filePart.filename || 'category-icon.jpg'),
+        mimeType: mediaData.validated.mimeType,
+        fileSize: filePart.size,
+        baseUrl: mediaData.cleanHost,
+        resource: 'categories',
+        resourceId: mediaData.mediaId,
+        mediaType: 'icon',
+      });
+    }
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
     return {
@@ -906,19 +910,6 @@ export class CategoriesService {
             attachedToId: id,
           },
         });
-
-        await queueMediaProcessingJob({
-          mediaId: newMediaData.mediaId,
-          tempPath: filePart.tempPath,
-          userId,
-          originalName: path.basename(filePart.filename || 'category-icon.jpg'),
-          mimeType: newMediaData.validated.mimeType,
-          fileSize: filePart.size,
-          baseUrl: newMediaData.cleanHost,
-          resource: 'categories',
-          resourceId: newMediaData.mediaId,
-          mediaType: 'icon',
-        });
       }
 
       // 2. Update category referencing the new mediaId or null
@@ -950,6 +941,23 @@ export class CategoriesService {
 
       return res;
     });
+
+    // Queue BullMQ job AFTER transaction commits — prevents the worker from racing with
+    // an uncommitted media record (which causes "Record not found" and stuck PROCESSING state)
+    if (newMediaData) {
+      await queueMediaProcessingJob({
+        mediaId: newMediaData.mediaId,
+        tempPath: filePart.tempPath,
+        userId,
+        originalName: path.basename(filePart.filename || 'category-icon.jpg'),
+        mimeType: newMediaData.validated.mimeType,
+        fileSize: filePart.size,
+        baseUrl: newMediaData.cleanHost,
+        resource: 'categories',
+        resourceId: newMediaData.mediaId,
+        mediaType: 'icon',
+      });
+    }
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
     return {
