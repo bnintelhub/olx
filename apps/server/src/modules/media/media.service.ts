@@ -231,13 +231,16 @@ export class MediaService {
     const orphans = await prisma.media.findMany({
       where: {
         isAttached: false,
+        categories: { none: {} },
+        adImages: { none: {} },
         createdAt: { lt: cutoffDate },
       },
       take: 100,
     });
 
     for (const orphan of orphans) {
-      await defaultStorage.deleteMediaFiles(orphan.id);
+      const { deletePhysicalMedia } = await import('../admin/admin.media.service');
+      await deletePhysicalMedia(orphan);
       await prisma.media.delete({ where: { id: orphan.id } }).catch(() => {});
     }
 

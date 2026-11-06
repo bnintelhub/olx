@@ -76,6 +76,7 @@ export function MediaPage() {
   const [editMedia, setEditMedia] = useState<MediaItem | null>(null);
   const [deleteConfirmMedia, setDeleteConfirmMedia] = useState<MediaItem | null>(null);
   const [showCleanupDialog, setShowCleanupDialog] = useState(false);
+  const [cleanupHours, setCleanupHours] = useState<number>(0);
 
   // Edit form state
   const [editOriginalName, setEditOriginalName] = useState('');
@@ -147,7 +148,7 @@ export function MediaPage() {
   };
 
   const handleRunCleanup = async () => {
-    await cleanupMutation.mutateAsync(24);
+    await cleanupMutation.mutateAsync(cleanupHours);
     setShowCleanupDialog(false);
   };
 
@@ -1024,17 +1025,59 @@ export function MediaPage() {
             <span>Clean Up Orphaned Media</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Purge unattached and abandoned media files older than 24 hours to reclaim disk & S3 space.
+            Purge unattached and abandoned media files from database and storage (disk & S3).
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-2 text-xs space-y-2">
+        <div className="py-2 text-xs space-y-3">
           <p className="text-muted-foreground">
-            This routine identifies draft uploads that were never attached to an active ad listing and permanently deletes both their database records and physical files on storage.
+            This routine identifies draft uploads that were never attached to an active ad listing or category and permanently deletes both their database records and physical files on storage.
           </p>
           <div className="p-3 border rounded-lg bg-amber-500/10 text-amber-900 dark:text-amber-200">
             Currently detected unattached files:{' '}
             <span className="font-bold">{overview?.orphanedMedia.count || 0}</span>
+          </div>
+
+          <div className="space-y-1.5 pt-1">
+            <label className="text-xs font-semibold text-foreground">Reclamation Scope</label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => setCleanupHours(0)}
+                className={`p-2 rounded border text-left transition ${
+                  cleanupHours === 0
+                    ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                <div className="text-[11px] font-bold">All Unattached</div>
+                <div className="text-[10px] opacity-80">Immediate (0h)</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCleanupHours(1)}
+                className={`p-2 rounded border text-left transition ${
+                  cleanupHours === 1
+                    ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                <div className="text-[11px] font-bold">&gt; 1 Hour Old</div>
+                <div className="text-[10px] opacity-80">Safe draft grace</div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCleanupHours(24)}
+                className={`p-2 rounded border text-left transition ${
+                  cleanupHours === 24
+                    ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
+                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                }`}
+              >
+                <div className="text-[11px] font-bold">&gt; 24 Hours Old</div>
+                <div className="text-[10px] opacity-80">Legacy uploads</div>
+              </button>
+            </div>
           </div>
         </div>
 

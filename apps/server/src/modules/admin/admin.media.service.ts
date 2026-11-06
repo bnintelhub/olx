@@ -99,8 +99,13 @@ export class AdminMediaService {
         by: ['mimeType'],
         _count: { id: true },
       }),
+      // Count genuine unattached orphans (not attached to any category or ad listing)
       prisma.media.count({
-        where: { isAttached: false },
+        where: {
+          isAttached: false,
+          categories: { none: {} },
+          adImages: { none: {} },
+        },
       }),
       prisma.media.findMany({
         take: 5,
@@ -586,29 +591,55 @@ export class AdminMediaService {
     };
   }
 
-  // Purges unattached orphaned media older than gracePeriodHours from DB and physical storage
-  static async cleanupOrphanedMedia(gracePeriodHours = 24, actorUserId?: string) {
-    const cutoffDate = new Date(Date.now() - gracePeriodHours * 3600 * 1000);
+  // Purges unattached orphaned media from DB and physical storage (S3 & Disk)
+  static async cleanupOrphanedMedia(gracePeriodHours = 0, actorUserId?: string) {
+    const where: any = {
+      isAttached: false,
+    };
+
+    if (gracePeriodHours > 0) {
+      const cutoffDate = new Date(Date.now() - gracePeriodHours * 3600 * 1000);
+      where.createdAt = { lt: cutoffDate };
+    }
 
     const orphans = await prisma.media.findMany({
-      where: {
-        isAttached: false,
-        createdAt: { lt: cutoffDate },
+      where,
+      include: {
+        categories: { select: { id: true } },
+        adImages: { select: { id: true } },
       },
       take: 500,
     });
 
     let freedBytes = 0;
     let deletedCount = 0;
+    let healedCount = 0;
 
     for (const orphan of orphans) {
+      // Consistency self-heal: if media is actually referenced by a category or ad, restore attachment
+      if (orphan.categories.length > 0 || orphan.adImages.length > 0) {
+        await prisma.media.update({
+          where: { id: orphan.id },
+          data: {
+            isAttached: true,
+            attachedToId: orphan.categories[0]?.id || orphan.adImages[0]?.id,
+            scope: orphan.categories.length > 0 ? 'CATEGORY_BANNER' : 'LISTING_IMAGE',
+          },
+        });
+        healedCount++;
+        continue;
+      }
+
+      // Thoroughly remove all physical files from S3/MinIO and local disk
       await deletePhysicalMedia(orphan);
       freedBytes += orphan.fileSize;
+
+      // Delete from database
       await prisma.media.delete({ where: { id: orphan.id } }).catch(() => {});
       deletedCount++;
     }
 
-    if (actorUserId && deletedCount > 0) {
+    if (actorUserId && (deletedCount > 0 || healedCount > 0)) {
       await writeAuditLog({
         userId: actorUserId,
         action: 'ADMIN_ACTION_CLEANUP_ORPHANED_MEDIA',
@@ -617,6 +648,7 @@ export class AdminMediaService {
         status: 'SUCCESS',
         newData: {
           deletedCount,
+          healedCount,
           freedBytes,
           freedFormatted: formatBytes(freedBytes),
           gracePeriodHours,
@@ -627,9 +659,12 @@ export class AdminMediaService {
     return {
       success: true,
       deletedCount,
+      healedCount,
       freedBytes,
       freedFormatted: formatBytes(freedBytes),
-      message: `Cleaned up ${deletedCount} orphaned files and reclaimed ${formatBytes(freedBytes)} of storage`,
+      message: `Cleaned up ${deletedCount} orphaned files and reclaimed ${formatBytes(freedBytes)} of storage${
+        healedCount > 0 ? ` (${healedCount} attached records restored)` : ''
+      }`,
     };
   }
 }

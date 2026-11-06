@@ -70,10 +70,11 @@ export class AdminMediaController {
     });
   }
 
-  // Purges unattached orphan files older than grace period to reclaim disk/S3 space
+  // Purges unattached orphan files to reclaim disk/S3 space (gracePeriodHours = 0 means purge all unattached)
   static async cleanupOrphanedMedia(request: FastifyRequest, reply: FastifyReply) {
     const query = request.query as { hours?: string };
-    const gracePeriodHours = Math.max(1, Number(query?.hours) || 24);
+    const parsedHours = query?.hours !== undefined ? Number(query.hours) : 0;
+    const gracePeriodHours = isNaN(parsedHours) ? 0 : Math.max(0, parsedHours);
     const actorUserId = request.user?.id;
 
     const result = await AdminMediaService.cleanupOrphanedMedia(gracePeriodHours, actorUserId);

@@ -194,8 +194,8 @@ export const mediaService = {
     return res.data;
   },
 
-  // Batch purges unattached orphan files to reclaim disk and S3 space
-  async cleanupOrphans(hours = 24): Promise<{ success: boolean; deletedCount: number; freedBytes: number; freedFormatted: string; message: string }> {
+  // Batch purges unattached orphan files to reclaim disk and S3 space (default 0 = purge all unattached)
+  async cleanupOrphans(hours = 0): Promise<{ success: boolean; deletedCount: number; healedCount?: number; freedBytes: number; freedFormatted: string; message: string }> {
     const res = await apiClient.post(`/admin/media/cleanup-orphans?hours=${hours}`);
     return res.data;
   },
