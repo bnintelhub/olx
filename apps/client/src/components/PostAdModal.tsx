@@ -20,6 +20,7 @@ import {
   Search,
   IndianRupee,
   ImageIcon,
+  GripVertical,
 } from 'lucide-react';
 import { Category, LocationItem } from '../types';
 import { categoriesService } from '../features/categories/service/categories.service';
@@ -114,8 +115,12 @@ export const PostAdModal: React.FC<{
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [contactPreference, setContactPreference] = useState<'CHAT_AND_CALL' | 'CHAT_ONLY' | 'CALL_ONLY'>('CHAT_AND_CALL');
 
-  // Images state
+  // Images state & Drag-and-Drop state
   const [images, setImages] = useState<ImageUploadItem[]>([]);
+  const [isDragOverDropZone, setIsDragOverDropZone] = useState(false);
+  const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
+  const [dragOverImageIndex, setDragOverImageIndex] = useState<number | null>(null);
+
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgressText, setUploadProgressText] = useState('');
   const [createdAd, setCreatedAd] = useState<any | null>(null);
@@ -137,6 +142,9 @@ export const PostAdModal: React.FC<{
     setImages([]);
     setAttributeValues({});
     setCategoryAttributes([]);
+    setIsDragOverDropZone(false);
+    setDraggedImageIndex(null);
+    setDragOverImageIndex(null);
 
     let isMounted = true;
     setIsLoadingTaxonomy(true);
@@ -216,20 +224,27 @@ export const PostAdModal: React.FC<{
     }
   };
 
-  // Image Selection Handler (Max 8 photos, <10MB each)
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  // Helper to ingest files from input or drag-and-drop
+  const addFiles = (filesList: FileList | File[]) => {
+    const rawFiles = Array.from(filesList);
+    const validFiles = rawFiles.filter((f) =>
+      ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(f.type)
+    );
 
-    if (images.length + files.length > 8) {
+    if (validFiles.length === 0) {
+      setFormError('Please select valid JPEG, PNG, or WebP images.');
+      toast.error('Invalid image format (use JPEG, PNG, or WebP)');
+      return;
+    }
+
+    if (images.length + validFiles.length > 8) {
       setFormError('You can upload a maximum of 8 photos per ad.');
       toast.error('Maximum 8 photos allowed');
       return;
     }
 
     const newItems: ImageUploadItem[] = [];
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+    for (const file of validFiles) {
       if (file.size > 10 * 1024 * 1024) {
         setFormError(`Image "${file.name}" exceeds the 10MB size limit.`);
         toast.error(`Image exceeds 10MB: ${file.name}`);
@@ -239,13 +254,73 @@ export const PostAdModal: React.FC<{
       newItems.push({
         file,
         previewUrl,
-        isCover: images.length === 0 && i === 0,
+        isCover: images.length === 0 && newItems.length === 0,
       });
     }
 
-    setImages((prev) => [...prev, ...newItems]);
+    setImages((prev) => {
+      const combined = [...prev, ...newItems];
+      if (!combined.some((img) => img.isCover) && combined.length > 0) {
+        combined[0].isCover = true;
+      }
+      return combined;
+    });
     setFormError(null);
+  };
+
+  // Input change handler
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    addFiles(files);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Drag and drop external file handlers
+  const handleDropFiles = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverDropZone(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      addFiles(e.dataTransfer.files);
+    }
+  };
+
+  const handleDragOverDropZone = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragOverDropZone) {
+      setIsDragOverDropZone(true);
+    }
+  };
+
+  const handleDragLeaveDropZone = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragOverDropZone(false);
+  };
+
+  // Reorder photos via drag and drop
+  const handleReorderImages = (fromIndex: number | null, toIndex: number) => {
+    if (fromIndex === null || fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return;
+
+    setImages((prev) => {
+      const updated = [...prev];
+      const [movedItem] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, movedItem);
+
+      // Re-assign cover photo to slot 0
+      return updated.map((img, idx) => ({
+        ...img,
+        isCover: idx === 0,
+      }));
+    });
+
+    setDraggedImageIndex(null);
+    setDragOverImageIndex(null);
+    toast.success('Photos rearranged');
   };
 
   // Remove photo
@@ -890,71 +965,148 @@ export const PostAdModal: React.FC<{
               </div>
             </div>
 
-            {/* 4. Upload Photos Card (Up to 8 photos) */}
-            <div className="bg-white rounded-xl border border-[#D8DFE2] p-6 sm:p-8 shadow-xs space-y-4">
-              <div className="flex items-center justify-between border-b border-[#EBF1F3] pb-3">
+            {/* 4. Upload Photos Card (Up to 8 photos) with Drag & Drop */}
+            <div
+              onDragOver={handleDragOverDropZone}
+              onDragLeave={handleDragLeaveDropZone}
+              onDrop={handleDropFiles}
+              className={`bg-white rounded-xl border p-6 sm:p-8 shadow-xs space-y-4 transition-all duration-200 ${
+                isDragOverDropZone
+                  ? 'border-[#008581] bg-[#e6f7f6]/40 ring-2 ring-[#008581]/30 scale-[1.005]'
+                  : 'border-[#D8DFE2]'
+              }`}
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#EBF1F3] pb-3 gap-2">
                 <div>
-                  <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-[#002f34]">
-                    Upload Up to 8 Photos
+                  <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-[#002f34] flex items-center gap-2">
+                    <span>Upload Up to 8 Photos</span>
+                    {isDragOverDropZone && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#008581] text-white animate-pulse">
+                        Drop files here
+                      </span>
+                    )}
                   </h3>
                   <p className="text-xs text-[#70808C] mt-0.5">
-                    First photo is your cover image. Ads with clear photos get 5x more responses!
+                    Drag and drop files to upload. First photo is cover. Drag cards to reorder.
                   </p>
                 </div>
-                <span className="text-xs font-bold text-[#002f34] px-2.5 py-1 rounded-full bg-[#EBF1F3]">
+                <span className="text-xs font-bold text-[#002f34] px-2.5 py-1 rounded-full bg-[#EBF1F3] self-start sm:self-auto">
                   {images.length} / 8 Photos
                 </span>
               </div>
 
               {/* Photo Upload Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5 pt-2">
-                {images.map((img, idx) => (
-                  <div
-                    key={idx}
-                    className={`relative aspect-square rounded-xl overflow-hidden border-2 group transition-all ${
-                      img.isCover
-                        ? 'border-[#008581] ring-2 ring-[#008581]/30 shadow-sm'
-                        : 'border-[#D8DFE2] hover:border-[#002f34]'
-                    }`}
-                  >
-                    <img
-                      src={img.previewUrl}
-                      alt={`Upload ${idx + 1}`}
-                      className="h-full w-full object-cover"
-                    />
+                {images.map((img, idx) => {
+                  const isBeingDragged = draggedImageIndex === idx;
+                  const isDragTarget = dragOverImageIndex === idx && !isBeingDragged;
 
-                    {/* Delete button */}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveImage(idx)}
-                      className="absolute right-1.5 top-1.5 rounded-full bg-red-600/90 hover:bg-red-700 p-1.5 text-white transition shadow cursor-pointer"
-                      title="Remove Photo"
+                  return (
+                    <div
+                      key={idx}
+                      draggable={true}
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('text/plain', String(idx));
+                        e.dataTransfer.effectAllowed = 'move';
+                        setDraggedImageIndex(idx);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.dataTransfer.dropEffect = 'move';
+                        if (dragOverImageIndex !== idx) {
+                          setDragOverImageIndex(idx);
+                        }
+                      }}
+                      onDragEnd={() => {
+                        setDraggedImageIndex(null);
+                        setDragOverImageIndex(null);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleReorderImages(draggedImageIndex, idx);
+                      }}
+                      className={`relative aspect-square rounded-xl overflow-hidden border-2 group transition-all cursor-grab active:cursor-grabbing select-none ${
+                        isBeingDragged
+                          ? 'opacity-30 scale-95 border-dashed border-[#002f34]'
+                          : isDragTarget
+                          ? 'border-[#008581] ring-4 ring-[#008581]/40 scale-105'
+                          : img.isCover
+                          ? 'border-[#008581] ring-2 ring-[#008581]/30 shadow-sm'
+                          : 'border-[#D8DFE2] hover:border-[#002f34]'
+                      }`}
                     >
-                      <Trash2 size={13} />
-                    </button>
+                      <img
+                        src={img.previewUrl}
+                        alt={`Upload ${idx + 1}`}
+                        className="h-full w-full object-cover pointer-events-none"
+                      />
 
-                    {/* Cover badge / Set cover action */}
-                    {img.isCover ? (
-                      <span className="absolute bottom-2 left-2 rounded-md bg-[#008581] px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs">
-                        COVER PHOTO
-                      </span>
-                    ) : (
+                      {/* Drag Grip Handle */}
+                      <div className="absolute top-1.5 left-1.5 rounded-md bg-black/60 p-1 text-white opacity-0 group-hover:opacity-100 transition shadow-xs flex items-center gap-0.5 text-[9px] font-bold">
+                        <GripVertical size={12} />
+                        <span>Drag</span>
+                      </div>
+
+                      {/* Delete button */}
                       <button
                         type="button"
-                        onClick={() => handleSetCover(idx)}
-                        className="absolute bottom-2 left-2 rounded-md bg-black/75 hover:bg-black px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveImage(idx);
+                        }}
+                        className="absolute right-1.5 top-1.5 rounded-full bg-red-600/90 hover:bg-red-700 p-1.5 text-white transition shadow cursor-pointer z-10"
+                        title="Remove Photo"
                       >
-                        Set as Cover
+                        <Trash2 size={13} />
                       </button>
-                    )}
-                  </div>
-                ))}
 
-                {/* Add Photo Slot */}
+                      {/* Cover badge / Set cover action */}
+                      {img.isCover ? (
+                        <span className="absolute bottom-2 left-2 rounded-md bg-[#008581] px-2 py-0.5 text-[10px] font-extrabold text-white shadow-xs">
+                          COVER PHOTO
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSetCover(idx);
+                          }}
+                          className="absolute bottom-2 left-2 rounded-md bg-black/75 hover:bg-black px-2 py-0.5 text-[10px] font-bold text-white opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                        >
+                          Set as Cover
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Add Photo Slot (Also handles direct drop) */}
                 {images.length < 8 && (
-                  <label className="flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#D8DFE2] bg-[#F7F8F9] hover:border-[#002f34] hover:bg-white transition cursor-pointer group">
-                    <Camera size={26} className="text-[#70808C] group-hover:text-[#002f34] transition" />
-                    <span className="mt-2 text-xs font-bold text-[#002f34]">+ Add Photo</span>
+                  <label
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                        addFiles(e.dataTransfer.files);
+                      }
+                    }}
+                    className={`flex aspect-square flex-col items-center justify-center rounded-xl border-2 border-dashed transition cursor-pointer group ${
+                      isDragOverDropZone
+                        ? 'border-[#008581] bg-[#e6f7f6]'
+                        : 'border-[#D8DFE2] bg-[#F7F8F9] hover:border-[#002f34] hover:bg-white'
+                    }`}
+                  >
+                    <Upload size={24} className="text-[#70808C] group-hover:text-[#002f34] transition" />
+                    <span className="mt-2 text-xs font-bold text-[#002f34]">
+                      {isDragOverDropZone ? 'Drop to Upload' : '+ Add / Drop Photo'}
+                    </span>
                     <span className="text-[10px] text-[#70808C] mt-0.5">JPEG, PNG, WebP</span>
                     <input
                       ref={fileInputRef}
