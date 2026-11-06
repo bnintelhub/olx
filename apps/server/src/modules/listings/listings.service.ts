@@ -82,12 +82,12 @@ export class ListingsService {
         );
       }
 
-      const pendingMedia = userMediaList.filter((m) => m.status !== 'READY');
-      if (pendingMedia.length > 0) {
+      const failedMedia = userMediaList.filter((m) => m.status === 'FAILED');
+      if (failedMedia.length > 0) {
         throw new AppError(
           400,
-          'MEDIA_PROCESSING',
-          'One or more images are still being processed. Please wait a few seconds and try again.'
+          'MEDIA_FAILED',
+          'One or more uploaded images failed processing. Please remove and re-upload them.'
         );
       }
     }
@@ -121,9 +121,9 @@ export class ListingsService {
             return {
               adId: createdAd.id,
               mediaId: img.mediaId,
-              originalUrl: variants.large || variants.card || media?.diskPath || '',
-              displayUrl: variants.card || variants.large || media?.diskPath || '',
-              thumbnailUrl: variants.thumbnail || variants.card || media?.diskPath || '',
+              originalUrl: variants.large || variants.card || img.url || media?.diskPath || '',
+              displayUrl: variants.card || variants.large || img.url || media?.diskPath || '',
+              thumbnailUrl: variants.thumbnail || variants.card || img.url || media?.diskPath || '',
               sortOrder: img.sortOrder !== undefined ? img.sortOrder : idx,
               isCover: img.isCover !== undefined ? img.isCover : idx === 0,
             };

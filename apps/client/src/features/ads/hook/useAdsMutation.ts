@@ -45,3 +45,20 @@ export function useDeleteAdMutation() {
   });
 }
 
+export function useCreateAdMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: any) => adsService.createAd(payload),
+    onSuccess: () => {
+      toast.success('Your ad is live now!');
+      queryClient.invalidateQueries({ queryKey: ADS_QUERY_KEYS.all });
+      queryClient.invalidateQueries({ queryKey: ADS_QUERY_KEYS.myAds() });
+    },
+    onError: (err: any) => {
+      const message = err.response?.data?.message || err.message || 'Failed to publish ad';
+      toast.error(message);
+    },
+  });
+}
+

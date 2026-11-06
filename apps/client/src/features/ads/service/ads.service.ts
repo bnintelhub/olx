@@ -76,6 +76,28 @@ export const adsService = {
     return data.success ? data.data : [];
   },
 
+  // Upload listing photos (up to 8 images)
+  async uploadImages(files: File[]): Promise<Array<{
+    mediaId: string;
+    url: string;
+    displayUrl?: string;
+    thumbnailUrl?: string;
+    variants?: any;
+  }>> {
+    const formData = new FormData();
+    files.forEach((file) => {
+      formData.append('images', file);
+    });
+
+    const { data } = await apiClient.post('/ads/upload-images?resource=ads', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+
+    return data.success && Array.isArray(data.data) ? data.data : [];
+  },
+
   // Create new listing
   async createAd(formData: any): Promise<AdItem> {
     const { data } = await apiClient.post('/ads', formData);

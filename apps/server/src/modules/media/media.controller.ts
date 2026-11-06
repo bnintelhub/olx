@@ -20,7 +20,11 @@ export class MediaController {
     const baseUrl = `${protocol}://${host}`;
 
     const query = (request.query as any) || {};
-    if (!query.resource) {
+    const defaultResource =
+      request.url.includes('/ads') || request.url.includes('/listings') ? 'ads' : undefined;
+    const resource = query.resource || defaultResource;
+
+    if (!resource) {
       throw new AppError(
         400,
         'RESOURCE_REQUIRED',
@@ -29,15 +33,14 @@ export class MediaController {
     }
 
     const validResources = ['ads', 'users', 'categories', 'brands', 'chats', 'verification', 'system'];
-    if (!validResources.includes(query.resource)) {
+    if (!validResources.includes(resource)) {
       throw new AppError(
         400,
         'INVALID_RESOURCE',
-        `Invalid resource "${query.resource}". Allowed: ${validResources.join(', ')}`
+        `Invalid resource "${resource}". Allowed: ${validResources.join(', ')}`
       );
     }
 
-    const resource = query.resource;
     const resourceId = query.resourceId || (resource === 'users' ? userId : (query.adId || 'drafts'));
     const defaultMediaType = resource === 'users' ? 'avatar' : resource === 'categories' ? 'icon' : resource === 'brands' ? 'logo' : resource === 'chats' ? 'attachments' : 'images';
     const mediaType = query.mediaType || defaultMediaType;
