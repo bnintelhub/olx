@@ -22,24 +22,35 @@ export function getChatIO(): SocketIOServer | null {
 
 // Broadcasts chat messages across conversation room and recipient's user room
 export function broadcastChatMessage(conversationId: string, message: any, senderId: string, receiverId?: string | null) {
-  if (!chatIO) return;
+  if (!chatIO) {
+    console.warn('[broadcastChatMessage] chatIO is not initialized!');
+    return;
+  }
+
+  const payload = {
+    ...message,
+    createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
+    updatedAt: message.updatedAt instanceof Date ? message.updatedAt.toISOString() : message.updatedAt,
+  };
+
+  console.log(`[Chat Broadcast] Emitting message.new for conv_${conversationId} to receiver user_${receiverId}`);
 
   // Broadcast to active conversation room
-  chatIO.to(`conv_${conversationId}`).emit('message.new', message);
+  chatIO.to(`conv_${conversationId}`).emit('message.new', payload);
 
   // Broadcast to receiver's personal user room
   if (receiverId) {
-    chatIO.to(`user_${receiverId}`).emit('message.new', message);
+    chatIO.to(`user_${receiverId}`).emit('message.new', payload);
     chatIO.to(`user_${receiverId}`).emit('conversation.updated', {
       conversationId,
-      lastMessageText: message.content ? message.content.slice(0, 80) : 'Photo',
-      lastMessageAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
+      lastMessageText: payload.content ? payload.content.slice(0, 80) : 'Photo',
+      lastMessageAt: payload.createdAt,
       senderId,
     });
   }
 
   // Broadcast to sender's other devices
-  chatIO.to(`user_${senderId}`).emit('message.new', message);
+  chatIO.to(`user_${senderId}`).emit('message.new', payload);
 }
 
 export function setupChatSocket(io: SocketIOServer) {

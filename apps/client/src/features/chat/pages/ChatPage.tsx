@@ -46,10 +46,11 @@ export const ChatPage: React.FC = () => {
   useEffect(() => {
     if (!user?.id) return;
     const activeToken = getActiveToken();
-    const socket = io('/', {
+    const socketUrl = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5000' : '/';
+    const socket = io(socketUrl, {
       path: '/socket.io',
       auth: { token: activeToken || '' },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       withCredentials: true,
     });
     socketRef.current = socket;
@@ -215,35 +216,43 @@ export const ChatPage: React.FC = () => {
 
   useEffect(() => {
     void fetchInbox();
+    const interval = setInterval(fetchInbox, 4000);
+    return () => clearInterval(interval);
   }, [fetchInbox]);
 
-  // 4. Load active conversation messages
+  // 4. Load active conversation messages + automatic real-time sync
   useEffect(() => {
     if (!activeConvId || !user) return;
+    let isMounted = true;
+
     const fetchMessages = async () => {
       const activeToken = getActiveToken();
       try {
         const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages?limit=30`, {
-          headers: {
-            Authorization: `Bearer ${activeToken}`,
-            'X-App-Context': 'client',
-          },
+          headers: { Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
         });
         const data = await res.json();
-        if (res.ok && data.success && data.data?.messages) {
-          setMessages(data.data.messages);
+        if (isMounted && res.ok && data.success && data.data?.messages) {
+          setMessages((prev) => {
+            const temps = prev.filter((m) => m.id.startsWith('temp-'));
+            const fetched = data.data.messages;
+            const remaining = temps.filter((t) => !fetched.some((f: any) => f.content === t.content && f.senderId === t.senderId));
+            return [...fetched, ...remaining];
+          });
           setNextCursor(data.data.nextCursor || null);
           socketRef.current?.emit('conversation.join', { conversationId: activeConvId });
-          setConversations((prev) =>
-            prev.map((c) => (c.id === activeConvId ? { ...c, unreadCount: 0 } : c))
-          );
         }
       } catch (err) {
         console.error('Failed to fetch messages', err);
       }
     };
 
-    fetchMessages();
+    void fetchMessages();
+    const syncInterval = setInterval(fetchMessages, 2000);
+    return () => {
+      isMounted = false;
+      clearInterval(syncInterval);
+    };
   }, [activeConvId, user]);
 
   useEffect(() => {
@@ -349,34 +358,19 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleDeleteMessage = async (messageId: string) => {
-    const activeToken = getActiveToken();
     try {
-      const res = await fetch(`/api/v1/chat/messages/${messageId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${activeToken}` },
-      });
-      if (res.ok) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m))
-        );
-      }
+      const res = await fetch(`/api/v1/chat/messages/${messageId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getActiveToken()}` } });
+      if (res.ok) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m)));
     } catch (err) {
       console.error('Failed to delete message', err);
     }
   };
 
   const handleBlockUser = async (targetUserId: string) => {
-    const activeToken = getActiveToken();
     try {
-      const res = await fetch('/api/v1/chat/users/block', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}` },
-        body: JSON.stringify({ targetUserId }),
-      });
+      const res = await fetch('/api/v1/chat/users/block', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getActiveToken()}` }, body: JSON.stringify({ targetUserId }) });
       if (res.ok) {
-        setConversations((prev) =>
-          prev.map((c) => (c.otherParty.id === targetUserId ? { ...c, isBlocked: true } : c))
-        );
+        setConversations((prev) => prev.map((c) => (c.otherParty.id === targetUserId ? { ...c, isBlocked: true } : c)));
         setChatAlert('User blocked. Messaging is restricted.');
       }
     } catch (err) {
@@ -385,16 +379,9 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleReportChat = async (reason: string, details?: string) => {
-    const activeToken = getActiveToken();
     try {
-      const res = await fetch('/api/v1/chat/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}` },
-        body: JSON.stringify({ conversationId: activeConvId, reason, details }),
-      });
-      if (res.ok) {
-        setChatAlert('Report submitted to moderation team. Thank you.');
-      }
+      const res = await fetch('/api/v1/chat/reports', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getActiveToken()}` }, body: JSON.stringify({ conversationId: activeConvId, reason, details }) });
+      if (res.ok) setChatAlert('Report submitted to moderation team. Thank you.');
     } catch (err) {
       console.error('Failed to submit report', err);
     }
