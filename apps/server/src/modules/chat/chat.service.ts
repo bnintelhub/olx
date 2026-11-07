@@ -71,13 +71,7 @@ export class ChatService {
       throw new AppError(403, 'USER_BLOCKED', 'Communication is restricted with this user');
     }
 
-    // Rate-limit new conversations to prevent mass buyer scraping
-    const newConvLimit = await ChatAbuseService.checkNewConversationLimit(buyerId);
-    if (!newConvLimit.allowed) {
-      throw new AppError(429, 'RATE_LIMIT_EXCEEDED', 'Too many new conversations initiated. Please try again later.');
-    }
-
-    // Find or create conversation
+    // 1. Check if conversation already exists for this ad
     let conversation = await prisma.conversation.findUnique({
       where: { adId_buyerId_sellerId: { adId, buyerId, sellerId } },
       include: {
@@ -88,6 +82,11 @@ export class ChatService {
     });
 
     if (!conversation) {
+      // Rate-limit new conversations to prevent mass buyer scraping
+      const newConvLimit = await ChatAbuseService.checkNewConversationLimit(buyerId);
+      if (!newConvLimit.allowed) {
+        throw new AppError(429, 'RATE_LIMIT_EXCEEDED', 'Too many new conversations initiated. Please try again later.');
+      }
       const text = (initialMessage || 'Hi, is this still available?').trim();
       const spamCheck = ChatAbuseService.analyzeMessageRisk(text);
       if (!spamCheck.allowed) {

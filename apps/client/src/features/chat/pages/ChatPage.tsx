@@ -46,14 +46,23 @@ export const ChatPage: React.FC = () => {
   // 1. Initialize persistent Socket.IO connection (Once per authenticated user session)
   useEffect(() => {
     if (!user?.id) return;
+    if (socketRef.current?.connected) return;
+
     const activeToken = getActiveToken();
-    const socketUrl = typeof window !== 'undefined' && window.location.origin ? window.location.origin : '/';
+    const socketUrl =
+      typeof window !== 'undefined' && (window.location.port === '5173' || window.location.port === '5174')
+        ? 'http://127.0.0.1:5000'
+        : '/';
+
     const socket = io(socketUrl, {
       path: '/socket.io',
       auth: { token: activeToken || '', accessToken: activeToken || '' },
       query: { token: activeToken || '' },
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
       withCredentials: true,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
     });
     socketRef.current = socket;
 

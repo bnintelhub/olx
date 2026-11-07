@@ -56,14 +56,16 @@ export class ChatAbuseService {
     return { allowed: true };
   }
 
-  // New conversation creation limit: max 15 new chats per hour
+  // New conversation creation limit: relaxed in development, max 25/hr in prod
   static async checkNewConversationLimit(userId: string): Promise<{ allowed: boolean }> {
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev) return { allowed: true };
     const key = `ratelimit:chat:newconv:${userId}:hour`;
     try {
       if (redis.status === 'ready' || redis.status === 'connect') {
         const count = await redis.incr(key);
         if (count === 1) await redis.expire(key, 3600);
-        return { allowed: count <= 15 };
+        return { allowed: count <= 25 };
       }
     } catch {
       // ignore
