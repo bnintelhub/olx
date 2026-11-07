@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
-import { MessageType, MessageStatus, ReportReason, ReportStatus } from '@prisma/client';
+import { MessageType, MessageStatus, ReportReason, ReportStatus, Prisma } from '@prisma/client';
 import { dispatchNotificationJob } from '../../jobs/notification.job';
 import { ChatAbuseService } from './chat.abuse.service';
 import { ChatPresenceService } from './chat.presence.service';
@@ -122,25 +122,22 @@ export class ChatService {
 
   // Get active conversations inbox with unread counts
   static async getConversations(userId: string, filter: 'all' | 'archived' = 'all') {
+    const where: Prisma.ConversationWhereInput = filter === 'archived'
+      ? {
+          OR: [
+            { buyerId: userId, buyerDeletedAt: null, buyerArchivedAt: { not: null } },
+            { sellerId: userId, sellerDeletedAt: null, sellerArchivedAt: { not: null } },
+          ],
+        }
+      : {
+          OR: [
+            { buyerId: userId, buyerDeletedAt: null, buyerArchivedAt: null },
+            { sellerId: userId, sellerDeletedAt: null, sellerArchivedAt: null },
+          ],
+        };
+
     const conversations = await prisma.conversation.findMany({
-      where: {
-        OR: [
-          { buyerId: userId, buyerDeletedAt: null },
-          { sellerId: userId, sellerDeletedAt: null },
-        ],
-        ...(filter === 'archived'
-          ? {
-              OR: [
-                { buyerId: userId, buyerArchivedAt: { not: null } },
-                { sellerId: userId, sellerArchivedAt: { not: null } },
-              ],
-            }
-          : {
-              AND: [
-                { OR: [{ buyerId: userId, buyerArchivedAt: null }, { sellerId: userId, sellerArchivedAt: null }] },
-              ],
-            }),
-      },
+      where,
       orderBy: { lastMessageAt: 'desc' },
       include: {
         ad: {
