@@ -15,6 +15,10 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   config.headers['X-App-Context'] = 'client';
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('olx_access_token') || localStorage.getItem('token')) : null;
+  if (token && !config.headers.Authorization) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
   return config;
 });
 
@@ -41,6 +45,11 @@ export async function executeSilentRefresh(): Promise<boolean> {
       }
     )
     .then((res) => {
+      const newToken = res.data?.data?.tokens?.accessToken || res.data?.tokens?.accessToken;
+      if (newToken) {
+        localStorage.setItem('olx_access_token', newToken);
+        localStorage.setItem('token', newToken);
+      }
       return Boolean(res.data?.success);
     })
     .catch((err) => {

@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { ArrowLeft, ShieldCheck, AlertCircle, LogIn, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiClient } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
 
@@ -86,11 +87,7 @@ export const ChatPage: React.FC = () => {
         });
         setTimeout(() => scrollToBottom('smooth'), 50);
         socket.emit('message.read', { conversationId: currentActiveId });
-        const token = getActiveToken();
-        void fetch(`/api/v1/chat/conversations/${currentActiveId}/read`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${token}`, 'X-App-Context': 'client' },
-        });
+        void apiClient.patch(`/chat/conversations/${currentActiveId}/read`);
       }
 
       setConversations((prev) => {
@@ -166,31 +163,27 @@ export const ChatPage: React.FC = () => {
   const fetchInbox = React.useCallback(async (isInitial = false) => {
     if (!user) return;
     if (isInitial) setLoading(true);
-    const activeToken = getActiveToken();
     try {
       let targetConvId: string | null = null;
       let targetConvItem: ConversationItem | null = null;
       if (targetAdId) {
-        const startRes = await fetch('/api/v1/chat/conversations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
-          body: JSON.stringify({ adId: targetAdId }),
-        });
-        const startData = await startRes.json();
-        if (startRes.ok && startData.success && startData.data?.id) {
-          targetConvId = startData.data.id;
-          targetConvItem = startData.data;
-          setActiveConvDetails(startData.data);
-        } else if (startData.message) {
-          setChatAlert(startData.message);
+        try {
+          const startRes = await apiClient.post('/chat/conversations', { adId: targetAdId });
+          if (startRes.data?.success && startRes.data.data?.id) {
+            targetConvId = startRes.data.data.id;
+            targetConvItem = startRes.data.data;
+            setActiveConvDetails(startRes.data.data);
+            setActiveConvId(targetConvId);
+            setMobileShowThread(true);
+          }
+        } catch (err: any) {
+          const errMsg = err.response?.data?.message;
+          if (errMsg) setChatAlert(errMsg);
         }
       }
 
-      const res = await fetch('/api/v1/chat/conversations', {
-        headers: { Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
-      });
-      const data = await res.json();
-      let convList: ConversationItem[] = data.data?.conversations || (Array.isArray(data.data) ? data.data : []);
+      const res = await apiClient.get('/chat/conversations');
+      let convList: ConversationItem[] = res.data?.data?.conversations || (Array.isArray(res.data?.data) ? res.data.data : []);
       if (targetConvItem && !convList.some((c) => c.id === targetConvItem!.id)) {
         convList = [targetConvItem, ...convList];
       }
@@ -219,17 +212,13 @@ export const ChatPage: React.FC = () => {
     let isMounted = true;
 
     const fetchMessages = async () => {
-      const activeToken = getActiveToken();
       try {
-        const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages?limit=30`, {
-          headers: { Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
-        });
-        const data = await res.json();
-        if (isMounted && res.ok && data.success && data.data?.messages) {
-          setMessages(data.data.messages);
-          setNextCursor(data.data.nextCursor || null);
-          if (data.data.conversation) {
-            setActiveConvDetails(data.data.conversation);
+        const res = await apiClient.get(`/chat/conversations/${activeConvId}/messages?limit=30`);
+        if (isMounted && res.data?.success && res.data.data?.messages) {
+          setMessages(res.data.data.messages);
+          setNextCursor(res.data.data.nextCursor || null);
+          if (res.data.data.conversation) {
+            setActiveConvDetails(res.data.data.conversation);
           }
           setTimeout(() => scrollToBottom('auto'), 50);
         }
@@ -318,18 +307,17 @@ export const ChatPage: React.FC = () => {
           }
         });
       } else {
-        const activeToken = getActiveToken();
-        const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
-          body: JSON.stringify(payload),
-        });
-        const data = await res.json();
-        if (res.ok && data.success && data.data) {
-          setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m)));
-          if (data.safetyNotice) setChatAlert(data.safetyNotice);
-        } else {
-          setChatAlert(data.message || 'Unable to send message');
+        try {
+          const res = await apiClient.post(`/chat/conversations/${activeConvId}/messages`, payload);
+          if (res.data?.success && res.data.data) {
+            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...res.data.data, isDeleted: false } : m)));
+            if (res.data.safetyNotice) setChatAlert(res.data.safetyNotice);
+          } else {
+            setChatAlert(res.data?.message || 'Unable to send message');
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          }
+        } catch (postErr: any) {
+          setChatAlert(postErr.response?.data?.message || 'Unable to send message');
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
         }
       }
@@ -344,13 +332,10 @@ export const ChatPage: React.FC = () => {
     if (!activeConvId || !nextCursor || loadingOlder) return;
     setLoadingOlder(true);
     try {
-      const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages?cursor=${nextCursor}&limit=30`, {
-        headers: { Authorization: `Bearer ${getActiveToken()}` },
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.data?.messages) {
-        setMessages((prev) => [...data.data.messages, ...prev]);
-        setNextCursor(data.data.nextCursor || null);
+      const res = await apiClient.get(`/chat/conversations/${activeConvId}/messages?cursor=${nextCursor}&limit=30`);
+      if (res.data?.success && res.data.data?.messages) {
+        setMessages((prev) => [...res.data.data.messages, ...prev]);
+        setNextCursor(res.data.data.nextCursor || null);
       }
     } catch (err) { console.error('Failed loading older messages', err); }
     finally { setLoadingOlder(false); }
@@ -358,15 +343,15 @@ export const ChatPage: React.FC = () => {
 
   const handleDeleteMessage = async (messageId: string) => {
     try {
-      const res = await fetch(`/api/v1/chat/messages/${messageId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getActiveToken()}` } });
-      if (res.ok) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m)));
+      const res = await apiClient.delete(`/chat/messages/${messageId}`);
+      if (res.data?.success) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m)));
     } catch (err) { console.error('Failed to delete message', err); }
   };
 
   const handleBlockUser = async (targetUserId: string) => {
     try {
-      const res = await fetch('/api/v1/chat/users/block', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getActiveToken()}` }, body: JSON.stringify({ targetUserId }) });
-      if (res.ok) {
+      const res = await apiClient.post('/chat/users/block', { targetUserId });
+      if (res.data?.success) {
         setConversations((prev) => prev.map((c) => (c.otherParty.id === targetUserId ? { ...c, isBlocked: true } : c)));
         setChatAlert('User blocked. Messaging is restricted.');
       }
@@ -375,8 +360,8 @@ export const ChatPage: React.FC = () => {
 
   const handleReportChat = async (reason: string, details?: string) => {
     try {
-      const res = await fetch('/api/v1/chat/reports', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getActiveToken()}` }, body: JSON.stringify({ conversationId: activeConvId, reason, details }) });
-      if (res.ok) setChatAlert('Report submitted to moderation team. Thank you.');
+      const res = await apiClient.post('/chat/reports', { conversationId: activeConvId, reason, details });
+      if (res.data?.success) setChatAlert('Report submitted to moderation team. Thank you.');
     } catch (err) { console.error('Failed to submit report', err); }
   };
 
@@ -401,9 +386,9 @@ export const ChatPage: React.FC = () => {
   const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3 flex flex-col h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
-      {/* Top Header Bar */}
-      <div className="bg-[#002f34] text-white px-4 py-3 rounded-t-2xl flex items-center justify-between border-b border-[#003d44] shadow-sm flex-shrink-0">
+    <div className="w-full h-screen flex flex-col bg-white overflow-hidden select-none">
+      {/* Top Header Bar - Full width edge-to-edge */}
+      <div className="w-full bg-[#002f34] text-white px-4 sm:px-6 py-3 flex items-center justify-between border-b border-[#003d44] shadow-sm flex-shrink-0 z-20">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/')} className="p-1.5 hover:bg-white/10 rounded-lg text-gray-300 hover:text-white transition cursor-pointer" title="Back to Home">
             <ArrowLeft className="w-5 h-5" />
@@ -411,7 +396,7 @@ export const ChatPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base font-bold tracking-tight">OLX Messages</h1>
-              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold bg-white/10 px-2 py-0.5 rounded-full text-teal-300">
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/10 px-2 py-0.5 rounded-full text-teal-300">
                 <ShieldCheck className="w-3 h-3 text-emerald-400" />
                 Verified & Protected
               </span>
@@ -428,7 +413,7 @@ export const ChatPage: React.FC = () => {
 
       {/* Safety Alert Banner */}
       {chatAlert && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-900 flex-shrink-0">
+        <div className="w-full bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-900 flex-shrink-0">
           <div className="flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
             <span>{chatAlert}</span>
@@ -437,10 +422,10 @@ export const ChatPage: React.FC = () => {
         </div>
       )}
 
-      {/* Chat Split Container */}
-      <div className="flex flex-1 min-h-0 overflow-hidden bg-white border-x border-b border-gray-200 rounded-b-2xl shadow-lg">
+      {/* Chat Split Container - Full page width and height */}
+      <div className="w-full flex-1 flex min-h-0 min-w-0 overflow-hidden bg-white">
         {/* Left Side: Conversation List */}
-        <div className={`w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
+        <div className={`w-full md:w-88 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
           <ChatConversationList
             conversations={conversations}
             activeConvId={activeConvId}
@@ -455,7 +440,7 @@ export const ChatPage: React.FC = () => {
         {/* Right Side: Message Thread */}
         <div className={`flex-1 flex flex-col min-w-0 min-h-0 h-full ${!mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
           {mobileShowThread && (
-            <div className="md:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center">
+            <div className="md:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center flex-shrink-0">
               <button
                 onClick={() => setMobileShowThread(false)}
                 className="flex items-center gap-1.5 text-xs font-bold text-[#002f34] p-1.5 rounded-lg hover:bg-gray-200 transition cursor-pointer"

@@ -23,6 +23,36 @@ export class ChatService {
       throw new AppError(400, 'AD_UNAVAILABLE', 'Listing is not eligible for chat inquiries');
     }
     if (ad.userId === buyerId) {
+      // If seller opens their own listing, check if an inquiry already exists
+      const existing = await prisma.conversation.findFirst({
+        where: { adId, sellerId: buyerId },
+        orderBy: { lastMessageAt: 'desc' },
+        include: {
+          ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' } } } },
+          buyer: { select: { id: true, profile: true } },
+          seller: { select: { id: true, profile: true } },
+        },
+      });
+
+      if (existing) {
+        return {
+          id: existing.id,
+          adId: existing.adId,
+          ad: {
+            id: existing.ad.id, title: existing.ad.title, price: Number(existing.ad.price),
+            status: existing.ad.status, slug: existing.ad.slug, imageUrl: existing.ad.images[0]?.thumbnailUrl || existing.ad.images[0]?.displayUrl || null,
+          },
+          otherParty: {
+            id: existing.buyer.id, name: existing.buyer.profile?.name || 'Buyer',
+            avatarUrl: existing.buyer.profile?.avatarUrl || null, role: 'Buyer' as const,
+          },
+          lastMessageText: existing.lastMessageText,
+          lastMessageAt: existing.lastMessageAt,
+          unreadCount: existing.sellerUnreadCount,
+          isBlocked: existing.isBlocked,
+          status: existing.status,
+        };
+      }
       throw new AppError(400, 'OWN_AD', 'You cannot initiate a conversation on your own listing');
     }
 
@@ -417,43 +447,21 @@ export class ChatService {
   // Block a user
   static async blockUser(blockerId: string, blockedId: string) {
     if (blockerId === blockedId) throw new AppError(400, 'CANNOT_BLOCK_SELF', 'Cannot block yourself');
-
-    await prisma.block.upsert({
-      where: { blockerId_blockedId: { blockerId, blockedId } },
-      create: { blockerId, blockedId },
-      update: {},
-    });
-
-    // Mark shared conversations as blocked
+    await prisma.block.upsert({ where: { blockerId_blockedId: { blockerId, blockedId } }, create: { blockerId, blockedId }, update: {} });
     await prisma.conversation.updateMany({
-      where: {
-        OR: [
-          { buyerId: blockerId, sellerId: blockedId },
-          { buyerId: blockedId, sellerId: blockerId },
-        ],
-      },
+      where: { OR: [{ buyerId: blockerId, sellerId: blockedId }, { buyerId: blockedId, sellerId: blockerId }] },
       data: { isBlocked: true },
     });
-
     return { success: true, message: 'User blocked successfully' };
   }
 
   // Unblock a user
   static async unblockUser(blockerId: string, blockedId: string) {
-    await prisma.block.deleteMany({
-      where: { blockerId, blockedId },
-    });
-
+    await prisma.block.deleteMany({ where: { blockerId, blockedId } });
     await prisma.conversation.updateMany({
-      where: {
-        OR: [
-          { buyerId: blockerId, sellerId: blockedId },
-          { buyerId: blockedId, sellerId: blockerId },
-        ],
-      },
+      where: { OR: [{ buyerId: blockerId, sellerId: blockedId }, { buyerId: blockedId, sellerId: blockerId }] },
       data: { isBlocked: false },
     });
-
     return { success: true, message: 'User unblocked successfully' };
   }
 
@@ -468,16 +476,10 @@ export class ChatService {
 
     const report = await prisma.report.create({
       data: {
-        reporterId,
-        reportedId: data.reportedUserId || null,
-        conversationId: data.conversationId || null,
-        messageId: data.messageId || null,
-        reason: data.reason,
-        details: data.details || null,
-        status: ReportStatus.PENDING,
+        reporterId, reportedId: data.reportedUserId || null, conversationId: data.conversationId || null,
+        messageId: data.messageId || null, reason: data.reason, details: data.details || null, status: ReportStatus.PENDING,
       },
     });
-
     return { success: true, reportId: report.id, priority };
   }
 }

@@ -12,7 +12,24 @@ import {
 export class ChatController {
   static async startConversation(request: FastifyRequest, reply: FastifyReply) {
     const { adId, initialMessage, clientMessageId } = startConversationSchema.parse(request.body);
-    const result = await ChatService.startConversation(request.user!.id, adId, initialMessage, clientMessageId);
+    const userId = request.user!.id || (request.user as any)!.userId;
+    const result = await ChatService.startConversation(userId, adId, initialMessage, clientMessageId);
+    if (result.lastMessageText) {
+      broadcastChatMessage(
+        result.id,
+        {
+          id: result.id,
+          conversationId: result.id,
+          senderId: userId,
+          receiverId: result.otherParty.id,
+          content: result.lastMessageText,
+          status: 'SENT',
+          createdAt: new Date().toISOString(),
+        },
+        userId,
+        result.otherParty.id
+      );
+    }
     return reply.status(200).send({ success: true, data: result });
   }
 
