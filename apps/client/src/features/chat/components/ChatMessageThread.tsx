@@ -44,14 +44,8 @@ interface ChatMessageThreadProps {
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
+  isSending?: boolean;
 }
-
-const QUICK_PROMPTS = [
-  'Hi, is this still available?',
-  'What is your final price?',
-  'Can I inspect it today?',
-  'Where in the city can we meet?',
-];
 
 export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   conversation,
@@ -69,6 +63,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   hasMoreOlder,
   loadingOlder,
   onLoadOlder,
+  isSending,
 }) => {
   const [showMenu, setShowMenu] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
@@ -90,6 +85,15 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       </div>
     );
   }
+
+  const isBuyer = conversation.otherParty.role === 'Seller';
+  const quickPrompts = isBuyer
+    ? ['Hi, is this still available?', 'What is your final price?', 'Can I inspect it today?', 'Where in the city can we meet?']
+    : ['Yes, it is available.', 'Price is firm.', 'Yes, you can inspect it today.', 'When would you like to pick it up?'];
+
+  const availablePrompts = quickPrompts.filter(
+    (prompt) => !messages.some((m) => m.content.toLowerCase().trim() === prompt.toLowerCase().trim())
+  );
 
   const adThumb =
     conversation.ad?.imageUrl ||
@@ -245,6 +249,13 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
                     : 'bg-white text-gray-900 border border-gray-200 rounded-bl-xs'
                 }`}
               >
+                {/* Sender badge on incoming messages */}
+                {!isMine && (
+                  <span className="text-[10px] font-bold text-[#002f34] block mb-0.5">
+                    {conversation.otherParty.name} ({conversation.otherParty.role})
+                  </span>
+                )}
+
                 {/* Image attachment */}
                 {msg.attachmentUrl && !msg.isDeleted && (
                   <div className="mb-2 rounded-lg overflow-hidden border border-black/10">
@@ -323,18 +334,22 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       )}
 
       {/* Quick Prompts Strip */}
-      <div className="bg-white border-t border-gray-100 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-shrink-0">
-        <Sparkles className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mr-1" />
-        {QUICK_PROMPTS.map((prompt) => (
-          <button
-            key={prompt}
-            onClick={() => onSendMessage(prompt)}
-            className="text-[11px] whitespace-nowrap bg-gray-100 hover:bg-gray-200 text-[#002f34] font-medium px-2.5 py-1 rounded-full border border-gray-200 transition cursor-pointer"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
+      {availablePrompts.length > 0 && (
+        <div className="bg-white border-t border-gray-100 px-3 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-shrink-0">
+          <Sparkles className="w-3.5 h-3.5 text-amber-500 flex-shrink-0 mr-1" />
+          {availablePrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              disabled={isSending || conversation.isBlocked}
+              onClick={() => onSendMessage(prompt)}
+              className="text-[11px] whitespace-nowrap bg-gray-100 hover:bg-gray-200 text-[#002f34] font-medium px-2.5 py-1 rounded-full border border-gray-200 transition cursor-pointer disabled:opacity-40"
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Input Box Bar */}
       <form
@@ -356,7 +371,8 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           title="Attach image"
-          className="p-2 text-gray-500 hover:text-[#002f34] hover:bg-gray-100 rounded-full transition cursor-pointer"
+          disabled={conversation.isBlocked || isSending || uploadingImage}
+          className="p-2 text-gray-500 hover:text-[#002f34] hover:bg-gray-100 rounded-full transition cursor-pointer disabled:opacity-40"
         >
           <ImageIcon className="w-4 h-4" />
         </button>
@@ -366,14 +382,14 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
           value={inputText}
           onChange={(e) => onInputChange(e.target.value)}
           placeholder={conversation.isBlocked ? 'This conversation is blocked' : 'Type your message here...'}
-          disabled={conversation.isBlocked || uploadingImage}
-          className="flex-grow border border-gray-300 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[#002f34] focus:ring-1 focus:ring-[#002f34]"
+          disabled={conversation.isBlocked || uploadingImage || isSending}
+          className="flex-grow border border-gray-300 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[#002f34] focus:ring-1 focus:ring-[#002f34] disabled:bg-gray-100"
         />
 
         <button
           type="submit"
-          disabled={(!inputText.trim() && !selectedImage) || conversation.isBlocked || uploadingImage}
-          className="bg-[#002f34] hover:bg-[#003d44] disabled:opacity-40 text-white p-2.5 rounded-full transition shadow-xs flex-shrink-0 cursor-pointer"
+          disabled={(!inputText.trim() && !selectedImage) || conversation.isBlocked || uploadingImage || isSending}
+          className="p-2.5 bg-[#002f34] text-white hover:bg-[#003d44] rounded-full disabled:opacity-40 transition cursor-pointer shrink-0"
         >
           <Send className="w-4 h-4" />
         </button>

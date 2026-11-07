@@ -22,6 +22,9 @@ export const ChatPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [chatAlert, setChatAlert] = useState<string | null>(null);
   const [mobileShowThread, setMobileShowThread] = useState(false);
+  const [activeConvDetails, setActiveConvDetails] = useState<ConversationItem | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const lastSentRef = useRef<{ text: string; time: number }>({ text: '', time: 0 });
 
   const socketRef = useRef<Socket | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
@@ -108,18 +111,7 @@ export const ChatPage: React.FC = () => {
 
     socket.on('conversation.updated', (data: { conversationId: string; lastMessageText: string; lastMessageAt: string }) => {
       const currentActiveId = activeConvIdRef.current;
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === data.conversationId
-            ? {
-                ...c,
-                lastMessageText: data.lastMessageText,
-                lastMessageAt: data.lastMessageAt,
-                unreadCount: data.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
-              }
-            : c
-        )
-      );
+      setConversations((prev) => prev.map((c) => c.id === data.conversationId ? { ...c, lastMessageText: data.lastMessageText, lastMessageAt: data.lastMessageAt, unreadCount: data.conversationId === currentActiveId ? 0 : c.unreadCount + 1 } : c));
     });
 
     socket.on('message.sent', (data: { messageId: string; clientMessageId?: string; status: string }) => {
@@ -174,6 +166,7 @@ export const ChatPage: React.FC = () => {
     const activeToken = getActiveToken();
     try {
       let targetConvId: string | null = null;
+      let targetConvItem: ConversationItem | null = null;
       if (targetAdId) {
         const startRes = await fetch('/api/v1/chat/conversations', {
           method: 'POST',
@@ -183,6 +176,8 @@ export const ChatPage: React.FC = () => {
         const startData = await startRes.json();
         if (startRes.ok && startData.success && startData.data?.id) {
           targetConvId = startData.data.id;
+          targetConvItem = startData.data;
+          setActiveConvDetails(startData.data);
         } else if (startData.message) {
           setChatAlert(startData.message);
         }
@@ -192,7 +187,10 @@ export const ChatPage: React.FC = () => {
         headers: { Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
       });
       const data = await res.json();
-      const convList: ConversationItem[] = data.data?.conversations || (Array.isArray(data.data) ? data.data : []);
+      let convList: ConversationItem[] = data.data?.conversations || (Array.isArray(data.data) ? data.data : []);
+      if (targetConvItem && !convList.some((c) => c.id === targetConvItem!.id)) {
+        convList = [targetConvItem, ...convList];
+      }
       setConversations(convList);
 
       if (targetConvId) {
@@ -227,6 +225,9 @@ export const ChatPage: React.FC = () => {
         if (isMounted && res.ok && data.success && data.data?.messages) {
           setMessages(data.data.messages);
           setNextCursor(data.data.nextCursor || null);
+          if (data.data.conversation) {
+            setActiveConvDetails(data.data.conversation);
+          }
           setTimeout(() => scrollToBottom('auto'), 50);
         }
       } catch (err) {
@@ -252,14 +253,22 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleSendMessage = async (customText?: string, attachmentUrl?: string) => {
-    const textToSend = customText || inputText;
-    if ((!textToSend.trim() && !attachmentUrl) || !activeConvId) return;
+    const textToSend = (customText || inputText).trim();
+    if ((!textToSend && !attachmentUrl) || !activeConvId || isSending) return;
+
+    // Deduplicate rapid identical submissions within 2 seconds
+    const now = Date.now();
+    if (textToSend && lastSentRef.current.text === textToSend && now - lastSentRef.current.time < 2000) {
+      return;
+    }
+    lastSentRef.current = { text: textToSend, time: now };
+    setIsSending(true);
 
     const clientMessageId = crypto.randomUUID();
-    const tempId = `temp-${Date.now()}`;
+    const tempId = `temp-${now}`;
     const payload = {
       conversationId: activeConvId,
-      content: textToSend.trim(),
+      content: textToSend,
       attachmentUrl,
       clientMessageId,
     };
@@ -269,7 +278,7 @@ export const ChatPage: React.FC = () => {
       id: tempId,
       conversationId: activeConvId,
       senderId: user!.id,
-      content: textToSend.trim(),
+      content: textToSend,
       attachmentUrl: attachmentUrl || null,
       status: 'SENT',
       createdAt: new Date().toISOString(),
@@ -282,17 +291,17 @@ export const ChatPage: React.FC = () => {
     setConversations((prev) =>
       prev.map((c) =>
         c.id === activeConvId
-          ? { ...c, lastMessageText: textToSend.trim() || 'Photo', lastMessageAt: new Date().toISOString() }
+          ? { ...c, lastMessageText: textToSend || 'Photo', lastMessageAt: new Date().toISOString() }
           : c
       )
     );
 
-    // Fast WebSocket delivery if connected, fallback to HTTP only if disconnected
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('message.send', payload);
-    } else {
-      const activeToken = getActiveToken();
-      try {
+    try {
+      // Fast WebSocket delivery if connected, fallback to HTTP only if disconnected
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('message.send', payload);
+      } else {
+        const activeToken = getActiveToken();
         const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
@@ -306,30 +315,28 @@ export const ChatPage: React.FC = () => {
           setChatAlert(data.message || 'Unable to send message');
           setMessages((prev) => prev.filter((m) => m.id !== tempId));
         }
-      } catch (err) {
-        console.error('Failed to send message via HTTP', err);
       }
+    } catch (err) {
+      console.error('Failed to send message', err);
+    } finally {
+      setTimeout(() => setIsSending(false), 400);
     }
   };
 
   const handleLoadOlder = async () => {
     if (!activeConvId || !nextCursor || loadingOlder) return;
     setLoadingOlder(true);
-    const activeToken = getActiveToken();
     try {
       const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages?cursor=${nextCursor}&limit=30`, {
-        headers: { Authorization: `Bearer ${activeToken}` },
+        headers: { Authorization: `Bearer ${getActiveToken()}` },
       });
       const data = await res.json();
       if (res.ok && data.success && data.data?.messages) {
         setMessages((prev) => [...data.data.messages, ...prev]);
         setNextCursor(data.data.nextCursor || null);
       }
-    } catch (err) {
-      console.error('Failed loading older messages', err);
-    } finally {
-      setLoadingOlder(false);
-    }
+    } catch (err) { console.error('Failed loading older messages', err); }
+    finally { setLoadingOlder(false); }
   };
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -377,7 +384,7 @@ export const ChatPage: React.FC = () => {
     );
   }
 
-  const activeConversation = conversations.find((c) => c.id === activeConvId) || null;
+  const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;
 
   return (
     <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3 flex flex-col h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
@@ -481,6 +488,7 @@ export const ChatPage: React.FC = () => {
             hasMoreOlder={Boolean(nextCursor)}
             loadingOlder={loadingOlder}
             onLoadOlder={handleLoadOlder}
+            isSending={isSending}
           />
         </div>
       </div>
