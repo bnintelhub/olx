@@ -48,15 +48,16 @@ export function setupChatSocket(io: SocketIOServer) {
   // Global Handshake Authentication & Token Extraction
   io.use(async (socket: Socket, next) => {
     try {
-      let token =
+      let rawToken =
         socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization?.replace('Bearer ', '');
+        socket.handshake.headers?.authorization;
+      let token = typeof rawToken === 'string' ? rawToken.replace(/^Bearer\s+/i, '').trim() : '';
 
       if (!token && socket.handshake.headers?.cookie) {
         const rawCookies = socket.handshake.headers.cookie;
-        const adminMatch = rawCookies.match(/admin_access_token=([^;]+)/);
-        const clientMatch = rawCookies.match(/access_token=([^;]+)/);
-        token = adminMatch?.[1] || clientMatch?.[1];
+        const clientMatch = rawCookies.match(/(?:^|;\s*)access_token=([^;]+)/);
+        const adminMatch = rawCookies.match(/(?:^|;\s*)admin_access_token=([^;]+)/);
+        token = clientMatch?.[1] || adminMatch?.[1] || '';
       }
 
       if (token) {
@@ -84,6 +85,9 @@ export function setupChatSocket(io: SocketIOServer) {
 
     // Join personal user room for multi-device sync and inbox notifications
     socket.join(`user_${user.id}`);
+
+    // Notify client of successful authenticated connection
+    socket.emit('chat:ready', { userId: user.id });
 
     // Register user presence
     await ChatPresenceService.setUserOnline(user.id, socket.id);
@@ -125,13 +129,17 @@ export function setupChatSocket(io: SocketIOServer) {
     });
 
     // 3. Send Message
-    socket.on('message.send', async (payload: SendMessagePayload) => {
+    socket.on('message.send', async (payload: SendMessagePayload, ack?: any) => {
       try {
         const { conversationId } = payload;
         if (!conversationId) return;
 
         // Create message in database transaction
         const { message, safetyNotice } = await ChatService.sendMessage(user.id, payload);
+
+        if (typeof ack === 'function') {
+          ack({ success: true, data: message, safetyNotice });
+        }
 
         // Acknowledge receipt to the sender
         socket.emit('message.sent', {
@@ -161,6 +169,9 @@ export function setupChatSocket(io: SocketIOServer) {
           }
         }
       } catch (err: any) {
+        if (typeof ack === 'function') {
+          ack({ success: false, error: err.message || 'Unable to send message' });
+        }
         socket.emit('error', {
           code: err.code || 'MESSAGE_SEND_FAILED',
           message: err.message || 'Unable to send message',

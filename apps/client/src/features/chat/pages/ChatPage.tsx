@@ -60,6 +60,12 @@ export const ChatPage: React.FC = () => {
       }
     });
 
+    socket.on('chat:ready', () => {
+      if (activeConvIdRef.current) {
+        socket.emit('conversation.join', { conversationId: activeConvIdRef.current });
+      }
+    });
+
     socket.on('message.new', (msg: MessageItem) => {
       const currentActiveId = activeConvIdRef.current;
       if (msg.conversationId === currentActiveId) {
@@ -75,10 +81,20 @@ export const ChatPage: React.FC = () => {
           return [...prev, msg];
         });
         socket.emit('message.read', { conversationId: currentActiveId });
+        const token = getActiveToken();
+        void fetch(`/api/v1/chat/conversations/${currentActiveId}/read`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${token}`, 'X-App-Context': 'client' },
+        });
       }
 
-      setConversations((prev) =>
-        prev.map((c) =>
+      setConversations((prev) => {
+        const exists = prev.some((c) => c.id === msg.conversationId);
+        if (!exists) {
+          void fetchInbox();
+          return prev;
+        }
+        return prev.map((c) =>
           c.id === msg.conversationId
             ? {
                 ...c,
@@ -87,8 +103,8 @@ export const ChatPage: React.FC = () => {
                 unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
               }
             : c
-        )
-      );
+        );
+      });
     });
 
     socket.on('conversation.updated', (data: { conversationId: string; lastMessageText: string; lastMessageAt: string }) => {
@@ -153,57 +169,53 @@ export const ChatPage: React.FC = () => {
   }, [activeConvId]);
 
   // 3. Fetch conversations inbox and handle adId deep link
-  useEffect(() => {
+  const fetchInbox = React.useCallback(async () => {
     if (!user) return;
-    const fetchConversations = async () => {
-      setLoading(true);
-      const activeToken = getActiveToken();
-      try {
-        let targetConvId: string | null = null;
-
-        if (targetAdId) {
-          const startRes = await fetch('/api/v1/chat/conversations', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${activeToken}`,
-              'X-App-Context': 'client',
-            },
-            body: JSON.stringify({ adId: targetAdId }),
-          });
-          const startData = await startRes.json();
-          if (startRes.ok && startData.success && startData.data?.id) {
-            targetConvId = startData.data.id;
-          } else if (startData.message) {
-            setChatAlert(startData.message);
-          }
-        }
-
-        const res = await fetch('/api/v1/chat/conversations', {
+    setLoading(true);
+    const activeToken = getActiveToken();
+    try {
+      let targetConvId: string | null = null;
+      if (targetAdId) {
+        const startRes = await fetch('/api/v1/chat/conversations', {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             Authorization: `Bearer ${activeToken}`,
             'X-App-Context': 'client',
           },
+          body: JSON.stringify({ adId: targetAdId }),
         });
-        const data = await res.json();
-        const convList: ConversationItem[] = data.data?.conversations || (Array.isArray(data.data) ? data.data : []);
-        setConversations(convList);
-
-        if (targetConvId) {
-          setActiveConvId(targetConvId);
-          setMobileShowThread(true);
-        } else if (convList.length > 0 && !activeConvId) {
-          setActiveConvId(convList[0].id);
+        const startData = await startRes.json();
+        if (startRes.ok && startData.success && startData.data?.id) {
+          targetConvId = startData.data.id;
+        } else if (startData.message) {
+          setChatAlert(startData.message);
         }
-      } catch (err) {
-        console.error('Failed to load conversations', err);
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchConversations();
+      const res = await fetch('/api/v1/chat/conversations', {
+        headers: { Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
+      });
+      const data = await res.json();
+      const convList: ConversationItem[] = data.data?.conversations || (Array.isArray(data.data) ? data.data : []);
+      setConversations(convList);
+
+      if (targetConvId) {
+        setActiveConvId(targetConvId);
+        setMobileShowThread(true);
+      } else if (convList.length > 0 && !activeConvIdRef.current) {
+        setActiveConvId(convList[0].id);
+      }
+    } catch (err) {
+      console.error('Failed to load conversations', err);
+    } finally {
+      setLoading(false);
+    }
   }, [user, targetAdId]);
+
+  useEffect(() => {
+    void fetchInbox();
+  }, [fetchInbox]);
 
   // 4. Load active conversation messages
   useEffect(() => {
@@ -284,13 +296,12 @@ export const ChatPage: React.FC = () => {
       )
     );
 
-    // Fast WebSocket delivery
+    // Fast WebSocket delivery if connected
     if (socketRef.current?.connected) {
       socketRef.current.emit('message.send', payload);
-      return;
     }
 
-    // Direct HTTP Fallback if socket is reconnecting
+    // Direct HTTP delivery with automatic server broadcast
     const activeToken = getActiveToken();
     try {
       const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
@@ -308,6 +319,9 @@ export const ChatPage: React.FC = () => {
           prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m))
         );
         if (data.safetyNotice) setChatAlert(data.safetyNotice);
+      } else {
+        setChatAlert(data.message || 'Unable to send message');
+        setMessages((prev) => prev.filter((m) => m.id !== tempId));
       }
     } catch (err) {
       console.error('Failed to send message via HTTP', err);

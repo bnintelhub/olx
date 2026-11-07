@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ChatService } from './chat.service';
-import { broadcastChatMessage } from './chat.socket';
+import { broadcastChatMessage, getChatIO } from './chat.socket';
 import {
   startConversationSchema,
   sendMessageSchema,
@@ -46,7 +46,13 @@ export class ChatController {
 
   static async markAsRead(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
-    await ChatService.markAsRead(request.user!.id, id);
+    const userId = request.user!.id || (request.user as any)!.userId;
+    await ChatService.markAsRead(userId, id);
+    getChatIO()?.to(`conv_${id}`).emit('message.read', {
+      conversationId: id,
+      readerId: userId,
+      readAt: new Date().toISOString(),
+    });
     return reply.status(200).send({ success: true, message: 'Marked as read' });
   }
 
