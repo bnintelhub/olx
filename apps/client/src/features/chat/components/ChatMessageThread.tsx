@@ -47,6 +47,20 @@ interface ChatMessageThreadProps {
   isSending?: boolean;
 }
 
+const TYPO_MAP: Record<string, string> = {
+  availble: 'available', avalable: 'available', avaliable: 'available', avialable: 'available',
+  pirce: 'price', prce: 'price', conditon: 'condition', conidtion: 'condition',
+  locaton: 'location', dilvery: 'delivery', delivary: 'delivery', whare: 'where',
+  teh: 'the', recive: 'receive', recieved: 'received', adress: 'address',
+  plz: 'please', pls: 'please', thx: 'thanks', inspecton: 'inspection',
+};
+
+const autoCorrectText = (text: string): string =>
+  text ? text.replace(/\b[a-zA-Z]+\b/g, (w) => {
+    const c = TYPO_MAP[w.toLowerCase()];
+    return c ? (w[0] === w[0].toUpperCase() ? c[0].toUpperCase() + c.slice(1) : c) : w;
+  }) : text;
+
 export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   conversation,
   currentUserId,
@@ -142,6 +156,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
 
   const handleSendWithImage = async () => {
     if (isSending || conversation.isBlocked) return;
+    const cleanText = autoCorrectText(inputText.trim());
     if (selectedImage) {
       setUploadingImage(true);
       try {
@@ -153,7 +168,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
         });
         const data = await res.json();
         const uploadedUrl = data.url || data.data?.url;
-        onSendMessage(inputText, uploadedUrl);
+        onSendMessage(cleanText, uploadedUrl);
         setSelectedImage(null);
         setImagePreviewUrl(null);
       } catch {
@@ -161,8 +176,8 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       } finally {
         setUploadingImage(false);
       }
-    } else if (inputText.trim()) {
-      onSendMessage();
+    } else if (cleanText) {
+      onSendMessage(cleanText);
     }
     setTimeout(() => textareaRef.current?.focus(), 10);
   };
@@ -343,25 +358,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Image Preview Thumbnail if Selected */}
-      {imagePreviewUrl && (
-        <div className="p-2 bg-gray-100 border-t border-gray-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <img src={imagePreviewUrl} alt="Preview" className="w-12 h-12 object-cover rounded border" />
-            <span className="text-xs text-gray-600 font-medium">Image attached</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedImage(null);
-              setImagePreviewUrl(null);
-            }}
-            className="text-xs text-rose-600 hover:underline cursor-pointer"
-          >
-            Remove
-          </button>
-        </div>
-      )}
+
 
       {/* Quick Prompts Strip */}
       {availablePrompts.length > 0 && (
@@ -428,6 +425,10 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
               value={inputText}
               onChange={(e) => onInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
+              spellCheck={true}
+              autoCorrect="on"
+              autoCapitalize="sentences"
+              autoComplete="on"
               placeholder={conversation.isBlocked ? 'This conversation is blocked' : 'Type a message... (Shift + Enter for new line)'}
               disabled={conversation.isBlocked || uploadingImage}
               className="w-full text-xs text-gray-800 placeholder-gray-400 bg-transparent resize-none focus:outline-none max-h-28 overflow-y-auto leading-relaxed scrollbar-thin"
