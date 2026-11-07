@@ -74,6 +74,15 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   const [uploadingImage, setUploadingImage] = useState(false);
   const [clickedPrompts, setClickedPrompts] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  React.useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const nextHeight = Math.min(el.scrollHeight, 120);
+    el.style.height = `${Math.max(nextHeight, 36)}px`;
+  }, [inputText]);
 
   if (!conversation) {
     return (
@@ -102,6 +111,16 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
     if (isSending || conversation.isBlocked) return;
     setClickedPrompts((prev) => [...prev, prompt]);
     onSendMessage(prompt);
+    setTimeout(() => textareaRef.current?.focus(), 10);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if ((inputText.trim() || selectedImage) && !conversation.isBlocked && !isSending && !uploadingImage) {
+        handleSendWithImage();
+      }
+    }
   };
 
   const adThumb =
@@ -122,6 +141,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   };
 
   const handleSendWithImage = async () => {
+    if (isSending || conversation.isBlocked) return;
     if (selectedImage) {
       setUploadingImage(true);
       try {
@@ -141,9 +161,10 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       } finally {
         setUploadingImage(false);
       }
-    } else {
+    } else if (inputText.trim()) {
       onSendMessage();
     }
+    setTimeout(() => textareaRef.current?.focus(), 10);
   };
 
   const handleReportSubmit = (e: React.FormEvent) => {
@@ -360,49 +381,69 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
         </div>
       )}
 
-      {/* Input Box Bar */}
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          handleSendWithImage();
-        }}
-        className="p-3 bg-white border-t border-gray-200 flex items-center gap-2 flex-shrink-0"
-      >
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleImageSelect}
-          accept="image/jpeg,image/png,image/webp"
-          className="hidden"
-        />
+      {/* Input Box Bar - WhatsApp Style */}
+      <div className="p-2.5 sm:p-3 bg-[#f0f2f5] border-t border-gray-200 flex-shrink-0">
+        {imagePreviewUrl && (
+          <div className="mb-2 relative inline-block">
+            <img src={imagePreviewUrl} alt="Preview" className="w-16 h-16 object-cover rounded-xl border border-gray-300 shadow-sm" />
+            <button
+              type="button"
+              onClick={() => { setSelectedImage(null); setImagePreviewUrl(null); }}
+              className="absolute -top-1.5 -right-1.5 bg-gray-900/80 text-white rounded-full p-0.5 hover:bg-black"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+        )}
 
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          title="Attach image"
-          disabled={conversation.isBlocked || isSending || uploadingImage}
-          className="p-2 text-gray-500 hover:text-[#002f34] hover:bg-gray-100 rounded-full transition cursor-pointer disabled:opacity-40"
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleSendWithImage();
+          }}
+          className="flex items-end gap-2"
         >
-          <ImageIcon className="w-4 h-4" />
-        </button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleImageSelect}
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+          />
 
-        <input
-          type="text"
-          value={inputText}
-          onChange={(e) => onInputChange(e.target.value)}
-          placeholder={conversation.isBlocked ? 'This conversation is blocked' : 'Type your message here...'}
-          disabled={conversation.isBlocked || uploadingImage || isSending}
-          className="flex-grow border border-gray-300 rounded-full px-4 py-2.5 text-xs focus:outline-none focus:border-[#002f34] focus:ring-1 focus:ring-[#002f34] disabled:bg-gray-100"
-        />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach image"
+            disabled={conversation.isBlocked || uploadingImage}
+            className="p-2 text-gray-500 hover:text-[#002f34] hover:bg-gray-200 rounded-full transition cursor-pointer disabled:opacity-40 mb-0.5 shrink-0"
+          >
+            <ImageIcon className="w-5 h-5" />
+          </button>
 
-        <button
-          type="submit"
-          disabled={(!inputText.trim() && !selectedImage) || conversation.isBlocked || uploadingImage || isSending}
-          className="p-2.5 bg-[#002f34] text-white hover:bg-[#003d44] rounded-full disabled:opacity-40 transition cursor-pointer shrink-0"
-        >
-          <Send className="w-4 h-4" />
-        </button>
-      </form>
+          <div className="flex-1 bg-white border border-gray-300 focus-within:border-[#002f34] focus-within:ring-1 focus-within:ring-[#002f34] rounded-2xl px-3.5 py-2 shadow-sm transition flex items-center min-h-[40px]">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={inputText}
+              onChange={(e) => onInputChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={conversation.isBlocked ? 'This conversation is blocked' : 'Type a message... (Shift + Enter for new line)'}
+              disabled={conversation.isBlocked || uploadingImage}
+              className="w-full text-xs text-gray-800 placeholder-gray-400 bg-transparent resize-none focus:outline-none max-h-28 overflow-y-auto leading-relaxed scrollbar-thin"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={(!inputText.trim() && !selectedImage) || conversation.isBlocked || uploadingImage}
+            className="p-2.5 bg-[#002f34] text-white hover:bg-[#003d44] rounded-full disabled:opacity-40 transition cursor-pointer shrink-0 mb-0.5 shadow-sm active:scale-95"
+            title="Send message (Enter)"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      </div>
 
       {/* Report Modal */}
       {showReportModal && (
@@ -436,19 +477,8 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
                 />
               </div>
               <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowReportModal(false)}
-                  className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 text-xs bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700"
-                >
-                  Submit Report
-                </button>
+                <button type="button" onClick={() => setShowReportModal(false)} className="px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-100 rounded-lg">Cancel</button>
+                <button type="submit" className="px-3 py-1.5 text-xs bg-rose-600 text-white font-bold rounded-lg hover:bg-rose-700">Submit Report</button>
               </div>
             </form>
           </div>
