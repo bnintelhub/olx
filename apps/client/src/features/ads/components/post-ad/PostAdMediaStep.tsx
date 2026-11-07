@@ -90,6 +90,15 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
                 src={item.previewUrl}
                 alt=""
                 className="w-full h-full object-cover"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (item.file && !target.dataset.fallback) {
+                    target.dataset.fallback = 'true';
+                    const reader = new FileReader();
+                    reader.onload = () => { if (reader.result) target.src = reader.result as string; };
+                    reader.readAsDataURL(item.file);
+                  }
+                }}
               />
 
               {/* Cover Photo Badge */}

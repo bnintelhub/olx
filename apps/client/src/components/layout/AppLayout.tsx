@@ -27,9 +27,9 @@ export const AppLayout: React.FC = () => {
 
   const handleOpenPostAd = () => {
     if (!user) {
-      openAuthModal(() => ui.openPostAd());
+      openAuthModal(() => navigate('/sell'));
     } else {
-      ui.openPostAd();
+      navigate('/sell');
     }
   };
 
@@ -41,9 +41,13 @@ export const AppLayout: React.FC = () => {
     }
   };
 
+  const handleOpenMyAds = () => {
+    navigate('/my-ads');
+  };
+
   const handleAdCreated = () => {
     queryClient.invalidateQueries({ queryKey: ADS_QUERY_KEYS.all });
-    ui.openMyAds();
+    navigate('/my-ads');
   };
 
   const handleOpenAdminPortal = () => {
@@ -64,7 +68,7 @@ export const AppLayout: React.FC = () => {
             navigate(`/search?${params.toString()}`);
           }}
           onOpenPostAd={handleOpenPostAd}
-          onOpenMyAds={ui.openMyAds}
+          onOpenMyAds={handleOpenMyAds}
           onOpenChat={() => handleOpenChat()}
           onOpenWishlist={ui.openWishlist}
           onOpenProfile={ui.openProfile}

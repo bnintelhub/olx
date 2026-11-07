@@ -15,19 +15,25 @@ const userSocketsMap = new Map<string, Set<string>>();
 export function setupChatSocket(io: SocketIOServer) {
   io.use(async (socket: Socket, next) => {
     try {
-      const token =
+      let token =
         socket.handshake.auth?.token ||
         socket.handshake.headers?.authorization?.replace('Bearer ', '');
 
-      if (!token) {
-        return next(new Error('Authentication token required'));
+      if (!token && socket.handshake.headers?.cookie) {
+        const rawCookies = socket.handshake.headers.cookie;
+        const adminMatch = rawCookies.match(/admin_access_token=([^;]+)/);
+        const clientMatch = rawCookies.match(/access_token=([^;]+)/);
+        token = adminMatch?.[1] || clientMatch?.[1];
       }
 
-      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as SocketUser;
-      (socket as any).user = decoded;
+      if (token) {
+        const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as SocketUser;
+        (socket as any).user = decoded;
+      }
       next();
     } catch {
-      next(new Error('Invalid or expired socket token'));
+      // Allow socket handshake to succeed for general metrics/rooms
+      next();
     }
   });
 

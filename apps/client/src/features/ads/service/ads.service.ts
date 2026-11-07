@@ -80,9 +80,23 @@ export const adsService = {
   },
 
   // Fetch current user's published ads
-  async getMyAds(): Promise<AdItem[]> {
-    const { data } = await apiClient.get('/ads/my-ads');
-    return data.success ? data.data : [];
+  async getMyAds(status?: string): Promise<{ ads: any[]; counts: Record<string, number>; total: number }> {
+    const params = status && status !== 'ALL' ? { status } : {};
+    const { data } = await apiClient.get('/user/my-ads', { params });
+    if (data.success && data.data) {
+      return {
+        ads: Array.isArray(data.data.ads) ? data.data.ads : (Array.isArray(data.data) ? data.data : []),
+        counts: data.data.counts || { ACTIVE: 0, PENDING_REVIEW: 0, SOLD: 0, EXPIRED: 0, ARCHIVED: 0 },
+        total: data.data.total ?? (Array.isArray(data.data.ads) ? data.data.ads.length : 0),
+      };
+    }
+    return { ads: [], counts: { ACTIVE: 0, PENDING_REVIEW: 0, SOLD: 0, EXPIRED: 0, ARCHIVED: 0 }, total: 0 };
+  },
+
+  // Update listing status (e.g. SOLD, ACTIVE)
+  async updateAdStatus(id: string, status: string): Promise<any> {
+    const { data } = await apiClient.patch(`/ads/${id}/status`, { status });
+    return data.data;
   },
 
   // Upload listing photos (up to 8 images)

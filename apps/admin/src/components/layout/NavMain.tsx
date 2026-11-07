@@ -82,7 +82,8 @@ export function NavMain() {
                 item.href === '/listings' ||
                 item.href === '/users' ||
                 item.href === '/payments' ||
-                item.href === '/promotions';
+                item.href === '/promotions' ||
+                item.href === '/revenue-policy';
 
               const isActive = item.href.includes('?')
                 ? currentPath === item.href

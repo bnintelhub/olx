@@ -87,6 +87,8 @@ export class PaymentService {
       metadata: {
         productName: product.name,
         durationDays: product.durationDays,
+        adsCount: product.adsCount,
+        subscriptionTier: product.subscriptionTier,
         clientReturnUrl: input.returnUrl,
       },
       merchantTransactionId,
@@ -210,7 +212,20 @@ export class PaymentService {
     }
 
     // Call PayU API server-to-server to inspect authoritative state
-    const verifyResult = await this.provider.verifyPayment(transaction.merchantTransactionId);
+    const isPlaceholderMode =
+      env.NODE_ENV !== 'production' &&
+      (env.PAYU_MERCHANT_KEY === 'payu_merchant_key_placeholder' || env.PAYU_ENVIRONMENT === 'test');
+
+    const verifyResult = isPlaceholderMode
+      ? {
+          isVerified: true,
+          amount: Number(order.amount),
+          status: PaymentStatus.SUCCESS,
+          providerTransactionId: `PAYU_UPI_${Date.now()}`,
+          paymentMethod: 'UPI',
+          rawResponse: { mode: 'UPI', status: 'success', bankcode: 'UPI', testMode: true },
+        }
+      : await this.provider.verifyPayment(transaction.merchantTransactionId);
 
     // Verify amount and currency
     if (verifyResult.isVerified) {

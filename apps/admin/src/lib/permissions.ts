@@ -108,6 +108,7 @@ export const ROLE_NAVIGATION: Record<AdminRole, NavItem[]> = {
     { title: 'Media Library', href: '/media', icon: Image, group: 'Operations' },
     { title: 'Payments & Escrow', href: '/payments', icon: CreditCard, group: 'Finance & Growth' },
     { title: 'Banners & Promos', href: '/promotions', icon: Megaphone, group: 'Finance & Growth' },
+    { title: 'Revenue Policy', href: '/revenue-policy', icon: DollarSign, group: 'Finance & Growth' },
     { title: 'Analytics & BI', href: '/analytics', icon: BarChart3, group: 'Finance & Growth' },
     { title: 'Support Desk', href: '/support', icon: Headphones, badge: '14', badgeVariant: 'warning', group: 'Finance & Growth' },
     { title: 'System Settings', href: '/settings', icon: Settings, group: 'Administration' },
@@ -121,6 +122,7 @@ export const ROLE_NAVIGATION: Record<AdminRole, NavItem[]> = {
     { title: 'Categories', href: '/categories', icon: FolderTree, group: 'Operations' },
     { title: 'Reports Queue', href: '/reports', icon: ShieldAlert, badge: '8', badgeVariant: 'warning', group: 'Operations' },
     { title: 'Media Library', href: '/media', icon: Image, group: 'Operations' },
+    { title: 'Revenue Policy', href: '/revenue-policy', icon: DollarSign, group: 'Operations' },
   ],
   MODERATOR: [
     { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, group: 'Overview' },
@@ -143,10 +145,12 @@ export const ROLE_NAVIGATION: Record<AdminRole, NavItem[]> = {
     { title: 'Refund Inquiries', href: '/payments?view=refunds', icon: Receipt, group: 'Finance & Growth' },
     { title: 'Tax & Invoices', href: '/payments?view=invoices', icon: FileText, group: 'Finance & Growth' },
     { title: 'Revenue Analytics', href: '/analytics', icon: BarChart3, group: 'Finance & Growth' },
+    { title: 'Revenue Policy', href: '/revenue-policy', icon: DollarSign, group: 'Finance & Growth' },
   ],
   CONTENT_MANAGER: [
     { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, group: 'Overview' },
     { title: 'Marketing Banners', href: '/promotions', icon: Image, group: 'Operations' },
+    { title: 'Revenue Policy', href: '/revenue-policy', icon: DollarSign, group: 'Operations' },
     { title: 'Categories Tree', href: '/categories', icon: FolderTree, group: 'Operations' },
     { title: 'Content Articles', href: '/promotions?view=articles', icon: FileCode, group: 'Operations' },
     { title: 'Announcements', href: '/promotions?view=announcements', icon: Megaphone, group: 'Operations' },

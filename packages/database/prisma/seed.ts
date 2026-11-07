@@ -19,6 +19,7 @@ async function main() {
     { name: 'Indore', slug: 'indore', type: 'CITY', latitude: 22.7196, longitude: 75.8577 },
     { name: 'Chandigarh', slug: 'chandigarh', type: 'CITY', latitude: 30.7333, longitude: 76.7794 },
     { name: 'Lucknow', slug: 'lucknow', type: 'CITY', latitude: 26.8467, longitude: 80.9462 },
+    { name: 'Patna', slug: 'patna', type: 'CITY', latitude: 25.5941, longitude: 85.1376 },
   ];
 
   for (const loc of locationsData) {

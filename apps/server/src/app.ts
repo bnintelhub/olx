@@ -28,6 +28,7 @@ import { adminRoutes } from './modules/admin/admin.routes';
 import { uploadRoutes } from './modules/uploads/uploads.routes';
 import { mediaRoutes } from './modules/media/media.routes';
 import { notificationRoutes } from './modules/notifications/notifications.routes';
+import { revenueRoutes } from './modules/revenue/revenue.routes';
 import { ListingsController } from './modules/listings/listings.controller';
 import { defaultStorage } from './integrations/storage/storage.adapter';
 
@@ -35,6 +36,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({
     logger: env.NODE_ENV === 'development' ? { level: 'info' } : { level: 'warn' },
     trustProxy: true,
+    ignoreTrailingSlash: true,
   });
 
   // Security headers
@@ -142,6 +144,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(uploadRoutes, { prefix: '/uploads' });
     await api.register(mediaRoutes, { prefix: '/media' });
     await api.register(notificationRoutes, { prefix: '/notifications' });
+    await api.register(revenueRoutes, { prefix: '/revenue' });
   }, { prefix: '/api/v1' });
 
   return app;

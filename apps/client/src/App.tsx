@@ -4,6 +4,9 @@ import { AppLayout } from './components/layout/AppLayout';
 import { HomePage } from './features/home/pages/HomePage';
 import { AdDetailPage } from './features/ads/pages/AdDetailPage';
 import { SearchPage } from './features/search/pages/SearchPage';
+import { SellPage } from './features/sell/pages/SellPage';
+import { MyAdsPage } from './features/ads/pages/MyAdsPage';
+import { PlansPage } from './features/plans/pages/PlansPage';
 
 interface OutletContextType {
   onOpenPostAd: () => void;
@@ -28,6 +31,10 @@ export const App: React.FC = () => {
         {/* Dedicated Product Details Page */}
         <Route path="ad/:id" element={<AdDetailRoute />} />
         <Route path="search" element={<SearchPage />} />
+        <Route path="sell" element={<SellPage />} />
+        <Route path="plans" element={<PlansPage />} />
+        <Route path="my-ads" element={<MyAdsPage />} />
+        <Route path="ads" element={<MyAdsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

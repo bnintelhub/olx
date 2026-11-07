@@ -14,6 +14,7 @@ export async function listingRoutes(fastify: FastifyInstance) {
   // Public discovery
   fastify.get('/', SearchController.search);
   fastify.get('/suggestions', SearchController.getSuggestions);
+  fastify.get('/my-ads', auth, ListingsController.getMyAds);
   fastify.get('/:id/similar', SearchController.getSimilar);
   fastify.get('/:id/contact', ListingsController.getContact);
   fastify.get('/:id', ListingsController.getById);

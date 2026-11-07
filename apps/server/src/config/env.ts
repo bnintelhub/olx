@@ -33,8 +33,8 @@ const envSchema = z
     S3_FORCE_PATH_STYLE: z.string().transform((v) => v === 'true').default('true'),
     S3_PUBLIC_URL: z.string().optional(),
     // PayU Hosted Checkout configuration
-    PAYU_MERCHANT_KEY: z.string().default('payu_merchant_key_placeholder'),
-    PAYU_MERCHANT_SALT: z.string().default('payu_merchant_salt_placeholder'),
+    PAYU_MERCHANT_KEY: z.string().default(process.env.PAYUKEY || process.env.PAYU_MERCHANT_KEY || 'payu_merchant_key_placeholder'),
+    PAYU_MERCHANT_SALT: z.string().default(process.env.PAYUSALT || process.env.PAYU_MERCHANT_SALT || 'payu_merchant_salt_placeholder'),
     PAYU_BASE_URL: z.string().default('https://test.payu.in'),
     PAYU_WEBHOOK_SECRET: z.string().optional(),
     PAYU_ENVIRONMENT: z.enum(['test', 'production']).default('test'),

@@ -5,31 +5,38 @@ import { checkContentForFraud } from '../../shared/utils/anti-fraud.util';
 import { CreateListingInput, UpdateListingInput } from './listings.schema';
 import { processListingImagesJob } from '../../jobs/image-processing.job';
 import { SETTING_DEFAULTS } from '../../config/constants';
+import { RevenueService } from '../revenue/revenue.service';
 
 export class ListingsService {
   private static slugify(text: string): string {
-    return text
-      .toLowerCase()
-      .trim()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s_-]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+    return text.toLowerCase().trim().replace(/[^\w\s-]/g, '').replace(/[\s_-]+/g, '-').replace(/^-+|-+$/g, '');
   }
 
   static async create(userId: string, data: CreateListingInput) {
-    const [category, location] = await Promise.all([
-      prisma.category.findUnique({
-        where: { id: data.categoryId },
-        include: {
-          attributes: true,
-          parent: { include: { attributes: true } },
-        },
-      }),
-      prisma.location.findUnique({ where: { id: data.locationId } }),
-    ]);
+    // Dynamic revenue policy enforcement (e.g. 5 free ads/month or active paid credits)
+    await RevenueService.assertListingAllowed(userId);
 
+    const category = await prisma.category.findUnique({
+      where: { id: data.categoryId },
+      include: { attributes: true, parent: { include: { attributes: true } } },
+    });
     if (!category) throw new AppError(404, 'CATEGORY_NOT_FOUND', 'Selected category does not exist');
-    if (!location) throw new AppError(404, 'LOCATION_NOT_FOUND', 'Selected location does not exist');
+
+    // Robust location resolution by ID, slug, or fallback city
+    let location = await prisma.location.findFirst({
+      where: {
+        OR: [
+          { id: data.locationId },
+          { slug: data.locationId.toLowerCase() },
+          { name: { equals: data.locationId, mode: 'insensitive' } },
+        ],
+      },
+    });
+    if (!location) {
+      location =
+        (await prisma.location.findFirst({ where: { OR: [{ slug: 'patna' }, { type: 'CITY', isActive: true }] } })) ||
+        (await prisma.location.create({ data: { name: 'Patna', slug: 'patna', type: 'CITY', latitude: 25.5941, longitude: 85.1376 } }));
+    }
 
     // Dynamic attributes verification
     const allCategoryAttributes = [
@@ -95,7 +102,7 @@ export class ListingsService {
         data: {
           userId,
           categoryId: data.categoryId,
-          locationId: data.locationId,
+          locationId: location.id,
           title: data.title,
           slug,
           description: fraudResult.sanitizedDescription,
@@ -273,7 +280,6 @@ export class ListingsService {
     if (ad.userId !== userId && role !== 'ADMIN') {
       throw new AppError(403, 'FORBIDDEN', 'You do not have permission to edit this listing');
     }
-
     return prisma.ad.update({
       where: { id },
       data: {
@@ -282,9 +288,7 @@ export class ListingsService {
         price: data.price,
         isNegotiable: data.isNegotiable,
         contactPreference: data.contactPreference,
-        attributesCache: data.attributes
-          ? { ...((ad.attributesCache as any) || {}), ...data.attributes }
-          : undefined,
+        attributesCache: data.attributes ? { ...((ad.attributesCache as any) || {}), ...data.attributes } : undefined,
       },
     });
   }
@@ -292,11 +296,9 @@ export class ListingsService {
   static async updateStatus(userId: string, role: string, id: string, status: AdStatus) {
     const ad = await prisma.ad.findUnique({ where: { id } });
     if (!ad) throw new AppError(404, 'AD_NOT_FOUND', 'Listing not found');
-
     if (ad.userId !== userId && role !== 'ADMIN') {
       throw new AppError(403, 'FORBIDDEN', 'You do not have permission to modify this listing');
     }
-
     return prisma.ad.update({
       where: { id },
       data: {
@@ -312,11 +314,8 @@ export class ListingsService {
       where: { OR: [{ id }, { slug: id }] },
       include: { user: { select: { phoneNumber: true, profile: { select: { name: true } } } } },
     });
-
     if (!ad) throw new AppError(404, 'AD_NOT_FOUND', 'Listing not found');
-
     prisma.ad.update({ where: { id: ad.id }, data: { chatCount: { increment: 1 } } }).catch(() => {});
-
     return {
       phoneNumber: ad.user.phoneNumber,
       sellerName: ad.user.profile?.name || 'Seller',
@@ -333,7 +332,7 @@ export class ListingsService {
       include: {
         category: { select: { name: true, slug: true } },
         location: { select: { name: true } },
-        images: { where: { isCover: true }, take: 1 },
+        images: { orderBy: { isCover: 'desc' }, take: 3 },
       },
       orderBy: { createdAt: 'desc' },
     });

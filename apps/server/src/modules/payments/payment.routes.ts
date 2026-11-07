@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify';
 import { PaymentController } from './payment.controller';
+import { PaymentAnalyticsController } from './payment.analytics.controller';
 import { requirePermission } from '../../plugins/auth.plugin';
 import { Permissions } from '../../shared/auth/rbac';
 
@@ -43,5 +44,17 @@ export async function paymentRoutes(fastify: FastifyInstance) {
     { preHandler: [fastify.authenticate, requirePermission(Permissions.PAYMENTS_READ, Permissions.REVENUE_READ)] },
     PaymentController.getAdminOrders
   );
+
+  // 5. Complete Financial Analytics & Export Suite
+  const analyticsAuth = {
+    preHandler: [fastify.authenticate, requirePermission(Permissions.PAYMENTS_READ, Permissions.REVENUE_READ)],
+  };
+  fastify.get('/admin/analytics/overview', analyticsAuth, PaymentAnalyticsController.getOverview);
+  fastify.get('/admin/analytics/trend', analyticsAuth, PaymentAnalyticsController.getTrend);
+  fastify.get('/admin/analytics/breakdown', analyticsAuth, PaymentAnalyticsController.getBreakdown);
+  fastify.get('/admin/analytics/refunds', analyticsAuth, PaymentAnalyticsController.getRefunds);
+  fastify.get('/admin/analytics/performance', analyticsAuth, PaymentAnalyticsController.getPerformance);
+  fastify.get('/admin/analytics/realtime', analyticsAuth, PaymentAnalyticsController.getRealtime);
+  fastify.get('/admin/export', analyticsAuth, PaymentAnalyticsController.exportPayments);
 }
 

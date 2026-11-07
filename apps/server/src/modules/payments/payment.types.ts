@@ -13,6 +13,8 @@ export interface CatalogProduct {
   currency: 'INR';
   description: string;
   boostType?: 'FEATURED' | 'URGENT' | 'HOME_SPOTLIGHT';
+  adsCount?: number;
+  subscriptionTier?: string;
 }
 
 // Order creation input from client — amount is intentionally omitted to prevent tampering

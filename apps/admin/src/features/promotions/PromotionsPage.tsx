@@ -1,7 +1,8 @@
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { Megaphone, Plus, Sparkles } from 'lucide-react';
+import { Megaphone, Plus, Sparkles, DollarSign } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const BANNERS = [
   { id: '1', title: 'Great Indian Auto Fest 2026', location: 'Home Hero Carousel', targetUrl: '/search?category=cars', status: 'Live' },
@@ -10,6 +11,8 @@ const BANNERS = [
 ];
 
 export function PromotionsPage() {
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -19,10 +22,20 @@ export function PromotionsPage() {
             Content Manager suite for homepage hero announcements, urgent badges, and promotional campaigns.
           </p>
         </div>
-        <Button className="gap-1.5">
-          <Plus className="h-4 w-4" />
-          <span>New Banner</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => navigate('/revenue-policy')}
+            className="gap-1.5 h-9 text-xs font-semibold cursor-pointer"
+          >
+            <DollarSign className="h-4 w-4 text-emerald-600" />
+            <span>Revenue Policy</span>
+          </Button>
+          <Button className="gap-1.5 h-9 text-xs font-bold cursor-pointer">
+            <Plus className="h-4 w-4" />
+            <span>New Banner</span>
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

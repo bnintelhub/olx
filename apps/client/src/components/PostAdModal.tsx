@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -108,16 +108,19 @@ export const PostAdModal: React.FC<{
       .finally(() => setIsLoadingTaxonomy(false));
   }, [isOpen]);
 
-  // Clean up object URLs
+  // Clean up object URLs only when modal unmounts
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
+
   useEffect(() => {
     return () => {
-      images.forEach((img) => {
+      imagesRef.current.forEach((img) => {
         if (img.previewUrl.startsWith('blob:')) {
           URL.revokeObjectURL(img.previewUrl);
         }
       });
     };
-  }, [images]);
+  }, []);
 
   const handleSelectLeafCategory = async (cat: Category) => {
     setSelectedCategory(cat);

@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { initRedis, redis } from './config/redis';
 import { checkDatabaseConnection, prisma } from './config/prisma';
 import { setupChatSocket } from './modules/chat/chat.socket';
+import { setupAdminMetricsSocket } from './modules/admin/admin.socket';
 import { closeOtpQueue } from './jobs/otp.job';
 
 async function startServer() {
@@ -23,6 +24,7 @@ async function startServer() {
     });
 
     setupChatSocket(io);
+    setupAdminMetricsSocket(io);
 
     // 4. Start HTTP Server
     const port = env.PORT || 5000;
@@ -58,6 +60,6 @@ async function startServer() {
     console.error('Fatal error starting server:', err);
     process.exit(1);
   }
-}
+};
 
 void startServer();

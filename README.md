@@ -19,6 +19,7 @@
   - [Workspace Structure](#workspace-structure)
   - [Available Monorepo Commands](#available-monorepo-commands)
 - [Backend & Authentication Architecture](#backend--authentication-architecture)
+  - [👉 Classifieds Ad Creation, Automated Moderation & Monetization Architecture (Clickable)](docs/AD_CREATION_AND_MODERATION_FLOW.md)
   - [👉 Detailed Auth Workflow & API Payloads Documentation (Clickable)](docs/AUTH_WORKFLOW.md)
   - [👉 RBAC & Account Capabilities Architecture Documentation (Clickable)](docs/RBAC_WORKFLOW.md)
   - [👉 Universal Media & Smart Crop Pipeline Architecture (Clickable)](docs/media.md)

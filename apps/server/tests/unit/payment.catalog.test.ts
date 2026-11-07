@@ -18,6 +18,15 @@ describe('Payment Product Catalog', () => {
     expect(product.purpose).toBe(PaymentPurpose.FEATURED_LISTING);
   });
 
+  it('should return correct configuration for ₹1 rupee test product', () => {
+    const product = getCatalogProduct('test_1');
+    expect(product).toBeDefined();
+    expect(product.amount).toBe(1.0);
+    expect(product.currency).toBe('INR');
+    expect(product.adsCount).toBe(1);
+    expect(product.purpose).toBe(PaymentPurpose.OTHER);
+  });
+
   it('should reject non-existent products', () => {
     expect(() => getCatalogProduct('arbitrary_cheap_product')).toThrowError(/Unrecognized or inactive product/);
   });
