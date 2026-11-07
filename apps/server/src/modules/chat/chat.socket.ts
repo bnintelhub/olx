@@ -61,7 +61,9 @@ export function setupChatSocket(io: SocketIOServer) {
     try {
       let rawToken =
         socket.handshake.auth?.token ||
-        socket.handshake.headers?.authorization;
+        socket.handshake.auth?.accessToken ||
+        socket.handshake.headers?.authorization ||
+        (socket.handshake.query?.token as string);
       let token = typeof rawToken === 'string' ? rawToken.replace(/^Bearer\s+/i, '').trim() : '';
 
       if (!token && socket.handshake.headers?.cookie) {
@@ -71,28 +73,35 @@ export function setupChatSocket(io: SocketIOServer) {
         token = clientMatch?.[1] || adminMatch?.[1] || '';
       }
 
-      if (token) {
-        const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
-        const userId = decoded.userId || decoded.id || decoded.sub;
-        if (userId) {
-          (socket as any).user = {
-            id: userId,
-            userId,
-            role: decoded.role,
-            phoneNumber: decoded.phoneNumber,
-            email: decoded.email,
-          };
-        }
+      if (!token) {
+        return next(new Error('AUTHENTICATION_REQUIRED'));
       }
+
+      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
+      const userId = decoded.userId || decoded.id || decoded.sub;
+      if (!userId) {
+        return next(new Error('INVALID_TOKEN_PAYLOAD'));
+      }
+
+      (socket as any).user = {
+        id: userId,
+        userId,
+        role: decoded.role,
+        phoneNumber: decoded.phoneNumber,
+        email: decoded.email,
+      };
       next();
-    } catch {
-      next();
+    } catch (err: any) {
+      next(new Error(err.message || 'AUTHENTICATION_FAILED'));
     }
   });
 
   io.on('connection', async (socket: Socket) => {
     const user: SocketUser = (socket as any).user;
-    if (!user || !user.id) return;
+    if (!user || !user.id) {
+      socket.disconnect(true);
+      return;
+    }
 
     // Join personal user room for multi-device sync and inbox notifications
     socket.join(`user_${user.id}`);

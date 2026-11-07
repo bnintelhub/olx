@@ -46,11 +46,11 @@ export const ChatPage: React.FC = () => {
   useEffect(() => {
     if (!user?.id) return;
     const activeToken = getActiveToken();
-    const socketUrl = typeof window !== 'undefined' && window.location.port === '5173' ? 'http://localhost:5000' : '/';
-    const socket = io(socketUrl, {
+    const socket = io({
       path: '/socket.io',
-      auth: { token: activeToken || '' },
-      transports: ['polling', 'websocket'],
+      auth: { token: activeToken || '', accessToken: activeToken || '' },
+      query: { token: activeToken || '' },
+      transports: ['websocket', 'polling'],
       withCredentials: true,
     });
     socketRef.current = socket;
@@ -72,7 +72,10 @@ export const ChatPage: React.FC = () => {
       if (msg.conversationId === currentActiveId) {
         setMessages((prev) => {
           const idx = prev.findIndex(
-            (m) => m.id === msg.id || (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
+            (m) =>
+              m.id === msg.id ||
+              ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
+              (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
           );
           if (idx !== -1) {
             const next = [...prev];
@@ -297,9 +300,23 @@ export const ChatPage: React.FC = () => {
     );
 
     try {
-      // Fast WebSocket delivery if connected, fallback to HTTP only if disconnected
+      // Fast WebSocket delivery with ack callback, fallback to HTTP if disconnected
       if (socketRef.current?.connected) {
-        socketRef.current.emit('message.send', payload);
+        socketRef.current.emit('message.send', payload, (res: any) => {
+          if (res?.success && res.data) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === tempId || (m as any).clientMessageId === clientMessageId
+                  ? { ...res.data, isDeleted: false }
+                  : m
+              )
+            );
+            if (res.safetyNotice) setChatAlert(res.safetyNotice);
+          } else if (res?.error) {
+            setChatAlert(res.error);
+            setMessages((prev) => prev.filter((m) => m.id !== tempId));
+          }
+        });
       } else {
         const activeToken = getActiveToken();
         const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
@@ -372,10 +389,7 @@ export const ChatPage: React.FC = () => {
             <h2 className="text-2xl font-bold text-[#002f34]">Sign In to Chat</h2>
             <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">Directly talk with buyers and sellers, negotiate prices, and organize pickups securely.</p>
           </div>
-          <button
-            onClick={() => openAuthModal()}
-            className="w-full bg-[#002f34] hover:bg-[#003d44] text-white py-3.5 rounded-xl font-bold text-sm shadow transition flex items-center justify-center gap-2 cursor-pointer"
-          >
+          <button onClick={() => openAuthModal()} className="w-full bg-[#002f34] hover:bg-[#003d44] text-white py-3.5 rounded-xl font-bold text-sm shadow transition flex items-center justify-center gap-2 cursor-pointer">
             <LogIn className="w-4 h-4" />
             <span>Login / Register</span>
           </button>
@@ -391,11 +405,7 @@ export const ChatPage: React.FC = () => {
       {/* Top Header Bar */}
       <div className="bg-[#002f34] text-white px-4 py-3 rounded-t-2xl flex items-center justify-between border-b border-[#003d44] shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/')}
-            className="p-1.5 hover:bg-white/10 rounded-lg text-gray-300 hover:text-white transition cursor-pointer"
-            title="Back to Home"
-          >
+          <button onClick={() => navigate('/')} className="p-1.5 hover:bg-white/10 rounded-lg text-gray-300 hover:text-white transition cursor-pointer" title="Back to Home">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -406,12 +416,9 @@ export const ChatPage: React.FC = () => {
                 Verified & Protected
               </span>
             </div>
-            <p className="text-[11px] text-gray-300 hidden sm:block">
-              Direct, real-time negotiation between verified buyers and sellers
-            </p>
+            <p className="text-[11px] text-gray-300 hidden sm:block">Direct, real-time negotiation between verified buyers and sellers</p>
           </div>
         </div>
-
         <div className="flex items-center gap-3 text-xs">
           <span className="text-gray-300 hidden md:inline">
             Logged in as <strong className="text-white">{user.profile?.name || user.email || user.phoneNumber || 'User'}</strong>
@@ -426,23 +433,14 @@ export const ChatPage: React.FC = () => {
             <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
             <span>{chatAlert}</span>
           </div>
-          <button
-            onClick={() => setChatAlert(null)}
-            className="text-amber-700 hover:text-amber-900 font-bold text-xs cursor-pointer"
-          >
-            ✕
-          </button>
+          <button onClick={() => setChatAlert(null)} className="text-amber-700 hover:text-amber-900 font-bold text-xs cursor-pointer">✕</button>
         </div>
       )}
 
       {/* Chat Split Container */}
       <div className="flex flex-1 min-h-0 overflow-hidden bg-white border-x border-b border-gray-200 rounded-b-2xl shadow-lg">
         {/* Left Side: Conversation List */}
-        <div
-          className={`w-full sm:w-80 md:w-88 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${
-            mobileShowThread ? 'hidden sm:flex' : 'flex'
-          }`}
-        >
+        <div className={`w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
           <ChatConversationList
             conversations={conversations}
             activeConvId={activeConvId}
@@ -455,16 +453,12 @@ export const ChatPage: React.FC = () => {
         </div>
 
         {/* Right Side: Message Thread */}
-        <div
-          className={`flex-1 flex flex-col min-w-0 min-h-0 h-full ${
-            !mobileShowThread ? 'hidden sm:flex' : 'flex'
-          }`}
-        >
+        <div className={`flex-1 flex flex-col min-w-0 min-h-0 h-full ${!mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
           {mobileShowThread && (
-            <div className="sm:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center">
+            <div className="md:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center">
               <button
                 onClick={() => setMobileShowThread(false)}
-                className="flex items-center gap-1 text-xs font-semibold text-[#002f34] p-1 rounded hover:bg-gray-200 transition"
+                className="flex items-center gap-1.5 text-xs font-bold text-[#002f34] p-1.5 rounded-lg hover:bg-gray-200 transition cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>All Conversations</span>

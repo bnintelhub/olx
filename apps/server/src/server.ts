@@ -18,7 +18,28 @@ async function startServer() {
     // 3. Attach Socket.IO
     const io = new SocketIOServer(app.server, {
       cors: {
-        origin: [env.CLIENT_URL, 'http://localhost:5173', 'http://localhost:5174', 'http://127.0.0.1:5174', 'http://localhost:3000', 'http://localhost:80'],
+        origin: (origin, callback) => {
+          if (!origin) return callback(null, true);
+          if (
+            env.NODE_ENV !== 'production' &&
+            (origin.includes('localhost') || origin.includes('127.0.0.1'))
+          ) {
+            return callback(null, true);
+          }
+          const allowed = [
+            env.CLIENT_URL,
+            'http://localhost:5173',
+            'http://localhost:5174',
+            'http://127.0.0.1:5173',
+            'http://127.0.0.1:5174',
+            'http://localhost:3000',
+            'http://localhost:80',
+          ];
+          if (allowed.includes(origin)) {
+            return callback(null, true);
+          }
+          callback(null, false);
+        },
         credentials: true,
       },
     });

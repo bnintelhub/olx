@@ -72,6 +72,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [clickedPrompts, setClickedPrompts] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!conversation) {
@@ -92,8 +93,16 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
     : ['Yes, it is available.', 'Price is firm.', 'Yes, you can inspect it today.', 'When would you like to pick it up?'];
 
   const availablePrompts = quickPrompts.filter(
-    (prompt) => !messages.some((m) => m.content.toLowerCase().trim() === prompt.toLowerCase().trim())
+    (prompt) =>
+      !clickedPrompts.includes(prompt) &&
+      !messages.some((m) => m.content?.toLowerCase().trim() === prompt.toLowerCase().trim())
   );
+
+  const handleQuickPromptClick = (prompt: string) => {
+    if (isSending || conversation.isBlocked) return;
+    setClickedPrompts((prev) => [...prev, prompt]);
+    onSendMessage(prompt);
+  };
 
   const adThumb =
     conversation.ad?.imageUrl ||
@@ -342,7 +351,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
               key={prompt}
               type="button"
               disabled={isSending || conversation.isBlocked}
-              onClick={() => onSendMessage(prompt)}
+              onClick={() => handleQuickPromptClick(prompt)}
               className="text-[11px] whitespace-nowrap bg-gray-100 hover:bg-gray-200 text-[#002f34] font-medium px-2.5 py-1 rounded-full border border-gray-200 transition cursor-pointer disabled:opacity-40"
             >
               {prompt}
