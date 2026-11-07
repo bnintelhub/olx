@@ -73,6 +73,7 @@ export const ChatPage: React.FC = () => {
           }
           return [...prev, msg];
         });
+        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
         socket.emit('message.read', { conversationId: currentActiveId });
         const token = getActiveToken();
         void fetch(`/api/v1/chat/conversations/${currentActiveId}/read`, {
@@ -84,7 +85,7 @@ export const ChatPage: React.FC = () => {
       setConversations((prev) => {
         const exists = prev.some((c) => c.id === msg.conversationId);
         if (!exists) {
-          void fetchInbox();
+          void fetchInbox(false);
           return prev;
         }
         return prev.map((c) =>
@@ -162,9 +163,9 @@ export const ChatPage: React.FC = () => {
   }, [activeConvId]);
 
   // 3. Fetch conversations inbox and handle adId deep link
-  const fetchInbox = React.useCallback(async () => {
+  const fetchInbox = React.useCallback(async (isInitial = false) => {
     if (!user) return;
-    setLoading(true);
+    if (isInitial) setLoading(true);
     const activeToken = getActiveToken();
     try {
       let targetConvId: string | null = null;
@@ -198,17 +199,15 @@ export const ChatPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to load conversations', err);
     } finally {
-      setLoading(false);
+      if (isInitial) setLoading(false);
     }
   }, [user, targetAdId]);
 
   useEffect(() => {
-    void fetchInbox();
-    const interval = setInterval(fetchInbox, 4000);
-    return () => clearInterval(interval);
+    void fetchInbox(true);
   }, [fetchInbox]);
 
-  // 4. Load active conversation messages + automatic real-time sync
+  // 4. Load active conversation messages once on conversation switch
   useEffect(() => {
     if (!activeConvId || !user) return;
     let isMounted = true;
@@ -221,14 +220,11 @@ export const ChatPage: React.FC = () => {
         });
         const data = await res.json();
         if (isMounted && res.ok && data.success && data.data?.messages) {
-          setMessages((prev) => {
-            const temps = prev.filter((m) => m.id.startsWith('temp-'));
-            const fetched = data.data.messages;
-            const remaining = temps.filter((t) => !fetched.some((f: any) => f.content === t.content && f.senderId === t.senderId));
-            return [...fetched, ...remaining];
-          });
+          setMessages(data.data.messages);
           setNextCursor(data.data.nextCursor || null);
-          socketRef.current?.emit('conversation.join', { conversationId: activeConvId });
+          setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+          }, 50);
         }
       } catch (err) {
         console.error('Failed to fetch messages', err);
@@ -236,16 +232,10 @@ export const ChatPage: React.FC = () => {
     };
 
     void fetchMessages();
-    const syncInterval = setInterval(fetchMessages, 2000);
     return () => {
       isMounted = false;
-      clearInterval(syncInterval);
     };
   }, [activeConvId, user]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isOtherTyping]);
 
   const handleInputChange = (val: string) => {
     setInputText(val);
@@ -283,6 +273,7 @@ export const ChatPage: React.FC = () => {
       isDeleted: false,
     };
     setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     if (!customText) setInputText('');
 
     setConversations((prev) =>
