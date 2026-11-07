@@ -40,6 +40,7 @@ interface ChatMessageThreadProps {
   onReportChat?: (reason: string, details?: string) => void;
   isOtherTyping: boolean;
   messagesEndRef: React.RefObject<any>;
+  messagesContainerRef?: React.RefObject<any>;
   hasMoreOlder?: boolean;
   loadingOlder?: boolean;
   onLoadOlder?: () => void;
@@ -64,6 +65,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   onReportChat,
   isOtherTyping,
   messagesEndRef,
+  messagesContainerRef,
   hasMoreOlder,
   loadingOlder,
   onLoadOlder,
@@ -217,7 +219,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       </div>
 
       {/* Message Thread Scroll View */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-[#f8f9fa] no-scrollbar overscroll-contain">
+      <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-[#f8f9fa] no-scrollbar overscroll-contain">
         {hasMoreOlder && (
           <div className="text-center py-1">
             <button

@@ -66,7 +66,7 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F5F7F8]">
+    <div className={`min-h-screen flex flex-col bg-[#F5F7F8] ${isChatPage ? 'h-screen overflow-hidden' : ''}`}>
       {/* Navbar (Rendered only on the Home page) */}
       {isHomePage && (
         <Navbar
@@ -88,7 +88,7 @@ export const AppLayout: React.FC = () => {
       )}
 
       {/* Main Outlet */}
-      <main className="flex-1">
+      <main className={`flex-1 ${isChatPage ? 'min-h-0 overflow-hidden flex flex-col' : ''}`}>
         <Outlet context={{ onOpenPostAd: handleOpenPostAd, onOpenChat: handleOpenChat }} />
       </main>
 

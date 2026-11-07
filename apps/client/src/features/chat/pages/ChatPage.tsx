@@ -28,7 +28,12 @@ export const ChatPage: React.FC = () => {
   activeConvIdRef.current = activeConvId;
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior });
+  };
 
   const getActiveToken = (): string | null => {
     return token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
@@ -73,7 +78,7 @@ export const ChatPage: React.FC = () => {
           }
           return [...prev, msg];
         });
-        setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+        setTimeout(() => scrollToBottom('smooth'), 50);
         socket.emit('message.read', { conversationId: currentActiveId });
         const token = getActiveToken();
         void fetch(`/api/v1/chat/conversations/${currentActiveId}/read`, {
@@ -222,9 +227,7 @@ export const ChatPage: React.FC = () => {
         if (isMounted && res.ok && data.success && data.data?.messages) {
           setMessages(data.data.messages);
           setNextCursor(data.data.nextCursor || null);
-          setTimeout(() => {
-            messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
-          }, 50);
+          setTimeout(() => scrollToBottom('auto'), 50);
         }
       } catch (err) {
         console.error('Failed to fetch messages', err);
@@ -273,7 +276,7 @@ export const ChatPage: React.FC = () => {
       isDeleted: false,
     };
     setMessages((prev) => [...prev, optimisticMsg]);
-    setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    setTimeout(() => scrollToBottom('smooth'), 50);
     if (!customText) setInputText('');
 
     setConversations((prev) =>
@@ -284,29 +287,28 @@ export const ChatPage: React.FC = () => {
       )
     );
 
-    // Fast WebSocket delivery if connected
+    // Fast WebSocket delivery if connected, fallback to HTTP only if disconnected
     if (socketRef.current?.connected) {
       socketRef.current.emit('message.send', payload);
-    }
-
-    // Direct HTTP delivery with automatic server broadcast
-    const activeToken = getActiveToken();
-    try {
-      const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json();
-      if (res.ok && data.success && data.data) {
-        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m)));
-        if (data.safetyNotice) setChatAlert(data.safetyNotice);
-      } else {
-        setChatAlert(data.message || 'Unable to send message');
-        setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } else {
+      const activeToken = getActiveToken();
+      try {
+        const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (res.ok && data.success && data.data) {
+          setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m)));
+          if (data.safetyNotice) setChatAlert(data.safetyNotice);
+        } else {
+          setChatAlert(data.message || 'Unable to send message');
+          setMessages((prev) => prev.filter((m) => m.id !== tempId));
+        }
+      } catch (err) {
+        console.error('Failed to send message via HTTP', err);
       }
-    } catch (err) {
-      console.error('Failed to send message via HTTP', err);
     }
   };
 
@@ -430,8 +432,8 @@ export const ChatPage: React.FC = () => {
       <div className="flex flex-1 min-h-0 overflow-hidden bg-white border-x border-b border-gray-200 rounded-b-2xl shadow-lg">
         {/* Left Side: Conversation List */}
         <div
-          className={`w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${
-            mobileShowThread ? 'hidden md:flex' : 'flex'
+          className={`w-full sm:w-80 md:w-88 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${
+            mobileShowThread ? 'hidden sm:flex' : 'flex'
           }`}
         >
           <ChatConversationList
@@ -448,11 +450,11 @@ export const ChatPage: React.FC = () => {
         {/* Right Side: Message Thread */}
         <div
           className={`flex-1 flex flex-col min-w-0 min-h-0 h-full ${
-            !mobileShowThread ? 'hidden md:flex' : 'flex'
+            !mobileShowThread ? 'hidden sm:flex' : 'flex'
           }`}
         >
           {mobileShowThread && (
-            <div className="md:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center">
+            <div className="sm:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center">
               <button
                 onClick={() => setMobileShowThread(false)}
                 className="flex items-center gap-1 text-xs font-semibold text-[#002f34] p-1 rounded hover:bg-gray-200 transition"
@@ -475,6 +477,7 @@ export const ChatPage: React.FC = () => {
             onReportChat={handleReportChat}
             isOtherTyping={isOtherTyping}
             messagesEndRef={messagesEndRef}
+            messagesContainerRef={messagesContainerRef}
             hasMoreOlder={Boolean(nextCursor)}
             loadingOlder={loadingOlder}
             onLoadOlder={handleLoadOlder}
