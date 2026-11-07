@@ -1,35 +1,73 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ChatService } from './chat.service';
-import { startConversationSchema, sendMessageSchema } from './chat.schema';
+import {
+  startConversationSchema,
+  sendMessageSchema,
+  blockUserSchema,
+  reportChatSchema,
+  cursorPaginationSchema,
+} from './chat.schema';
 
 export class ChatController {
   static async startConversation(request: FastifyRequest, reply: FastifyReply) {
-    const { adId, initialMessage } = startConversationSchema.parse(request.body);
-    const result = await ChatService.startConversation(request.user!.id, adId, initialMessage);
+    const { adId, initialMessage, clientMessageId } = startConversationSchema.parse(request.body);
+    const result = await ChatService.startConversation(request.user!.id, adId, initialMessage, clientMessageId);
     return reply.status(200).send({ success: true, data: result });
   }
 
   static async getConversations(request: FastifyRequest, reply: FastifyReply) {
-    const result = await ChatService.getConversations(request.user!.id);
+    const filter = (request.query as { filter?: 'all' | 'archived' }).filter || 'all';
+    const result = await ChatService.getConversations(request.user!.id, filter);
     return reply.status(200).send({ success: true, data: result });
   }
 
   static async getMessages(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
-    const messages = await ChatService.getMessages(request.user!.id, id);
-    return reply.status(200).send({ success: true, data: messages });
+    const { cursor, limit } = cursorPaginationSchema.parse(request.query);
+    const result = await ChatService.getMessages(request.user!.id, id, cursor, limit);
+    return reply.status(200).send({ success: true, data: result });
   }
 
   static async sendMessage(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
-    const { content, attachmentUrl } = sendMessageSchema.parse(request.body);
-    const message = await ChatService.sendMessage(request.user!.id, id, content, attachmentUrl);
-    return reply.status(201).send({ success: true, data: message });
+    const { content, attachmentUrl, clientMessageId, replyToMessageId } = sendMessageSchema.parse(request.body);
+    const result = await ChatService.sendMessage(request.user!.id, {
+      conversationId: id,
+      content,
+      attachmentUrl,
+      clientMessageId,
+      replyToMessageId,
+    });
+    return reply.status(201).send({ success: true, data: result.message, safetyNotice: result.safetyNotice });
   }
 
   static async markAsRead(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
-    const result = await ChatService.markAsRead(request.user!.id, id);
+    await ChatService.markAsRead(request.user!.id, id);
+    return reply.status(200).send({ success: true, message: 'Marked as read' });
+  }
+
+  static async deleteMessage(request: FastifyRequest, reply: FastifyReply) {
+    const { messageId } = request.params as { messageId: string };
+    const result = await ChatService.deleteMessage(request.user!.id, messageId);
     return reply.status(200).send({ success: true, data: result });
+  }
+
+  static async blockUser(request: FastifyRequest, reply: FastifyReply) {
+    const { targetUserId } = blockUserSchema.parse(request.body);
+    const result = await ChatService.blockUser(request.user!.id, targetUserId);
+    return reply.status(200).send({ success: true, data: result });
+  }
+
+  static async unblockUser(request: FastifyRequest, reply: FastifyReply) {
+    const { userId } = request.params as { userId: string };
+    const result = await ChatService.unblockUser(request.user!.id, userId);
+    return reply.status(200).send({ success: true, data: result });
+  }
+
+  static async reportChat(request: FastifyRequest, reply: FastifyReply) {
+    const body = reportChatSchema.parse(request.body);
+    const result = await ChatService.reportChat(request.user!.id, body);
+    return reply.status(201).send({ success: true, data: result });
   }
 }

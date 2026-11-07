@@ -8,17 +8,20 @@ export interface ConversationItem {
     id: string;
     title: string;
     price: number | string;
-    images?: { displayUrl?: string }[];
+    imageUrl?: string | null;
+    images?: { displayUrl?: string; thumbnailUrl?: string }[];
   };
   otherParty: {
     id: string;
     name: string;
-    avatarUrl?: string;
+    avatarUrl?: string | null;
     role: string;
+    isOnline?: boolean;
   };
   lastMessageText: string;
   lastMessageAt: string;
   unreadCount: number;
+  isBlocked?: boolean;
 }
 
 interface ChatConversationListProps {
@@ -36,7 +39,7 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
 }) => {
   return (
     <div className="w-full sm:w-80 md:w-96 border-r border-gray-200 flex flex-col bg-gray-50 flex-shrink-0">
-      <div className="p-3 border-b border-gray-200 bg-white">
+      <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between">
         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
           Conversations ({conversations.length})
         </span>
@@ -58,6 +61,8 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
           conversations.map((conv) => {
             const isActive = conv.id === activeConvId;
             const adThumb =
+              conv.ad?.imageUrl ||
+              conv.ad?.images?.[0]?.thumbnailUrl ||
               conv.ad?.images?.[0]?.displayUrl ||
               'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=100&auto=format&fit=crop&q=80';
 
@@ -71,21 +76,34 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
                     : 'hover:bg-gray-100 bg-white'
                 }`}
               >
-                <img
-                  src={adThumb}
-                  alt=""
-                  className="w-12 h-12 rounded object-cover flex-shrink-0 border border-gray-200"
-                />
+                <div className="relative flex-shrink-0">
+                  <img
+                    src={adThumb}
+                    alt=""
+                    className="w-12 h-12 rounded object-cover border border-gray-200"
+                  />
+                  {conv.otherParty.isOnline && (
+                    <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Online" />
+                  )}
+                </div>
+
                 <div className="flex-grow min-w-0">
                   <div className="flex items-baseline justify-between gap-1">
-                    <h4 className="text-xs font-bold text-gray-900 truncate">
-                      {conv.otherParty.name}
-                    </h4>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <h4 className="text-xs font-bold text-gray-900 truncate">
+                        {conv.otherParty.name}
+                      </h4>
+                      {conv.isBlocked && (
+                        <span className="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded font-semibold">Blocked</span>
+                      )}
+                    </div>
                     <span className="text-[10px] text-gray-400 flex-shrink-0">
-                      {new Date(conv.lastMessageAt).toLocaleTimeString('en-IN', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
+                      {conv.lastMessageAt
+                        ? new Date(conv.lastMessageAt).toLocaleTimeString('en-IN', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })
+                        : ''}
                     </span>
                   </div>
                   <p className="text-[11px] font-medium text-[#002f34] truncate mt-0.5">
@@ -110,4 +128,3 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
     </div>
   );
 };
-

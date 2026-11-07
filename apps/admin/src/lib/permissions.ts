@@ -20,6 +20,7 @@ import {
   Receipt,
   FileCode,
   DollarSign,
+  MessageSquare,
   LucideIcon,
 } from 'lucide-react';
 
@@ -102,6 +103,7 @@ export const ROLE_NAVIGATION: Record<AdminRole, NavItem[]> = {
     { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, group: 'Overview' },
     { title: 'Users & Accounts', href: '/users', icon: Users, group: 'Operations' },
     { title: 'Classified Listings', href: '/listings', icon: ShoppingBag, group: 'Operations' },
+    { title: 'Chat & Moderation', href: '/chat-moderation', icon: MessageSquare, group: 'Operations' },
     { title: 'Moderation Queue', href: '/moderation', icon: ShieldAlert, badge: '24', badgeVariant: 'danger', group: 'Operations' },
     { title: 'Reports & Safety', href: '/reports', icon: AlertTriangle, badge: '8', badgeVariant: 'warning', group: 'Operations' },
     { title: 'Categories', href: '/categories', icon: FolderTree, group: 'Operations' },
@@ -119,6 +121,7 @@ export const ROLE_NAVIGATION: Record<AdminRole, NavItem[]> = {
     { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, group: 'Overview' },
     { title: 'Users Management', href: '/users', icon: Users, group: 'Operations' },
     { title: 'Listings', href: '/listings', icon: ShoppingBag, group: 'Operations' },
+    { title: 'Chat & Moderation', href: '/chat-moderation', icon: MessageSquare, group: 'Operations' },
     { title: 'Categories', href: '/categories', icon: FolderTree, group: 'Operations' },
     { title: 'Reports Queue', href: '/reports', icon: ShieldAlert, badge: '8', badgeVariant: 'warning', group: 'Operations' },
     { title: 'Media Library', href: '/media', icon: Image, group: 'Operations' },

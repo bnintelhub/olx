@@ -10,6 +10,7 @@ import { ModeratorDashboard } from '../features/dashboard/ModeratorDashboard';
 import { UsersPage } from '../features/users/UsersPage';
 import { ListingsPage } from '../features/listings/ListingsPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
+import { ChatModerationPage } from '../features/chat-moderation/ChatModerationPage';
 import { CategoriesPage } from '../features/categories/CategoriesPage';
 import { MediaPage } from '../features/media/MediaPage';
 import { PaymentsPage } from '../features/payments/PaymentsPage';
@@ -110,6 +111,10 @@ export const router = createBrowserRouter([
       {
         path: 'reports',
         element: <ReportsPage />,
+      },
+      {
+        path: 'chat-moderation',
+        element: <ChatModerationPage />,
       },
       {
         path: 'categories',

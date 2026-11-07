@@ -23,6 +23,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [inputText, setInputText] = useState('');
   const [isOtherTyping, setIsOtherTyping] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -30,7 +32,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
 
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const typingTimeoutRef = useRef<any>(null);
+  const typingTimerRef = useRef<any>(null);
 
   const getActiveToken = (): string | null => {
     return token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
@@ -41,57 +43,78 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
     if (!isOpen || !user) return;
 
     const activeToken = getActiveToken();
-    if (!activeToken) return;
-
-    const socket = io({
+    const socket = io('/', {
       path: '/socket.io',
-      auth: { token: activeToken },
+      auth: { token: activeToken || '' },
       transports: ['websocket', 'polling'],
+      withCredentials: true,
     });
 
     socketRef.current = socket;
 
     socket.on('connect', () => {
       if (activeConvId) {
-        socket.emit('join_conversation', { conversationId: activeConvId });
+        socket.emit('conversation.join', { conversationId: activeConvId });
       }
     });
 
-    socket.on('new_message', (payload: { conversationId: string; message: MessageItem }) => {
-      if (payload.conversationId === activeConvId) {
+    socket.on('message.new', (msg: MessageItem) => {
+      if (msg.conversationId === activeConvId) {
         setMessages((prev) => {
-          if (prev.some((m) => m.id === payload.message.id)) return prev;
-          return [...prev, payload.message];
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
         });
-        socket.emit('mark_read', { conversationId: activeConvId });
+        socket.emit('message.read', { conversationId: activeConvId });
       }
 
       setConversations((prev) =>
         prev.map((c) =>
-          c.id === payload.conversationId
+          c.id === msg.conversationId
             ? {
                 ...c,
-                lastMessageText: payload.message.content,
-                lastMessageAt: payload.message.createdAt,
-                unreadCount: payload.conversationId === activeConvId ? 0 : c.unreadCount + 1,
+                lastMessageText: msg.content || 'Photo',
+                lastMessageAt: msg.createdAt,
+                unreadCount: msg.conversationId === activeConvId ? 0 : c.unreadCount + 1,
               }
             : c
         )
       );
     });
 
-    socket.on('user_typing', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvId && data.userId !== user?.id) {
-        setIsOtherTyping(true);
-        clearTimeout(typingTimeoutRef.current);
-        typingTimeoutRef.current = setTimeout(() => setIsOtherTyping(false), 2500);
+    socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
+      if (data.conversationId === activeConvId && data.readerId !== user?.id) {
+        setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
       }
     });
 
-    socket.on('messages_read', (data: { conversationId: string }) => {
+    socket.on('message.delivered', (data: { messageId: string; conversationId: string }) => {
       if (data.conversationId === activeConvId) {
-        setMessages((prev) => prev.map((m) => ({ ...m, status: 'READ' })));
+        setMessages((prev) =>
+          prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m))
+        );
       }
+    });
+
+    socket.on('typing.start', (data: { conversationId: string; userId: string }) => {
+      if (data.conversationId === activeConvId && data.userId !== user?.id) {
+        setIsOtherTyping(true);
+      }
+    });
+
+    socket.on('typing.stop', (data: { conversationId: string; userId: string }) => {
+      if (data.conversationId === activeConvId && data.userId !== user?.id) {
+        setIsOtherTyping(false);
+      }
+    });
+
+    socket.on('presence.update', (data: { userId: string; isOnline: boolean }) => {
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.otherParty.id === data.userId
+            ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } }
+            : c
+        )
+      );
     });
 
     return () => {
@@ -100,7 +123,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
     };
   }, [isOpen, user, activeConvId]);
 
-  // 2. Fetch conversations
+  // 2. Fetch conversations list
   useEffect(() => {
     if (!isOpen || !user) return;
 
@@ -138,13 +161,13 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
           },
         });
         const data = await res.json();
-        if (res.ok && data.success && Array.isArray(data.data)) {
-          setConversations(data.data);
-          if (targetConvId) {
-            setActiveConvId(targetConvId);
-          } else if (data.data.length > 0 && !activeConvId) {
-            setActiveConvId(data.data[0].id);
-          }
+        const convList: ConversationItem[] = data.data?.conversations || (Array.isArray(data.data) ? data.data : []);
+        setConversations(convList);
+
+        if (targetConvId) {
+          setActiveConvId(targetConvId);
+        } else if (convList.length > 0 && !activeConvId) {
+          setActiveConvId(convList[0].id);
         }
       } catch (err) {
         console.error('Failed to load conversations', err);
@@ -156,24 +179,25 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
     fetchConversations();
   }, [isOpen, user, initialAd]);
 
-  // 3. Fetch active messages when conversation changes
+  // 3. Switch conversation and fetch initial message history
   useEffect(() => {
     if (!activeConvId || !user) return;
 
     const fetchMessages = async () => {
       const activeToken = getActiveToken();
       try {
-        const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
+        const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages?limit=30`, {
           headers: {
             Authorization: `Bearer ${activeToken}`,
             'X-App-Context': 'client',
           },
         });
         const data = await res.json();
-        if (res.ok && data.success && Array.isArray(data.data)) {
-          setMessages(data.data);
-          socketRef.current?.emit('join_conversation', { conversationId: activeConvId });
-          socketRef.current?.emit('mark_read', { conversationId: activeConvId });
+        if (res.ok && data.success && data.data?.messages) {
+          setMessages(data.data.messages);
+          setNextCursor(data.data.nextCursor || null);
+
+          socketRef.current?.emit('conversation.join', { conversationId: activeConvId });
 
           setConversations((prev) =>
             prev.map((c) => (c.id === activeConvId ? { ...c, unreadCount: 0 } : c))
@@ -187,22 +211,43 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
     fetchMessages();
   }, [activeConvId, user]);
 
-  // Scroll to bottom on message update
+  // 4. Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isOtherTyping]);
 
+  // 5. Handle typing indicator
   const handleInputChange = (val: string) => {
     setInputText(val);
     if (activeConvId && socketRef.current) {
-      socketRef.current.emit('typing', { conversationId: activeConvId });
+      socketRef.current.emit('typing.start', { conversationId: activeConvId });
+      clearTimeout(typingTimerRef.current);
+      typingTimerRef.current = setTimeout(() => {
+        socketRef.current?.emit('typing.stop', { conversationId: activeConvId });
+      }, 2000);
     }
   };
 
-  const handleSendMessage = async (customText?: string) => {
+  // 6. Send message
+  const handleSendMessage = async (customText?: string, attachmentUrl?: string) => {
     const textToSend = customText || inputText;
-    if (!textToSend.trim() || !activeConvId) return;
+    if ((!textToSend.trim() && !attachmentUrl) || !activeConvId) return;
 
+    const clientMessageId = crypto.randomUUID();
+    const payload = {
+      conversationId: activeConvId,
+      content: textToSend.trim(),
+      attachmentUrl,
+      clientMessageId,
+    };
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('message.send', payload);
+      if (!customText) setInputText('');
+      return;
+    }
+
+    // REST Fallback if socket is reconnecting
     const activeToken = getActiveToken();
     try {
       const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
@@ -212,7 +257,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
           Authorization: `Bearer ${activeToken}`,
           'X-App-Context': 'client',
         },
-        body: JSON.stringify({ content: textToSend.trim() }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok && data.success && data.data) {
@@ -221,21 +266,94 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
           if (prev.some((m) => m.id === data.data.id)) return prev;
           return [...prev, data.data];
         });
-
-        setConversations((prev) =>
-          prev.map((c) =>
-            c.id === activeConvId
-              ? {
-                  ...c,
-                  lastMessageText: data.data.content,
-                  lastMessageAt: data.data.createdAt,
-                }
-              : c
-          )
-        );
+        if (data.safetyNotice) {
+          setChatAlert(data.safetyNotice);
+        }
       }
     } catch (err) {
       console.error('Failed to send message', err);
+    }
+  };
+
+  // 7. Load older messages via cursor
+  const handleLoadOlder = async () => {
+    if (!activeConvId || !nextCursor || loadingOlder) return;
+    setLoadingOlder(true);
+    const activeToken = getActiveToken();
+    try {
+      const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages?cursor=${nextCursor}&limit=30`, {
+        headers: { Authorization: `Bearer ${activeToken}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.data?.messages) {
+        setMessages((prev) => [...data.data.messages, ...prev]);
+        setNextCursor(data.data.nextCursor || null);
+      }
+    } catch (err) {
+      console.error('Failed loading older messages', err);
+    } finally {
+      setLoadingOlder(false);
+    }
+  };
+
+  // 8. Delete message
+  const handleDeleteMessage = async (messageId: string) => {
+    const activeToken = getActiveToken();
+    try {
+      const res = await fetch(`/api/v1/chat/messages/${messageId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${activeToken}` },
+      });
+      if (res.ok) {
+        setMessages((prev) =>
+          prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m))
+        );
+      }
+    } catch (err) {
+      console.error('Failed to delete message', err);
+    }
+  };
+
+  // 9. Block user
+  const handleBlockUser = async (targetUserId: string) => {
+    const activeToken = getActiveToken();
+    try {
+      const res = await fetch('/api/v1/chat/users/block', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${activeToken}`,
+        },
+        body: JSON.stringify({ targetUserId }),
+      });
+      if (res.ok) {
+        setConversations((prev) =>
+          prev.map((c) => (c.otherParty.id === targetUserId ? { ...c, isBlocked: true } : c))
+        );
+        setChatAlert('User blocked. Messaging is restricted.');
+      }
+    } catch (err) {
+      console.error('Failed to block user', err);
+    }
+  };
+
+  // 10. Report chat
+  const handleReportChat = async (reason: string, details?: string) => {
+    const activeToken = getActiveToken();
+    try {
+      const res = await fetch('/api/v1/chat/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${activeToken}`,
+        },
+        body: JSON.stringify({ conversationId: activeConvId, reason, details }),
+      });
+      if (res.ok) {
+        setChatAlert('Report submitted to moderation team. Thank you.');
+      }
+    } catch (err) {
+      console.error('Failed to submit report', err);
     }
   };
 
@@ -287,8 +405,8 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
               <MessageCircle className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold tracking-tight">OLX ORBIT Messenger</h2>
-              <p className="text-[11px] text-gray-300">Direct Buyer-Seller Offline Deals</p>
+              <h2 className="text-sm font-bold tracking-tight">OLX Marketplace Chat</h2>
+              <p className="text-[11px] text-gray-300">Secure Direct Buyer-Seller Inquiries</p>
             </div>
           </div>
           <button
@@ -299,7 +417,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
           </button>
         </div>
 
-        {/* Optional Alert */}
+        {/* Optional Safety / System Alert */}
         {chatAlert && (
           <div className="bg-amber-50 border-b border-amber-200 px-4 py-2.5 flex items-center justify-between gap-2 text-xs text-amber-900 flex-shrink-0 animate-fadeIn">
             <div className="flex items-center gap-2">
@@ -331,8 +449,14 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
             inputText={inputText}
             onInputChange={handleInputChange}
             onSendMessage={handleSendMessage}
+            onDeleteMessage={handleDeleteMessage}
+            onBlockUser={handleBlockUser}
+            onReportChat={handleReportChat}
             isOtherTyping={isOtherTyping}
             messagesEndRef={messagesEndRef}
+            hasMoreOlder={Boolean(nextCursor)}
+            loadingOlder={loadingOlder}
+            onLoadOlder={handleLoadOlder}
           />
         </div>
       </div>

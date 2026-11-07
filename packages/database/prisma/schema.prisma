@@ -74,8 +74,15 @@ enum BoostStatus {
 enum MessageType {
   TEXT
   IMAGE
+  SYSTEM
   LOCATION
   SYSTEM_NOTICE
+}
+
+enum ConversationStatus {
+  ACTIVE
+  CLOSED
+  ARCHIVED
 }
 
 enum MessageStatus {
@@ -178,10 +185,12 @@ model User {
   buyerConvs      Conversation[] @relation("BuyerConversations")
   sellerConvs     Conversation[] @relation("SellerConversations")
   messagesSent    Message[]      @relation("SentMessages")
+  messagesReceived Message[]     @relation("ReceivedMessages")
   notifications   Notification[]
   reportsFiled    Report[]       @relation("ReporterUser")
   reportsReceived Report[]       @relation("ReportedUser")
   assignedReports Report[]       @relation("ReportAssignee")
+  moderationNotes ModerationNote[]
   supportTickets  SupportTicket[] @relation("TicketRequester")
   assignedTickets SupportTicket[] @relation("TicketAssignee")
   supportTicketEntries SupportTicketEntry[]
@@ -441,46 +450,83 @@ model AdAttributeValue {
 // ============================================================================
 
 model Conversation {
-  id                String        @id @default(uuid()) @db.VarChar(36)
-  adId              String        @map("ad_id") @db.VarChar(36)
-  buyerId           String        @map("buyer_id") @db.VarChar(36)
-  sellerId          String        @map("seller_id") @db.VarChar(36)
-  lastMessageText   String?       @map("last_message_text") @db.VarChar(1000)
-  lastMessageAt     DateTime?     @map("last_message_at")
-  buyerUnreadCount  Int           @default(0) @map("buyer_unread_count")
-  sellerUnreadCount Int           @default(0) @map("seller_unread_count")
-  isBlocked         Boolean       @default(false) @map("is_blocked")
-  createdAt         DateTime      @default(now()) @map("created_at")
-  updatedAt         DateTime      @updatedAt @map("updated_at")
+  id                String             @id @default(uuid()) @db.VarChar(36)
+  adId              String             @map("ad_id") @db.VarChar(36)
+  buyerId           String             @map("buyer_id") @db.VarChar(36)
+  sellerId          String             @map("seller_id") @db.VarChar(36)
+  lastMessageId     String?            @map("last_message_id") @db.VarChar(36)
+  lastMessageText   String?            @map("last_message_text") @db.VarChar(1000)
+  lastMessageAt     DateTime?          @map("last_message_at")
+  buyerUnreadCount  Int                @default(0) @map("buyer_unread_count")
+  sellerUnreadCount Int                @default(0) @map("seller_unread_count")
+  buyerArchivedAt   DateTime?          @map("buyer_archived_at")
+  sellerArchivedAt  DateTime?          @map("seller_archived_at")
+  buyerDeletedAt    DateTime?          @map("buyer_deleted_at")
+  sellerDeletedAt   DateTime?          @map("seller_deleted_at")
+  status            ConversationStatus @default(ACTIVE)
+  isBlocked         Boolean            @default(false) @map("is_blocked")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
 
-  ad                Ad            @relation(fields: [adId], references: [id], onDelete: Cascade)
-  buyer             User          @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
-  seller            User          @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
+  ad                Ad                 @relation(fields: [adId], references: [id], onDelete: Cascade)
+  buyer             User               @relation("BuyerConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  seller            User               @relation("SellerConversations", fields: [sellerId], references: [id], onDelete: Cascade)
   messages          Message[]
   reports           Report[]
+  moderationNotes   ModerationNote[]
 
   @@unique([adId, buyerId, sellerId])
   @@index([buyerId, lastMessageAt])
   @@index([sellerId, lastMessageAt])
+  @@index([status, updatedAt])
   @@map("conversations")
 }
 
 model Message {
-  id             String        @id @default(uuid()) @db.VarChar(36)
-  conversationId String        @map("conversation_id") @db.VarChar(36)
-  senderId       String        @map("sender_id") @db.VarChar(36)
-  type           MessageType   @default(TEXT)
-  content        String        @db.Text
-  attachmentUrl  String?       @map("attachment_url") @db.VarChar(500)
-  status         MessageStatus @default(SENT)
-  createdAt      DateTime      @default(now()) @map("created_at")
+  id               String        @id @default(uuid()) @db.VarChar(36)
+  conversationId   String        @map("conversation_id") @db.VarChar(36)
+  senderId         String        @map("sender_id") @db.VarChar(36)
+  receiverId       String?       @map("receiver_id") @db.VarChar(36)
+  type             MessageType   @default(TEXT)
+  content          String        @db.Text
+  attachmentUrl    String?       @map("attachment_url") @db.VarChar(500)
+  replyToMessageId String?       @map("reply_to_message_id") @db.VarChar(36)
+  clientMessageId  String?       @map("client_message_id") @db.VarChar(64)
+  status           MessageStatus @default(SENT)
+  deletedAt        DateTime?     @map("deleted_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @default(now()) @updatedAt @map("updated_at")
 
-  conversation   Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender         User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  reports        Report[]
+  conversation     Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender           User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver         User?         @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: SetNull)
+  replyTo          Message?      @relation("MessageReplies", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          Message[]     @relation("MessageReplies")
+  reports          Report[]
 
   @@index([conversationId, createdAt])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([clientMessageId])
   @@map("messages")
+}
+
+model ModerationNote {
+  id             String        @id @default(uuid()) @db.VarChar(36)
+  conversationId String?       @map("conversation_id") @db.VarChar(36)
+  reportId       String?       @map("report_id") @db.VarChar(36)
+  authorId       String        @map("author_id") @db.VarChar(36)
+  content        String        @db.Text
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  conversation   Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  report         Report?       @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  author         User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([reportId])
+  @@index([authorId])
+  @@map("moderation_notes")
 }
 
 // ============================================================================
@@ -560,6 +606,7 @@ model Report {
   conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   message    Message?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
   assignedTo User?        @relation("ReportAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  moderationNotes ModerationNote[]
 
   @@index([status, createdAt])
   @@index([assignedToId, status])

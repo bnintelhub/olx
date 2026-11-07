@@ -3,9 +3,15 @@ import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
-import { formatCurrency } from '../../../lib/utils';
 import {
-  IndianRupee, ArrowUpRight, ArrowDownRight, RotateCcw, Calendar, Download, Activity, Sparkles, Zap,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '../../../components/ui/dropdown-menu';
+import { cn, formatCurrency } from '../../../lib/utils';
+import {
+  IndianRupee, ArrowUpRight, ArrowDownRight, RotateCcw, Calendar, Download, Activity, Sparkles, Zap, ChevronDown, Check,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -14,6 +20,19 @@ import {
   useRevenueOverviewQuery, useRevenueTrendQuery, useRevenueBreakdownQuery, usePaymentPerformanceQuery,
 } from '../../payments/hook/usePaymentsQuery';
 import { paymentsService } from '../../payments/service/payments.service';
+
+const PERIOD_OPTIONS = [
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: '7d', label: 'Last 7 Days' },
+  { value: '30d', label: 'Last 30 Days' },
+  { value: 'this_month', label: 'This Month' },
+  { value: 'last_month', label: 'Last Month' },
+  { value: '3m', label: 'Last 3 Months' },
+  { value: '6m', label: 'Last 6 Months' },
+  { value: '1y', label: 'This Year' },
+  { value: 'custom', label: 'Custom Date Range' },
+];
 
 export function RevenueOverviewSection() {
   const queryClient = useQueryClient();
@@ -139,26 +158,39 @@ export function RevenueOverviewSection() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-          {/* Period Dropdown with Dark Mode Options */}
-          <div className="flex items-center gap-1.5 bg-muted/60 p-1 rounded-xl border border-border/60">
-            <Calendar className="w-3.5 h-3.5 text-muted-foreground ml-2" />
-            <select
-              value={period}
-              onChange={(e) => handlePeriodChange(e.target.value)}
-              className="bg-transparent text-xs font-bold text-foreground focus:outline-none pr-3 py-1 cursor-pointer [&>option]:bg-slate-900 [&>option]:text-slate-100"
-            >
-              <option value="today" className="bg-slate-900 text-slate-100 py-1">Today</option>
-              <option value="yesterday" className="bg-slate-900 text-slate-100 py-1">Yesterday</option>
-              <option value="7d" className="bg-slate-900 text-slate-100 py-1">Last 7 Days</option>
-              <option value="30d" className="bg-slate-900 text-slate-100 py-1">Last 30 Days</option>
-              <option value="this_month" className="bg-slate-900 text-slate-100 py-1">This Month</option>
-              <option value="last_month" className="bg-slate-900 text-slate-100 py-1">Last Month</option>
-              <option value="3m" className="bg-slate-900 text-slate-100 py-1">Last 3 Months</option>
-              <option value="6m" className="bg-slate-900 text-slate-100 py-1">Last 6 Months</option>
-              <option value="1y" className="bg-slate-900 text-slate-100 py-1">This Year</option>
-              <option value="custom" className="bg-slate-900 text-slate-100 py-1">Custom Date Range</option>
-            </select>
-          </div>
+          {/* Period Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-2 bg-muted/60 hover:bg-muted/90 px-3 py-1.5 rounded-xl border border-border/60 text-xs font-bold text-foreground transition focus:outline-none focus:ring-1 focus:ring-border cursor-pointer shadow-2xs"
+              >
+                <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+                <span>{PERIOD_OPTIONS.find((opt) => opt.value === period)?.label || 'Last 30 Days'}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 bg-slate-900 border-border/80 text-slate-100 p-1.5 shadow-xl rounded-xl z-50">
+              {PERIOD_OPTIONS.map((opt) => {
+                const isSelected = period === opt.value;
+                return (
+                  <DropdownMenuItem
+                    key={opt.value}
+                    onClick={() => handlePeriodChange(opt.value)}
+                    className={cn(
+                      'flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors',
+                      isSelected
+                        ? 'bg-primary text-primary-foreground font-semibold'
+                        : 'text-slate-200 hover:bg-slate-800 hover:text-white'
+                    )}
+                  >
+                    <span>{opt.label}</span>
+                    {isSelected && <Check className="w-3.5 h-3.5 ml-2" />}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           {/* Export Report */}
           <Button

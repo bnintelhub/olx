@@ -22,6 +22,7 @@ import { locationRoutes } from './modules/locations/locations.routes';
 import { listingRoutes } from './modules/listings/listings.routes';
 import { userRoutes } from './modules/users/users.routes';
 import { chatRoutes } from './modules/chat/chat.routes';
+import { chatAdminRoutes } from './modules/chat/chat.admin.routes';
 import { reportRoutes } from './modules/reports/reports.routes';
 import { paymentRoutes } from './modules/payments/payments.routes';
 import { adminRoutes } from './modules/admin/admin.routes';
@@ -138,9 +139,11 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(listingRoutes, { prefix: '/listings' });
     await api.register(userRoutes, { prefix: '/user' });
     await api.register(chatRoutes, { prefix: '/chat' });
+    await api.register(chatRoutes); // Direct /conversations alias
     await api.register(reportRoutes, { prefix: '/moderation' });
     await api.register(paymentRoutes, { prefix: '/payments' });
     await api.register(adminRoutes, { prefix: '/admin' });
+    await api.register(chatAdminRoutes, { prefix: '/admin/chat' });
     await api.register(uploadRoutes, { prefix: '/uploads' });
     await api.register(mediaRoutes, { prefix: '/media' });
     await api.register(notificationRoutes, { prefix: '/notifications' });

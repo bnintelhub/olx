@@ -2,7 +2,9 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
-import { MessageType, MessageStatus } from '@prisma/client';
+import { ChatService } from './chat.service';
+import { ChatPresenceService } from './chat.presence.service';
+import { SendMessagePayload } from './chat.types';
 
 interface SocketUser {
   id: string;
@@ -10,9 +12,8 @@ interface SocketUser {
   phoneNumber?: string;
 }
 
-const userSocketsMap = new Map<string, Set<string>>();
-
 export function setupChatSocket(io: SocketIOServer) {
+  // Global Handshake Authentication & Token Extraction
   io.use(async (socket: Socket, next) => {
     try {
       let token =
@@ -32,109 +33,156 @@ export function setupChatSocket(io: SocketIOServer) {
       }
       next();
     } catch {
-      // Allow socket handshake to succeed for general metrics/rooms
+      // Allow handshake to complete so public/telemetry rooms function
       next();
     }
   });
 
-  io.on('connection', (socket: Socket) => {
+  io.on('connection', async (socket: Socket) => {
     const user: SocketUser = (socket as any).user;
-    if (!user) return;
+    if (!user) return; // Unauthenticated connections cannot interact with private chat
 
-    if (!userSocketsMap.has(user.id)) {
-      userSocketsMap.set(user.id, new Set());
-    }
-    userSocketsMap.get(user.id)!.add(socket.id);
+    // Register user presence
+    await ChatPresenceService.setUserOnline(user.id, socket.id);
 
-    socket.on('join_conversation', ({ conversationId }: { conversationId: string }) => {
-      socket.join(`conv_${conversationId}`);
+    // 1. Join Conversation Room
+    socket.on('conversation.join', async ({ conversationId }: { conversationId: string }) => {
+      try {
+        if (!conversationId) return;
+
+        const conv = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { buyerId: true, sellerId: true },
+        });
+
+        if (!conv || (conv.buyerId !== user.id && conv.sellerId !== user.id)) {
+          socket.emit('error', { code: 'CHAT_ACCESS_DENIED', message: 'Not authorized for this conversation' });
+          return;
+        }
+
+        socket.join(`conv_${conversationId}`);
+
+        // Automatically mark messages as read and broadcast receipt
+        await ChatService.markAsRead(user.id, conversationId);
+        io.to(`conv_${conversationId}`).emit('message.read', {
+          conversationId,
+          readerId: user.id,
+          readAt: new Date().toISOString(),
+        });
+      } catch {
+        socket.emit('error', { code: 'CHAT_ERROR', message: 'Failed to join conversation room' });
+      }
     });
 
-    socket.on('leave_conversation', ({ conversationId }: { conversationId: string }) => {
-      socket.leave(`conv_${conversationId}`);
+    // 2. Leave Conversation Room
+    socket.on('conversation.leave', ({ conversationId }: { conversationId: string }) => {
+      if (conversationId) {
+        socket.leave(`conv_${conversationId}`);
+      }
     });
 
-    socket.on(
-      'send_message',
-      async ({
-        conversationId,
-        content,
-        attachmentUrl,
-      }: {
-        conversationId: string;
-        content: string;
-        attachmentUrl?: string;
-      }) => {
-        try {
-          if (!content && !attachmentUrl) return;
+    // 3. Send Message
+    socket.on('message.send', async (payload: SendMessagePayload) => {
+      try {
+        const { conversationId } = payload;
+        if (!conversationId) return;
 
-          const conv = await prisma.conversation.findUnique({
-            where: { id: conversationId },
-            include: { buyer: true, seller: true },
-          });
+        // Create message in database transaction
+        const { message, safetyNotice } = await ChatService.sendMessage(user.id, payload);
 
-          if (!conv || (conv.buyerId !== user.id && conv.sellerId !== user.id)) {
-            socket.emit('error', { message: 'Unauthorized or conversation not found' });
-            return;
-          }
+        // Acknowledge receipt to the sender
+        socket.emit('message.sent', {
+          messageId: message.id,
+          conversationId,
+          clientMessageId: payload.clientMessageId,
+          status: message.status,
+          createdAt: message.createdAt.toISOString(),
+          safetyNotice: safetyNotice || null,
+        });
 
-          const message = await prisma.message.create({
-            data: {
+        // Broadcast to conversation room
+        io.to(`conv_${conversationId}`).emit('message.new', message);
+
+        // Send conversation inbox update to recipient's personal sockets
+        if (message.receiverId) {
+          const recipientSockets = ChatPresenceService.getUserSockets(message.receiverId);
+          for (const sId of recipientSockets) {
+            io.to(sId).emit('conversation.updated', {
               conversationId,
+              lastMessageText: message.content.slice(0, 80),
+              lastMessageAt: message.createdAt.toISOString(),
               senderId: user.id,
-              type: attachmentUrl ? MessageType.IMAGE : MessageType.TEXT,
-              content: (content || '').trim(),
-              attachmentUrl,
-              status: MessageStatus.SENT,
-            },
-            include: {
-              sender: {
-                select: {
-                  id: true,
-                  profile: { select: { name: true, avatarUrl: true } },
-                },
-              },
-            },
-          });
-
-          const isSenderBuyer = conv.buyerId === user.id;
-          const otherUserId = isSenderBuyer ? conv.sellerId : conv.buyerId;
-
-          await prisma.conversation.update({
-            where: { id: conversationId },
-            data: {
-              lastMessageText: (content || 'Photo').trim().slice(0, 500),
-              lastMessageAt: new Date(),
-              buyerUnreadCount: isSenderBuyer ? conv.buyerUnreadCount : { increment: 1 },
-              sellerUnreadCount: isSenderBuyer ? { increment: 1 } : conv.sellerUnreadCount,
-            },
-          });
-
-          io.to(`conv_${conversationId}`).emit('new_message', message);
-
-          const recipientSockets = userSocketsMap.get(otherUserId);
-          if (recipientSockets) {
-            recipientSockets.forEach((sId) => {
-              io.to(sId).emit('conversation_updated', {
-                conversationId,
-                lastMessageText: (content || 'Photo').trim().slice(0, 100),
-                senderId: user.id,
-              });
             });
           }
-        } catch (err: any) {
-          socket.emit('error', { message: 'Failed to send message' });
-        }
-      }
-    );
 
-    socket.on('disconnect', () => {
-      const userSockets = userSocketsMap.get(user.id);
-      if (userSockets) {
-        userSockets.delete(socket.id);
-        if (userSockets.size === 0) {
-          userSocketsMap.delete(user.id);
+          // If recipient is currently online, mark as delivered
+          const isRecipientOnline = await ChatPresenceService.isUserOnline(message.receiverId);
+          if (isRecipientOnline) {
+            await prisma.message.update({
+              where: { id: message.id },
+              data: { status: 'DELIVERED' },
+            });
+            io.to(`conv_${conversationId}`).emit('message.delivered', {
+              messageId: message.id,
+              conversationId,
+            });
+          }
         }
+      } catch (err: any) {
+        socket.emit('error', {
+          code: err.code || 'MESSAGE_SEND_FAILED',
+          message: err.message || 'Unable to send message',
+        });
+      }
+    });
+
+    // 4. Mark Messages as Read
+    socket.on('message.read', async ({ conversationId }: { conversationId: string }) => {
+      try {
+        if (!conversationId) return;
+        await ChatService.markAsRead(user.id, conversationId);
+        io.to(`conv_${conversationId}`).emit('message.read', {
+          conversationId,
+          readerId: user.id,
+          readAt: new Date().toISOString(),
+        });
+      } catch {
+        // quiet error on read receipt
+      }
+    });
+
+    // 5. Typing Indicators (Ephemerally broadcasted, throttled)
+    socket.on('typing.start', ({ conversationId }: { conversationId: string }) => {
+      if (!conversationId) return;
+      if (ChatPresenceService.shouldThrottleTyping(user.id, conversationId)) return;
+      socket.to(`conv_${conversationId}`).emit('typing.start', {
+        conversationId,
+        userId: user.id,
+      });
+    });
+
+    socket.on('typing.stop', ({ conversationId }: { conversationId: string }) => {
+      if (!conversationId) return;
+      socket.to(`conv_${conversationId}`).emit('typing.stop', {
+        conversationId,
+        userId: user.id,
+      });
+    });
+
+    // 6. Presence Subscription
+    socket.on('presence.subscribe', async ({ userIds }: { userIds: string[] }) => {
+      if (!Array.isArray(userIds) || userIds.length === 0) return;
+      const statusMap = await ChatPresenceService.getOnlineStatusBatch(userIds.slice(0, 50));
+      for (const [targetUid, isOnline] of Object.entries(statusMap)) {
+        socket.emit('presence.update', { userId: targetUid, isOnline });
+      }
+    });
+
+    // 7. Cleanup on Disconnect
+    socket.on('disconnect', async () => {
+      const isCompletelyOffline = await ChatPresenceService.setUserOffline(user.id, socket.id);
+      if (isCompletelyOffline) {
+        io.emit('presence.update', { userId: user.id, isOnline: false });
       }
     });
   });

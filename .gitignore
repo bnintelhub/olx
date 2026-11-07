@@ -15,11 +15,12 @@ uploads/*
 apps/server/uploads/*
 !apps/server/uploads/.gitkeep
 
-# Environment files
+# Environment and Secret files
 .env
 .env.local
 .env.*.local
 !.env.example
+*-firebase-adminsdk-*.json
 
 # Logs and system artifacts
 *.log
