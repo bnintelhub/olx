@@ -27,8 +27,19 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
   });
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    // 1. Check HTTP-only cookie first (preferred for web clients to prevent XSS token theft)
-    let token = request.cookies?.access_token || request.cookies?.token;
+    const appContext = (request.headers['x-app-context'] as string)?.toLowerCase();
+    const url = request.url || '';
+    const isAdminRoute = url.includes('/admin');
+
+    // 1. Isolate HTTP-only cookies strictly by application context.
+    // Admin console sessions use 'admin_access_token', while public client sessions use 'access_token'.
+    let token: string | undefined;
+
+    if (appContext === 'admin' || isAdminRoute) {
+      token = request.cookies?.admin_access_token;
+    } else {
+      token = request.cookies?.access_token || request.cookies?.token;
+    }
 
     // 2. If cookie is absent, fallback to Authorization Bearer header (for mobile apps and APIs)
     if (!token && request.headers.authorization) {
@@ -69,6 +80,11 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
 
         if (!user || user.status !== 'ACTIVE') {
           throw new AppError(401, 'USER_INACTIVE', 'User account is inactive or suspended');
+        }
+
+        // Prevent regular non-staff user tokens from accessing admin console
+        if ((appContext === 'admin' || isAdminRoute) && user.role === 'USER') {
+          throw new AppError(403, 'FORBIDDEN', 'Access denied to admin console');
         }
 
         cached = {

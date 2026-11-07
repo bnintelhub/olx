@@ -7,13 +7,21 @@ export const apiClient = axios.create({
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-App-Context': 'admin',
   },
+});
+
+// Request interceptor guaranteeing Admin application context header on every outbound request
+apiClient.interceptors.request.use((config) => {
+  config.headers = config.headers || {};
+  config.headers['X-App-Context'] = 'admin';
+  return config;
 });
 
 // Mutex promise to prevent duplicate concurrent refresh requests
 let refreshPromise: Promise<boolean> | null = null;
 
-// Silently refreshes authentication cookies using the HTTP-only refresh_token cookie.
+// Silently refreshes authentication cookies using the HTTP-only admin_refresh_token cookie.
 // Returns a boolean indicating whether the refresh attempt succeeded.
 export async function executeSilentRefresh(): Promise<boolean> {
   if (refreshPromise) {
@@ -22,7 +30,17 @@ export async function executeSilentRefresh(): Promise<boolean> {
 
   // Use raw axios to bypass apiClient interceptors and avoid recursion
   refreshPromise = axios
-    .post('/api/v1/auth/refresh', {}, { withCredentials: true })
+    .post(
+      '/api/v1/auth/refresh',
+      {},
+      {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Context': 'admin',
+        },
+      }
+    )
     .then((res) => {
       return Boolean(res.data?.success);
     })

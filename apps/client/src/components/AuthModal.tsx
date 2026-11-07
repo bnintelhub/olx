@@ -40,7 +40,10 @@ export const AuthModal: React.FC = () => {
     try {
       const res = await fetch('/api/v1/auth/otp/send', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Context': 'client',
+        },
         body: JSON.stringify({ phoneNumber: clean }),
       });
 
@@ -96,7 +99,10 @@ export const AuthModal: React.FC = () => {
     try {
       const res = await fetch('/api/v1/auth/otp/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Context': 'client',
+        },
         body: JSON.stringify({
           sessionId,
           phoneNumber: cleanPhone,

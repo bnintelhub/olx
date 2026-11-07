@@ -17,25 +17,47 @@ import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/app-error';
 import { AuthTokens } from './auth.types';
 
+// Cookie names are strictly separated so Admin console and Client website sessions
+// never collide or overwrite each other when running in the same browser.
+export const AUTH_COOKIE_NAMES = {
+  CLIENT: {
+    ACCESS: 'access_token',
+    REFRESH: 'refresh_token',
+  },
+  ADMIN: {
+    ACCESS: 'admin_access_token',
+    REFRESH: 'admin_refresh_token',
+  },
+} as const;
+
+export function getAuthContext(request: FastifyRequest): 'admin' | 'client' {
+  const contextHeader = (request.headers['x-app-context'] as string)?.toLowerCase();
+  if (contextHeader === 'admin') return 'admin';
+  if (request.url?.includes('/admin')) return 'admin';
+  return 'client';
+}
+
 // Sets secure HTTP-only cookies on reply to keep the user logged in across page reloads.
 // Configures short-lived access token and 30-day refresh token with CSRF-safe SameSite.
-function setAuthCookies(reply: FastifyReply, tokens: AuthTokens) {
+function setAuthCookies(reply: FastifyReply, tokens: AuthTokens, context: 'admin' | 'client' = 'client') {
+  const isProd = env.NODE_ENV === 'production';
+  const cookieNames = context === 'admin' ? AUTH_COOKIE_NAMES.ADMIN : AUTH_COOKIE_NAMES.CLIENT;
   const accessMaxAge = tokens.expiresInSeconds && tokens.expiresInSeconds > 900
     ? tokens.expiresInSeconds
     : 24 * 60 * 60; // 24 hours for staff sessions
 
-  reply.setCookie('access_token', tokens.accessToken, {
+  reply.setCookie(cookieNames.ACCESS, tokens.accessToken, {
     path: '/',
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
+    secure: isProd,
     sameSite: 'lax',
     maxAge: accessMaxAge,
   });
 
-  reply.setCookie('refresh_token', tokens.refreshToken, {
+  reply.setCookie(cookieNames.REFRESH, tokens.refreshToken, {
     path: '/',
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
+    secure: isProd,
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60,
   });
@@ -43,9 +65,10 @@ function setAuthCookies(reply: FastifyReply, tokens: AuthTokens) {
 
 // Clears authentication cookies from the client browser on user logout.
 // Ensures expired or terminated sessions cannot be replayed from the browser.
-function clearAuthCookies(reply: FastifyReply) {
-  reply.clearCookie('access_token', { path: '/' });
-  reply.clearCookie('refresh_token', { path: '/' });
+function clearAuthCookies(reply: FastifyReply, context: 'admin' | 'client' = 'client') {
+  const cookieNames = context === 'admin' ? AUTH_COOKIE_NAMES.ADMIN : AUTH_COOKIE_NAMES.CLIENT;
+  reply.clearCookie(cookieNames.ACCESS, { path: '/' });
+  reply.clearCookie(cookieNames.REFRESH, { path: '/' });
 }
 
 export class AuthController {
@@ -74,8 +97,9 @@ export class AuthController {
   static async login(request: FastifyRequest, reply: FastifyReply) {
     const body = loginSchema.parse(request.body);
     const result = await AuthService.login(body);
+    const context = getAuthContext(request);
 
-    setAuthCookies(reply, result.tokens);
+    setAuthCookies(reply, result.tokens, context);
 
     await writeAuditLog({
       userId: result.user.id,
@@ -96,8 +120,9 @@ export class AuthController {
   static async verifyEmailOtp(request: FastifyRequest, reply: FastifyReply) {
     const body = verifyEmailOtpSchema.parse(request.body);
     const result = await AuthService.verifyEmailOtp(body);
+    const context = getAuthContext(request);
 
-    setAuthCookies(reply, result.tokens);
+    setAuthCookies(reply, result.tokens, context);
 
     await writeAuditLog({
       userId: result.user.id,
@@ -181,8 +206,9 @@ export class AuthController {
   static async verifyOtp(request: FastifyRequest, reply: FastifyReply) {
     const { phoneNumber, sessionId, otp } = verifyOtpSchema.parse(request.body);
     const result = await AuthService.verifyOtp(sessionId, phoneNumber, otp);
+    const context = getAuthContext(request);
 
-    setAuthCookies(reply, result.tokens);
+    setAuthCookies(reply, result.tokens, context);
 
     await writeAuditLog({
       userId: result.user.id,
@@ -202,15 +228,19 @@ export class AuthController {
   // Exchanges a valid long-lived refresh token for a newly minted access token pair.
   // Reads refresh token from request body with fallback to HTTP-only cookie.
   static async refreshTokens(request: FastifyRequest, reply: FastifyReply) {
+    const context = getAuthContext(request);
     const bodyToken = (request.body as { refreshToken?: string })?.refreshToken;
-    const refreshToken = bodyToken || request.cookies?.refresh_token;
+    const cookieToken = context === 'admin'
+      ? request.cookies?.admin_refresh_token
+      : request.cookies?.refresh_token;
+    const refreshToken = bodyToken || cookieToken;
 
     if (!refreshToken) {
       throw new AppError(400, 'REFRESH_TOKEN_REQUIRED', 'Refresh token is required in request body or cookie');
     }
 
     const tokens = await AuthService.refreshTokens(refreshToken);
-    setAuthCookies(reply, tokens);
+    setAuthCookies(reply, tokens, context);
 
     return reply.status(200).send({
       success: true,
@@ -225,7 +255,8 @@ export class AuthController {
     try {
       const result = await AuthService.adminLogin(username, password, role);
 
-      setAuthCookies(reply, result.tokens);
+      // Explicitly set Admin-scoped cookies so Client website session is never touched
+      setAuthCookies(reply, result.tokens, 'admin');
 
       await writeAuditLog({
         userId: result.user.id,
@@ -264,8 +295,9 @@ export class AuthController {
   // Terminates the authenticated user session by clearing refresh token hashes in Postgres.
   // Clears HTTP-only browser cookies and records an audit log entry.
   static async logout(request: FastifyRequest, reply: FastifyReply) {
+    const context = getAuthContext(request);
     await AuthService.logout(request.user!.id);
-    clearAuthCookies(reply);
+    clearAuthCookies(reply, context);
 
     await writeAuditLog({
       userId: request.user!.id,
@@ -295,7 +327,8 @@ export class AuthController {
     const body = acceptInvitationSchema.parse(request.body);
     const result = await AuthService.acceptStaffInvitation(body);
 
-    setAuthCookies(reply, result.tokens);
+    // Explicitly set Admin-scoped cookies for staff member onboarding
+    setAuthCookies(reply, result.tokens, 'admin');
 
     await writeAuditLog({
       userId: result.user.id,

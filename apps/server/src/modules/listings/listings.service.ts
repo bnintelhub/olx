@@ -46,11 +46,9 @@ export class ListingsService {
         );
       }
     }
-
     const shortId = Math.random().toString(36).substring(2, 8);
     const baseSlug = this.slugify(data.title);
     const slug = `${baseSlug}-${shortId}`;
-
     const latitude = data.latitude || location.latitude;
     const longitude = data.longitude || location.longitude;
 
@@ -115,34 +113,21 @@ export class ListingsService {
 
       if (data.images && data.images.length > 0) {
         const imageRows = data.images.map((img, idx) => {
-          if (img.mediaId) {
-            const media = userMediaList.find((m) => m.id === img.mediaId);
-            const variants = (media?.variants as any) || {};
-            return {
-              adId: createdAd.id,
-              mediaId: img.mediaId,
-              originalUrl: variants.large || variants.card || img.url || media?.diskPath || '',
-              displayUrl: variants.card || variants.large || img.url || media?.diskPath || '',
-              thumbnailUrl: variants.thumbnail || variants.card || img.url || media?.diskPath || '',
-              sortOrder: img.sortOrder !== undefined ? img.sortOrder : idx,
-              isCover: img.isCover !== undefined ? img.isCover : idx === 0,
-            };
-          }
-
+          const media = img.mediaId ? userMediaList.find((m) => m.id === img.mediaId) : null;
+          const variants = (media?.variants as any) || {};
+          const fallback = img.url || media?.diskPath || '';
           return {
             adId: createdAd.id,
-            mediaId: null,
-            originalUrl: img.url || '',
-            displayUrl: img.url || '',
-            thumbnailUrl: img.url || '',
+            mediaId: img.mediaId || null,
+            originalUrl: variants.large || variants.card || fallback,
+            displayUrl: variants.card || variants.large || fallback,
+            thumbnailUrl: variants.thumbnail || variants.card || fallback,
             sortOrder: img.sortOrder !== undefined ? img.sortOrder : idx,
             isCover: img.isCover !== undefined ? img.isCover : idx === 0,
           };
         });
 
-        await tx.adImage.createMany({
-          data: imageRows,
-        });
+        await tx.adImage.createMany({ data: imageRows });
 
         // Mark referenced media as attached in atomic transaction
         if (mediaIds.length > 0) {
@@ -209,10 +194,28 @@ export class ListingsService {
             name: true,
             slug: true,
             type: true,
-            parent: { select: { id: true, name: true, slug: true } },
+            latitude: true,
+            longitude: true,
+            parent: { select: { id: true, name: true, slug: true, latitude: true, longitude: true } },
           },
         },
         images: { orderBy: { sortOrder: 'asc' } },
+        attributeValues: {
+          include: {
+            attribute: {
+              select: {
+                id: true,
+                name: true,
+                key: true,
+                displayLabel: true,
+                type: true,
+                unit: true,
+                displayOrder: true,
+              },
+            },
+          },
+          orderBy: { attribute: { displayOrder: 'asc' } },
+        },
         user: {
           select: {
             id: true,
@@ -247,8 +250,12 @@ export class ListingsService {
       where: { userId: ad.userId, status: AdStatus.ACTIVE, deletedAt: null },
     });
 
+    const attributes = (ad.attributesCache as Record<string, any>) || {};
+
     return {
       ...ad,
+      attributes,
+      attributesCache: attributes,
       seller: {
         ...ad.user,
         maskedPhone,
@@ -337,15 +344,7 @@ export class ListingsService {
       _count: { _all: true },
     });
 
-    const counts: Record<string, number> = {
-      ACTIVE: 0,
-      PENDING_REVIEW: 0,
-      SOLD: 0,
-      EXPIRED: 0,
-      ARCHIVED: 0,
-      DRAFT: 0,
-      REJECTED: 0,
-    };
+    const counts: Record<string, number> = { ACTIVE: 0, PENDING_REVIEW: 0, SOLD: 0, EXPIRED: 0, ARCHIVED: 0, DRAFT: 0, REJECTED: 0 };
 
     statusCounts.forEach((c) => {
       counts[c.status] = c._count._all;

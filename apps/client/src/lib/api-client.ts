@@ -7,7 +7,15 @@ export const apiClient = axios.create({
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
+    'X-App-Context': 'client',
   },
+});
+
+// Request interceptor guaranteeing Client application context header on every outbound request
+apiClient.interceptors.request.use((config) => {
+  config.headers = config.headers || {};
+  config.headers['X-App-Context'] = 'client';
+  return config;
 });
 
 // Mutex promise to prevent duplicate concurrent refresh requests
@@ -21,7 +29,17 @@ export async function executeSilentRefresh(): Promise<boolean> {
 
   // Use raw axios to bypass apiClient interceptors and avoid recursion
   refreshPromise = axios
-    .post('/api/v1/auth/refresh', {}, { withCredentials: true })
+    .post(
+      '/api/v1/auth/refresh',
+      {},
+      {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Context': 'client',
+        },
+      }
+    )
     .then((res) => {
       return Boolean(res.data?.success);
     })

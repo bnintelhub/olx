@@ -23,7 +23,9 @@ export const categoriesService = {
   // Get dynamic category attributes / specifications
   async getCategoryAttributes(categoryId: string): Promise<any[]> {
     const { data } = await apiClient.get(`/categories/${categoryId}/attributes`);
-    return data.success && data.data ? data.data.attributes || [] : [];
+    if (!data?.success || !data?.data) return [];
+    if (Array.isArray(data.data)) return data.data;
+    return data.data.attributes || [];
   },
 };
 

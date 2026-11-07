@@ -11,6 +11,15 @@ export interface AdsQueryParams {
   page?: number;
   limit?: number;
   featured?: boolean;
+  brand?: string;
+  year?: string;
+  owner?: string;
+  fuel_type?: string;
+  transmission?: string;
+  bhk?: string;
+  furnishing?: string;
+  storage?: string;
+  [key: string]: any;
 }
 
 export interface AdsListResponse {

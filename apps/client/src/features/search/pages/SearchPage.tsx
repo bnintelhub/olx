@@ -1,46 +1,148 @@
-import React, { useState, useMemo } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import {
-  Filter,
-  X,
-  ChevronDown,
-  RotateCcw,
-  Search,
-  MapPin,
-  SlidersHorizontal,
-  ChevronRight,
-  ArrowLeft,
-  Sparkles,
-  Layers,
-} from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAdsQuery } from '@/features/ads/hook/useAdsQuery';
-import { useCategoriesTreeQuery } from '@/features/categories/hook/useCategoriesQuery';
 import { AdCard } from '@/features/ads/components/AdCard';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { categoriesService } from '@/features/categories/service/categories.service';
+import { Category, LocationItem } from '@/types';
+import { SearchHeaderBar } from '../components/SearchHeaderBar';
+import { SearchActiveBadges, ActiveFilterItem } from '../components/SearchActiveBadges';
+import { SearchFilterSidebar, CategoryAttributeItem } from '../components/SearchFilterSidebar';
 
 export const SearchPage: React.FC = () => {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Primary URL Query Params
   const q = searchParams.get('q') || '';
   const category = searchParams.get('category') || '';
   const city = searchParams.get('city') || '';
   const sort = searchParams.get('sort') || 'newest';
   const minPrice = searchParams.get('minPrice') || '';
   const maxPrice = searchParams.get('maxPrice') || '';
+  const page = Number(searchParams.get('page') || '1');
 
+  // Local Form Buffers
   const [localQ, setLocalQ] = useState(q);
   const [localMin, setLocalMin] = useState(minPrice);
   const [localMax, setLocalMax] = useState(maxPrice);
   const [showMobileFilter, setShowMobileFilter] = useState(false);
 
-  const { data: categories = [] } = useCategoriesTreeQuery();
+  // Metadata State
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [cities, setCities] = useState<LocationItem[]>([]);
+  const [dynamicAttributes, setDynamicAttributes] = useState<CategoryAttributeItem[]>([]);
+  const [isLoadingAttributes, setIsLoadingAttributes] = useState(false);
 
-  const queryParams = useMemo(
-    () => ({
+  // Sync inputs with URL params
+  useEffect(() => {
+    setLocalQ(q);
+  }, [q]);
+
+  useEffect(() => {
+    setLocalMin(minPrice);
+    setLocalMax(maxPrice);
+  }, [minPrice, maxPrice]);
+
+  // Load Categories & Cities taxonomy metadata
+  useEffect(() => {
+    categoriesService
+      .getCategoriesTree()
+      .then((tree: any) => {
+        if (Array.isArray(tree) && tree.length > 0) setCategories(tree);
+        else categoriesService.getCategories().then((flat: any) => setCategories(flat));
+      })
+      .catch(() => {
+        categoriesService.getCategories().then((flat: any) => setCategories(flat)).catch(() => {});
+      });
+
+    fetch('/api/v1/locations/cities')
+      .then((r) => r.json())
+      .then((d) => {
+        if (d?.success && Array.isArray(d.data)) setCities(d.data);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Resolve currently active category
+  const activeCategory = useMemo(() => {
+    if (!category || !categories.length) return null;
+    const target = category.toLowerCase().trim();
+
+    const findInTree = (nodes: Category[]): Category | null => {
+      for (const node of nodes) {
+        const s = (node.slug || '').toLowerCase();
+        const id = (node.id || '').toLowerCase();
+        const name = (node.name || '').toLowerCase();
+
+        // Exact match by slug, id, or name
+        if (s === target || id === target || name === target) return node;
+        // Singular / plural flexibility (e.g. "cars" matches "car", "vehicles" matches "vehicle")
+        if (target.endsWith('s') && s === target.slice(0, -1)) return node;
+        if (!target.endsWith('s') && s === `${target}s`) return node;
+
+        const sub = (node as any).children || node.subcategories;
+        if (sub?.length) {
+          const match = findInTree(sub);
+          if (match) return match;
+        }
+      }
+      return null;
+    };
+    return findInTree(categories);
+  }, [category, categories]);
+
+  // Load dynamic attributes when active category changes
+  useEffect(() => {
+    if (!activeCategory?.id) {
+      setDynamicAttributes([]);
+      return;
+    }
+
+    let isCurrent = true;
+    setIsLoadingAttributes(true);
+
+    // Immediate fallback from embedded tree attributes if present
+    const directAttrs = activeCategory.attributes || [];
+    const childAttrs: any[] = [];
+    const children = (activeCategory as any).children || activeCategory.subcategories || [];
+    for (const ch of children) {
+      if (Array.isArray(ch.attributes)) childAttrs.push(...ch.attributes);
+    }
+    const initialAttrs = [...directAttrs, ...childAttrs].filter((a) => a && a.isFilterable !== false);
+    if (initialAttrs.length > 0) {
+      setDynamicAttributes(initialAttrs);
+    }
+
+    categoriesService
+      .getCategoryAttributes(activeCategory.id)
+      .then((attrs: any) => {
+        if (!isCurrent) return;
+        if (Array.isArray(attrs) && attrs.length > 0) {
+          const filterable = attrs
+            .filter((a: any) => a.isFilterable !== false)
+            .sort((a: any, b: any) => (a.displayOrder || 0) - (b.displayOrder || 0));
+          setDynamicAttributes(filterable);
+        } else if (initialAttrs.length === 0) {
+          setDynamicAttributes([]);
+        }
+      })
+      .catch(() => {
+        if (isCurrent && initialAttrs.length === 0) setDynamicAttributes([]);
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingAttributes(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeCategory]);
+
+  // Construct query parameters payload dynamically from searchParams
+  const queryParams = useMemo(() => {
+    const params: Record<string, any> = {
       q: q || undefined,
       category: category || undefined,
       city: city || undefined,
@@ -48,21 +150,48 @@ export const SearchPage: React.FC = () => {
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
       limit: 24,
-    }),
-    [q, category, city, sort, minPrice, maxPrice]
-  );
+    };
 
-  const { data, isLoading, isFetching } = useAdsQuery(queryParams);
-  const ads = data?.ads || [];
-  const total = data?.total || ads.length;
+    searchParams.forEach((val, key) => {
+      if (
+        !['q', 'category', 'city', 'sort', 'minPrice', 'maxPrice', 'limit', 'page'].includes(key) &&
+        val
+      ) {
+        params[key] = val;
+      }
+    });
 
-  const updateParam = (key: string, value: string) => {
+    return params;
+  }, [q, category, city, sort, minPrice, maxPrice, searchParams]);
+
+  const { data: adsResult, isLoading, isFetching } = useAdsQuery(queryParams);
+
+  const ads = useMemo(() => {
+    if (!adsResult) return [];
+    if (Array.isArray(adsResult)) return adsResult;
+    return adsResult.ads || (adsResult as any).data || [];
+  }, [adsResult]);
+
+  const total = useMemo(() => {
+    if (!adsResult) return 0;
+    if (Array.isArray(adsResult)) return adsResult.length;
+    return adsResult.total ?? (adsResult as any).meta?.total ?? ads.length;
+  }, [adsResult, ads.length]);
+
+  const updateParam = (key: string, val: string) => {
     const next = new URLSearchParams(searchParams);
-    if (!value) {
-      next.delete(key);
-    } else {
-      next.set(key, value);
-    }
+    if (val) next.set(key, val);
+    else next.delete(key);
+    next.set('page', '1');
+    setSearchParams(next);
+  };
+
+  const handleApplyBudget = (min: string, max: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (min) next.set('minPrice', min);
+    else next.delete('minPrice');
+    if (max) next.set('maxPrice', max);
+    else next.delete('maxPrice');
     setSearchParams(next);
   };
 
@@ -73,12 +202,7 @@ export const SearchPage: React.FC = () => {
 
   const handlePriceSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const next = new URLSearchParams(searchParams);
-    if (localMin) next.set('minPrice', localMin);
-    else next.delete('minPrice');
-    if (localMax) next.set('maxPrice', localMax);
-    else next.delete('maxPrice');
-    setSearchParams(next);
+    handleApplyBudget(localMin, localMax);
   };
 
   const handleClearAll = () => {
@@ -88,149 +212,104 @@ export const SearchPage: React.FC = () => {
     setSearchParams(new URLSearchParams());
   };
 
-  const activeFiltersCount = [q, category, city, minPrice, maxPrice].filter(Boolean).length;
+  const activeFilters = useMemo(() => {
+    const list: ActiveFilterItem[] = [];
+    if (q) list.push({ key: 'q', label: 'Keyword', value: `"${q}"` });
+    if (category) {
+      list.push({ key: 'category', label: 'Category', value: activeCategory?.name || category });
+    }
+    if (city) {
+      const c = cities.find((ci) => ci.slug === city);
+      list.push({ key: 'city', label: 'Location', value: c?.name || city });
+    }
+    if (minPrice || maxPrice) {
+      const minText = minPrice ? `₹${Number(minPrice).toLocaleString('en-IN')}` : '₹0';
+      const maxText = maxPrice ? `₹${Number(maxPrice).toLocaleString('en-IN')}` : 'Any';
+      list.push({ key: 'price', label: 'Price', value: `${minText} - ${maxText}` });
+    }
+
+    searchParams.forEach((val, k) => {
+      if (
+        !['q', 'category', 'city', 'sort', 'minPrice', 'maxPrice', 'limit', 'page'].includes(k) &&
+        val
+      ) {
+        const attrDef = dynamicAttributes.find((a) => a.key === k);
+        const label = attrDef?.name || k.replace(/_/g, ' ').toUpperCase();
+        list.push({ key: k, label, value: val });
+      }
+    });
+
+    return list;
+  }, [q, category, activeCategory, city, minPrice, maxPrice, searchParams, cities, dynamicAttributes]);
+
+  const removeFilter = (key: string) => {
+    if (key === 'price') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('minPrice');
+      next.delete('maxPrice');
+      setLocalMin('');
+      setLocalMax('');
+      setSearchParams(next);
+    } else {
+      updateParam(key, '');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#F5F7F8] pb-16">
-      {/* Top Search Bar & Breadcrumbs */}
-      <div className="bg-white border-b border-[#E5EAED] sticky top-0 z-20 shadow-xs">
-        <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 py-3.5">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            {/* Breadcrumb */}
-            <div className="flex items-center gap-2 text-xs text-gray-500 w-full sm:w-auto">
-              <button
-                onClick={() => navigate('/')}
-                className="flex items-center gap-1 font-bold text-[#002f34] hover:underline"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Home</span>
-              </button>
-              <span className="text-gray-300">/</span>
-              <span className="text-gray-800 font-semibold truncate">
-                {category ? `Category: ${category}` : q ? `Search: "${q}"` : 'Marketplace Listings'}
-              </span>
-            </div>
-
-            {/* In-page search bar */}
-            <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full sm:w-96">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <Input
-                  value={localQ}
-                  onChange={(e) => setLocalQ(e.target.value)}
-                  placeholder="Search products, brands, cars..."
-                  className="pl-9 h-10 text-xs rounded-xl"
-                />
-              </div>
-              <Button type="submit" size="sm" className="h-10 px-4 text-xs font-bold rounded-xl">
-                Search
-              </Button>
-            </form>
-          </div>
-        </div>
-      </div>
+      {/* Top Search Header Bar (Matches screenshot: Home / Category: <Name> on left, Capsule Search on right) */}
+      <SearchHeaderBar
+        activeCategoryName={activeCategory?.name}
+        categoryParam={category}
+        queryParam={q}
+        localQuery={localQ}
+        onQueryChange={setLocalQ}
+        onSearchSubmit={handleSearchSubmit}
+      />
 
       <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-6">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Desktop Filter Sidebar (3 cols) */}
-          <div className="hidden lg:block lg:col-span-3 space-y-6">
-            <Card className="rounded-2xl border-[#E5EAED] shadow-sm">
-              <CardContent className="p-5 space-y-6">
-                <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                  <div className="flex items-center gap-2 font-bold text-sm text-[#002f34]">
-                    <SlidersHorizontal className="w-4 h-4" />
-                    <span>Filters</span>
-                    {activeFiltersCount > 0 && (
-                      <Badge variant="secondary" className="text-[10px] h-5">
-                        {activeFiltersCount}
-                      </Badge>
-                    )}
-                  </div>
-                  {activeFiltersCount > 0 && (
-                    <button
-                      onClick={handleClearAll}
-                      className="text-xs text-teal-800 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>Clear All</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Categories Accordion */}
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                    <Layers className="w-3.5 h-3.5" />
-                    <span>Categories</span>
-                  </h4>
-                  <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
-                    <button
-                      onClick={() => updateParam('category', '')}
-                      className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg transition font-medium ${
-                        !category ? 'bg-teal-50 text-teal-900 font-bold' : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      All Categories
-                    </button>
-                    {categories.map((cat) => (
-                      <button
-                        key={cat.id || cat.slug}
-                        onClick={() => updateParam('category', cat.slug)}
-                        className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg transition flex items-center justify-between ${
-                          category === cat.slug
-                            ? 'bg-teal-50 text-teal-900 font-bold'
-                            : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <span className="truncate">{cat.name}</span>
-                        {cat.subcategories && cat.subcategories.length > 0 && (
-                          <span className="text-[10px] text-gray-400">
-                            {cat.subcategories.length}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Price Range Filter */}
-                <div className="space-y-3 pt-3 border-t border-gray-100">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                    Price Range (₹)
-                  </h4>
-                  <form onSubmit={handlePriceSubmit} className="space-y-3">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input
-                        type="number"
-                        placeholder="Min"
-                        value={localMin}
-                        onChange={(e) => setLocalMin(e.target.value)}
-                        className="h-9 text-xs"
-                      />
-                      <Input
-                        type="number"
-                        placeholder="Max"
-                        value={localMax}
-                        onChange={(e) => setLocalMax(e.target.value)}
-                        className="h-9 text-xs"
-                      />
-                    </div>
-                    <Button type="submit" variant="outline" size="sm" className="w-full text-xs font-semibold">
-                      Apply Price
-                    </Button>
-                  </form>
-                </div>
+          <div className="hidden lg:block lg:col-span-3">
+            <Card className="rounded-2xl border-[#E5EAED] shadow-sm sticky top-16">
+              <CardContent className="p-5 max-h-[calc(100vh-5rem)] overflow-y-auto">
+                <SearchFilterSidebar
+                  categories={categories}
+                  selectedCategorySlug={category}
+                  activeCategory={activeCategory}
+                  cities={cities}
+                  selectedCitySlug={city}
+                  minPrice={minPrice}
+                  maxPrice={maxPrice}
+                  localMin={localMin}
+                  localMax={localMax}
+                  onLocalMinChange={setLocalMin}
+                  onLocalMaxChange={setLocalMax}
+                  onPriceSubmit={handlePriceSubmit}
+                  onApplyBudget={handleApplyBudget}
+                  dynamicAttributes={dynamicAttributes}
+                  isLoadingAttributes={isLoadingAttributes}
+                  activeFilters={activeFilters}
+                  onUpdateParam={updateParam}
+                  onClearAll={handleClearAll}
+                  getParamValue={(k) => searchParams.get(k) || ''}
+                />
               </CardContent>
             </Card>
           </div>
 
           {/* Results Column (9 cols) */}
-          <div className="lg:col-span-9 space-y-5">
+          <div className="lg:col-span-9 space-y-4">
             {/* Top Toolbar */}
-            <div className="bg-white p-4 rounded-2xl border border-[#E5EAED] shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div className="bg-white p-4 rounded-2xl border border-[#E5EAED] shadow-xs flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h1 className="text-base sm:text-lg font-bold text-[#002f34]">
-                  {category ? `Listings in ${category}` : q ? `Results for "${q}"` : 'All Marketplace Listings'}
+                <h1 className="text-base sm:text-lg font-extrabold text-[#002f34]">
+                  {activeCategory
+                    ? `Listings in ${activeCategory.name}`
+                    : q
+                    ? `Results for "${q}"`
+                    : 'All Classified Ads'}
+                  {city && <span className="text-gray-500 font-normal"> in {city.toUpperCase()}</span>}
                 </h1>
                 <p className="text-xs text-gray-500 mt-0.5">
                   Showing {total} {total === 1 ? 'listing' : 'listings'}
@@ -239,33 +318,39 @@ export const SearchPage: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-3">
-                {/* Mobile Filter Trigger */}
+                {/* Mobile Filter Button */}
                 <Button
                   onClick={() => setShowMobileFilter(true)}
                   variant="outline"
                   size="sm"
-                  className="lg:hidden text-xs gap-1.5"
+                  className="lg:hidden text-xs gap-1.5 border-teal-700 text-teal-800 font-bold"
                 >
                   <Filter className="w-3.5 h-3.5" />
-                  <span>Filters ({activeFiltersCount})</span>
+                  <span>Filters ({activeFilters.length})</span>
                 </Button>
 
-                {/* Sort dropdown */}
+                {/* Sort selector */}
                 <div className="flex items-center gap-2 text-xs">
-                  <span className="text-gray-500 hidden sm:inline">Sort by:</span>
+                  <span className="text-gray-500 hidden sm:inline font-medium">Sort by:</span>
                   <select
                     value={sort}
                     onChange={(e) => updateParam('sort', e.target.value)}
-                    className="bg-gray-50 border border-[#E5EAED] rounded-xl px-3 py-1.5 text-xs text-gray-800 font-semibold focus:outline-none focus:ring-1 focus:ring-teal-700 cursor-pointer"
+                    className="h-9 text-xs bg-white border border-[#D8DFE2] rounded-xl px-3 font-semibold text-[#002f34] focus:outline-none focus:border-teal-700 cursor-pointer shadow-xs"
                   >
-                    <option value="newest">Newly Listed</option>
+                    <option value="newest">Newest First</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
-                    <option value="popular">Most Popular</option>
                   </select>
                 </div>
               </div>
             </div>
+
+            {/* Active Filters Pill Bar */}
+            <SearchActiveBadges
+              activeFilters={activeFilters}
+              onRemoveFilter={removeFilter}
+              onClearAll={handleClearAll}
+            />
 
             {/* Listings Grid */}
             {isLoading ? (
@@ -275,37 +360,96 @@ export const SearchPage: React.FC = () => {
                     key={i}
                     className="bg-white rounded-2xl border border-[#E5EAED] overflow-hidden animate-pulse flex flex-col"
                   >
-                    <div className="aspect-[16/10] bg-gray-200" />
+                    <div className="aspect-[4/3] bg-gray-200" />
                     <div className="p-4 space-y-3">
-                      <div className="h-5 bg-gray-200 rounded w-1/3" />
+                      <div className="h-6 bg-gray-200 rounded w-1/2" />
                       <div className="h-4 bg-gray-200 rounded w-3/4" />
-                      <div className="h-3 bg-gray-200 rounded w-1/2" />
+                      <div className="h-3 bg-gray-200 rounded w-1/3" />
                     </div>
                   </div>
                 ))}
               </div>
             ) : ads.length === 0 ? (
-              <div className="bg-white rounded-2xl border border-[#E5EAED] p-12 text-center max-w-md mx-auto my-8">
-                <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                <h3 className="font-bold text-gray-800 text-base">No matching listings found</h3>
-                <p className="text-xs text-gray-500 mt-1 mb-6">
-                  Try adjusting your search keywords, clearing filters, or browsing other categories.
-                </p>
-                <Button onClick={handleClearAll} variant="outline" size="sm">
+              <div className="bg-white rounded-3xl border border-[#E5EAED] p-12 text-center space-y-4 shadow-xs">
+                <div className="w-16 h-16 rounded-full bg-teal-50 text-teal-800 flex items-center justify-center mx-auto text-2xl font-bold">
+                  🔍
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-[#002f34]">No matching listings found</h3>
+                  <p className="text-xs text-gray-500 max-w-md mx-auto mt-1">
+                    Try adjusting your filters, searching for broader terms, or exploring other categories.
+                  </p>
+                </div>
+                <Button onClick={handleClearAll} variant="default" size="sm" className="font-bold">
                   Clear All Filters
                 </Button>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                {ads.map((ad) => (
-                  <AdCard key={ad.id} ad={ad} />
+                {ads.map((item: any) => (
+                  <AdCard key={item.id} ad={item} />
                 ))}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Mobile Filters Slide-over / Modal */}
+      {showMobileFilter && (
+        <div className="fixed inset-0 z-50 lg:hidden flex">
+          <div
+            className="fixed inset-0 bg-black/50 transition-opacity"
+            onClick={() => setShowMobileFilter(false)}
+          />
+          <div className="relative ml-auto w-full max-w-xs bg-white h-full shadow-2xl flex flex-col z-10">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <span className="font-bold text-sm text-[#002f34]">Filter Classifieds</span>
+              <button
+                onClick={() => setShowMobileFilter(false)}
+                className="p-1 text-gray-400 hover:text-gray-700"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              <SearchFilterSidebar
+                categories={categories}
+                selectedCategorySlug={category}
+                activeCategory={activeCategory}
+                cities={cities}
+                selectedCitySlug={city}
+                minPrice={minPrice}
+                maxPrice={maxPrice}
+                localMin={localMin}
+                localMax={localMax}
+                onLocalMinChange={setLocalMin}
+                onLocalMaxChange={setLocalMax}
+                onPriceSubmit={(e) => {
+                  handlePriceSubmit(e);
+                  setShowMobileFilter(false);
+                }}
+                onApplyBudget={(min, max) => {
+                  handleApplyBudget(min, max);
+                  setShowMobileFilter(false);
+                }}
+                dynamicAttributes={dynamicAttributes}
+                isLoadingAttributes={isLoadingAttributes}
+                activeFilters={activeFilters}
+                onUpdateParam={(k, v) => {
+                  updateParam(k, v);
+                  setShowMobileFilter(false);
+                }}
+                onClearAll={() => {
+                  handleClearAll();
+                  setShowMobileFilter(false);
+                }}
+                getParamValue={(k) => searchParams.get(k) || ''}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-

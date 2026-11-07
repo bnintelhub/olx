@@ -121,14 +121,16 @@ export function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Active Listings</span>
+            <span className="text-xs font-medium text-muted-foreground">Marketplace Listings</span>
             <ShoppingBag className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {(stats?.activeAds ?? 0).toLocaleString('en-IN')}
+              {(stats?.totalAds ?? stats?.activeAds ?? 0).toLocaleString('en-IN')}
             </div>
-            <p className="text-[11px] text-emerald-600 font-medium mt-1">Live in marketplace</p>
+            <p className="text-[11px] text-emerald-600 font-medium mt-1">
+              {stats?.activeAds ?? 0} active · {stats?.pendingAds ?? 0} pending
+            </p>
           </CardContent>
         </Card>
 

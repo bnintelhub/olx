@@ -36,14 +36,14 @@ export function SuperAdminDashboard() {
   const pendingAds = stats?.pendingAds ?? 0;
 
   const statusData = stats?.statusDistribution?.filter((s) => s.value > 0).length
-    ? stats.statusDistribution
+    ? stats.statusDistribution.filter((s) => s.value > 0)
     : [
         { name: 'Active', value: stats?.activeAds ?? 0, color: '#10b981' },
         { name: 'Pending Review', value: stats?.pendingAds ?? 0, color: '#f59e0b' },
         { name: 'Sold / Closed', value: stats?.soldAds ?? 0, color: '#3b82f6' },
         { name: 'Expired', value: stats?.expiredAds ?? 0, color: '#94a3b8' },
         { name: 'Rejected', value: stats?.rejectedAds ?? 0, color: '#ef4444' },
-      ];
+      ].filter((s) => s.value > 0);
 
   // Dynamic growth trajectory points leading up to current totals
   const growthTimeline = [

@@ -84,8 +84,12 @@ export const useAuthStore = create<AuthState>()(
           // Guest user or token expired
         }
 
+        // Reset state and clear stale storage tokens on unauthenticated status
+        localStorage.removeItem('olx_access_token');
+        localStorage.removeItem('token');
         set({
           user: null,
+          token: null,
           isAuthenticated: false,
           isLoading: false,
         });

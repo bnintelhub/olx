@@ -68,13 +68,20 @@ export class SearchService {
       const conditions: Prisma.AdWhereInput[] = [];
       for (const [key, value] of Object.entries(params.attributes)) {
         if (value !== undefined && value !== null && value !== '') {
+          const strVal = String(value).trim();
           conditions.push({
-            attributeValues: {
-              some: {
-                attribute: { key },
-                value: String(value),
+            OR: [
+              {
+                attributeValues: {
+                  some: {
+                    attribute: { key: { equals: key, mode: 'insensitive' } },
+                    value: { contains: strVal, mode: 'insensitive' },
+                  },
+                },
               },
-            },
+              { title: { contains: strVal, mode: 'insensitive' } },
+              { description: { contains: strVal, mode: 'insensitive' } },
+            ],
           });
         }
       }

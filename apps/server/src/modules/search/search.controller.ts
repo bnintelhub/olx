@@ -7,15 +7,34 @@ export class SearchController {
     const query = request.query as Record<string, any>;
     const parsed = searchSchema.parse(query);
 
+    const standardKeys = new Set([
+      'q',
+      'categoryId',
+      'categorySlug',
+      'category',
+      'locationId',
+      'citySlug',
+      'city',
+      'minPrice',
+      'maxPrice',
+      'sort',
+      'page',
+      'limit',
+    ]);
+
     const attributes: Record<string, any> = {};
-    for (const key of Object.keys(query || {})) {
+    for (const [key, val] of Object.entries(query || {})) {
       if (key.startsWith('attr_')) {
-        attributes[key.replace('attr_', '')] = query[key];
+        attributes[key.replace('attr_', '')] = val;
+      } else if (!standardKeys.has(key) && val !== undefined && val !== null && val !== '') {
+        attributes[key] = val;
       }
     }
 
     const result = await SearchService.search({
       ...parsed,
+      categorySlug: parsed.categorySlug || parsed.category,
+      citySlug: parsed.citySlug || parsed.city,
       attributes,
     });
 

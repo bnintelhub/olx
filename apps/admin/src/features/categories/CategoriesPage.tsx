@@ -34,7 +34,9 @@ import {
   ExternalLink,
   Tag,
   Info,
+  SlidersHorizontal,
 } from 'lucide-react';
+import { CategoryAttributesModal } from './components/CategoryAttributesModal';
 import { useCategoryTree } from './hook/useCategoriesQuery';
 import {
   useCreateCategoryMutation,
@@ -446,6 +448,7 @@ export function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
   const [deletingCategory, setDeletingCategory] = useState<CategoryItem | null>(null);
   const [detailsCategory, setDetailsCategory] = useState<CategoryItem | null>(null);
+  const [attributeCategory, setAttributeCategory] = useState<CategoryItem | null>(null);
   const [copiedId, setCopiedId] = useState(false);
 
   // Form State
@@ -753,6 +756,23 @@ export function CategoriesPage() {
               onClick={() => handleMoveSibling(cat, 'DOWN', siblings)}
             >
               <ArrowDown className="h-3 w-3" />
+            </Button>
+
+            {/* Custom Form Fields & Attributes (Dropdown, Radio, Checklist, Number, Text) */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[10px] gap-1 font-semibold border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 cursor-pointer dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
+              title={`Manage Custom Form Fields (dropdown, radio, checklist, number, text) for ${cat.name}`}
+              onClick={() => setAttributeCategory(cat)}
+            >
+              <SlidersHorizontal className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+              <span>Fields</span>
+              {cat.attributes && cat.attributes.length > 0 && (
+                <span className="ml-0.5 rounded-full bg-amber-200 dark:bg-amber-800 px-1 py-0 text-[9px] font-mono font-bold">
+                  {cat.attributes.length}
+                </span>
+              )}
             </Button>
 
             {/* Add Child (allowed up to Level 3) */}
@@ -1176,6 +1196,19 @@ export function CategoriesPage() {
               <Button
                 size="sm"
                 variant="outline"
+                className="h-7 text-xs gap-1 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 cursor-pointer dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
+                onClick={() => {
+                  const catToManage = detailsCategory;
+                  setDetailsCategory(null);
+                  setAttributeCategory(catToManage);
+                }}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                Custom Fields
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 className="h-7 text-xs gap-1 cursor-pointer"
                 onClick={() => {
                   toggleStatusMutation.mutate(
@@ -1396,12 +1429,28 @@ export function CategoriesPage() {
             )}
 
             {/* Dynamic Specification Attributes */}
-            {detailsCategory.attributes && detailsCategory.attributes.length > 0 && (
-              <div className="p-3 rounded-lg border bg-card">
-                <h4 className="font-semibold text-foreground mb-2 flex items-center gap-1.5">
+            <div className="p-3 rounded-lg border bg-card">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold text-foreground flex items-center gap-1.5">
                   <Tag className="h-4 w-4 text-primary" />
-                  Specification Attributes ({detailsCategory.attributes.length})
+                  Specification Attributes ({detailsCategory.attributes?.length || 0})
                 </h4>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-6 px-2 text-[10px] gap-1 border-amber-300 bg-amber-50 text-amber-900 hover:bg-amber-100 cursor-pointer dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300"
+                  onClick={() => {
+                    const catToManage = detailsCategory;
+                    setDetailsCategory(null);
+                    setAttributeCategory(catToManage);
+                  }}
+                >
+                  <SlidersHorizontal className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                  <span>Configure Fields</span>
+                </Button>
+              </div>
+
+              {detailsCategory.attributes && detailsCategory.attributes.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {detailsCategory.attributes.map((attr: any) => (
                     <div key={attr.id || attr.key} className="p-2 border rounded bg-background/50 text-[11px]">
@@ -1424,8 +1473,12 @@ export function CategoriesPage() {
                     </div>
                   ))}
                 </div>
-              </div>
-            )}
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  No custom fields configured yet. Click &quot;Configure Fields&quot; to add dropdowns, checklists, radio options, numbers, or text inputs.
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -1440,6 +1493,13 @@ export function CategoriesPage() {
           </Button>
         </DialogFooter>
       </Dialog>
+
+      {/* Dynamic Specification Attributes Management Modal */}
+      <CategoryAttributesModal
+        category={attributeCategory}
+        isOpen={Boolean(attributeCategory)}
+        onClose={() => setAttributeCategory(null)}
+      />
     </div>
   );
 }

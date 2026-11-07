@@ -76,7 +76,21 @@ export interface AdItem {
   chatCount: number;
   favouriteCount: number;
   contactPreference: string;
+  attributes?: Record<string, any>;
   attributesCache?: Record<string, any>;
+  attributeValues?: Array<{
+    id?: string;
+    value: string;
+    attribute: {
+      id?: string;
+      name: string;
+      key: string;
+      displayLabel?: string | null;
+      type?: string;
+      unit?: string | null;
+      displayOrder?: number;
+    };
+  }>;
   createdAt: string;
   updatedAt: string;
   category?: {

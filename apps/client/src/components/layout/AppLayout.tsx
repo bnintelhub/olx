@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import React from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Navbar } from '../Navbar';
 import { Footer } from './Footer';
 import { AuthModal } from '../AuthModal';
@@ -8,94 +8,70 @@ import { MyAdsModal } from '../MyAdsModal';
 import { ChatModal } from '../ChatModal';
 import { WishlistModal } from '../WishlistModal';
 import { UserProfileModal } from '../UserProfileModal';
-import { UserFeatureModal, UserFeatureType } from '../UserFeatureModal';
+import { UserFeatureModal } from '../UserFeatureModal';
 import { ReportAdModal } from '../ReportAdModal';
-import { AdminCategoryBuilder } from '../AdminCategoryBuilder';
-import { AdminModerationModal } from '../AdminModerationModal';
-import { AdminPortal } from '../AdminPortal';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
-import { AdItem } from '@/types';
+import { useUIStore } from '@/stores/useUIStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { ADS_QUERY_KEYS } from '@/features/ads/hook/useAdsQuery';
 
 export const AppLayout: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { user, openAuthModal } = useAuthStore();
-  const hasStaffAccess = user?.role === 'ADMIN' || user?.role === 'MODERATOR';
+  const ui = useUIStore();
 
-  // Global modals state
-  const [isPostAdOpen, setIsPostAdOpen] = useState(false);
-  const [isMyAdsOpen, setIsMyAdsOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatTargetAd, setChatTargetAd] = useState<AdItem | null>(null);
-  const [isWishlistOpen, setIsWishlistOpen] = useState(false);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-  const [userFeatureModalType, setUserFeatureModalType] = useState<UserFeatureType>(null);
-  const [reportingAd, setReportingAd] = useState<{ id: string; title: string } | null>(null);
-  const [isCategoryStudioOpen, setIsCategoryStudioOpen] = useState(false);
-  const [isModerationOpen, setIsModerationOpen] = useState(false);
-  const [isAdminPortalOpen, setIsAdminPortalOpen] = useState(false);
+  // Show main Navbar only on the Home page ('/')
+  const isHomePage = location.pathname === '/';
 
   const handleOpenPostAd = () => {
     if (!user) {
-      openAuthModal(() => setIsPostAdOpen(true));
+      openAuthModal(() => ui.openPostAd());
     } else {
-      setIsPostAdOpen(true);
+      ui.openPostAd();
     }
   };
 
-  const handleOpenChat = (ad?: AdItem, _initialMessage?: string) => {
+  const handleOpenChat = (ad?: any, initialMessage?: string) => {
     if (!user) {
-      openAuthModal(() => {
-        if (ad) setChatTargetAd(ad);
-        setIsChatOpen(true);
-      });
+      openAuthModal(() => ui.openChat(ad, initialMessage));
     } else {
-      if (ad) setChatTargetAd(ad);
-      setIsChatOpen(true);
+      ui.openChat(ad, initialMessage);
     }
   };
 
   const handleAdCreated = () => {
     queryClient.invalidateQueries({ queryKey: ADS_QUERY_KEYS.all });
-    setIsMyAdsOpen(true);
+    ui.openMyAds();
   };
 
-  // If Admin Portal full view is triggered
-  if (isAdminPortalOpen && hasStaffAccess) {
-    return (
-      <AdminPortal
-        onExitToCustomerSite={() => setIsAdminPortalOpen(false)}
-        categories={[]}
-        cities={[]}
-      />
-    );
-  }
+  const handleOpenAdminPortal = () => {
+    const adminUrl = (import.meta as any).env?.VITE_ADMIN_URL || 'http://localhost:5174';
+    window.open(adminUrl, '_blank');
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-[#F5F7F8]">
-      {/* Navbar with route-based search and direct navigation */}
-      <Navbar
-        onLogoClick={() => navigate('/')}
-        onSearch={(kw, citySlug) => {
-          const params = new URLSearchParams();
-          if (kw) params.set('q', kw);
-          if (citySlug) params.set('city', citySlug);
-          navigate(`/search?${params.toString()}`);
-        }}
-        onOpenPostAd={handleOpenPostAd}
-        onOpenMyAds={() => setIsMyAdsOpen(true)}
-        onOpenChat={() => handleOpenChat()}
-        onOpenWishlist={() => setIsWishlistOpen(true)}
-        onOpenProfile={() => setIsProfileModalOpen(true)}
-        onOpenFeature={(type) => setUserFeatureModalType(type)}
-        onOpenAdminPortal={() => {
-          if (hasStaffAccess) {
-            setIsAdminPortalOpen(true);
-          }
-        }}
-      />
+      {/* Navbar (Rendered only on the Home page) */}
+      {isHomePage && (
+        <Navbar
+          onLogoClick={() => navigate('/')}
+          onSearch={(kw, citySlug) => {
+            const params = new URLSearchParams();
+            if (kw) params.set('q', kw);
+            if (citySlug) params.set('city', citySlug);
+            navigate(`/search?${params.toString()}`);
+          }}
+          onOpenPostAd={handleOpenPostAd}
+          onOpenMyAds={ui.openMyAds}
+          onOpenChat={() => handleOpenChat()}
+          onOpenWishlist={ui.openWishlist}
+          onOpenProfile={ui.openProfile}
+          onOpenFeature={ui.openUserFeature}
+          onOpenAdminPortal={handleOpenAdminPortal}
+        />
+      )}
 
       {/* Main Outlet */}
       <main className="flex-1">
@@ -103,82 +79,56 @@ export const AppLayout: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <Footer
-        onOpenAdminPortal={hasStaffAccess ? () => setIsAdminPortalOpen(true) : undefined}
-      />
+      <Footer onOpenAdminPortal={handleOpenAdminPortal} />
 
-      {/* Auth Modal */}
+      {/* Modals managed by Zustand UI Store */}
       <AuthModal />
 
-      {/* Post Ad Modal */}
       <PostAdModal
-        isOpen={isPostAdOpen}
-        onClose={() => setIsPostAdOpen(false)}
+        isOpen={ui.isPostAdOpen}
+        onClose={ui.closePostAd}
         onAdCreated={handleAdCreated}
       />
 
-      {/* My Ads Dashboard Modal */}
       <MyAdsModal
-        isOpen={isMyAdsOpen}
-        onClose={() => setIsMyAdsOpen(false)}
+        isOpen={ui.isMyAdsOpen}
+        onClose={ui.closeMyAds}
         onOpenPostAd={handleOpenPostAd}
       />
 
-      {/* Buyer-Seller Chat Modal */}
       <ChatModal
-        isOpen={isChatOpen}
-        onClose={() => {
-          setIsChatOpen(false);
-          setChatTargetAd(null);
-        }}
-        initialAd={chatTargetAd}
+        isOpen={ui.isChatOpen}
+        onClose={ui.closeChat}
+        initialAd={ui.chatTargetAd}
       />
 
-      {/* Wishlist Modal */}
       <WishlistModal
-        isOpen={isWishlistOpen}
-        onClose={() => setIsWishlistOpen(false)}
+        isOpen={ui.isWishlistOpen}
+        onClose={ui.closeWishlist}
         onSelectAd={(ad) => navigate(`/ad/${ad.id}`)}
       />
 
-      {/* User Profile Modal */}
       <UserProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        onOpenMyAds={() => setIsMyAdsOpen(true)}
-        onOpenWishlist={() => setIsWishlistOpen(true)}
+        isOpen={ui.isProfileOpen}
+        onClose={ui.closeProfile}
+        onOpenMyAds={ui.openMyAds}
+        onOpenWishlist={ui.openWishlist}
       />
 
-      {/* User Feature Modal */}
       <UserFeatureModal
-        type={userFeatureModalType}
-        onClose={() => setUserFeatureModalType(null)}
+        type={ui.userFeatureType}
+        onClose={ui.closeUserFeature}
         onOpenProfile={() => {
-          setUserFeatureModalType(null);
-          setIsProfileModalOpen(true);
+          ui.closeUserFeature();
+          ui.openProfile();
         }}
       />
 
-      {/* Report Ad Modal */}
       <ReportAdModal
-        isOpen={Boolean(reportingAd)}
-        adId={reportingAd?.id || null}
-        adTitle={reportingAd?.title}
-        onClose={() => setReportingAd(null)}
-      />
-
-      {/* Staff Admin Modals */}
-      <AdminCategoryBuilder
-        isOpen={isCategoryStudioOpen}
-        onClose={() => setIsCategoryStudioOpen(false)}
-      />
-
-      <AdminModerationModal
-        isOpen={isModerationOpen}
-        onClose={() => {
-          setIsModerationOpen(false);
-          queryClient.invalidateQueries({ queryKey: ADS_QUERY_KEYS.all });
-        }}
+        isOpen={Boolean(ui.reportingAd)}
+        adId={ui.reportingAd?.id || null}
+        adTitle={ui.reportingAd?.title}
+        onClose={ui.closeReportAd}
       />
     </div>
   );

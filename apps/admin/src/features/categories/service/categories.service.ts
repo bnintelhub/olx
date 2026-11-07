@@ -55,6 +55,36 @@ export interface ReorderCategoryItem {
   sortOrder: number;
 }
 
+export interface CategoryAttributeItem {
+  id: string;
+  categoryId: string;
+  name: string;
+  key: string;
+  displayLabel?: string | null;
+  type: 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'SELECT' | 'MULTI_SELECT' | 'DATE';
+  options?: string[] | null;
+  validationRules?: Record<string, any> | null;
+  isRequired: boolean;
+  isFilterable: boolean;
+  unit?: string | null;
+  displayOrder: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface CreateAttributePayload {
+  name: string;
+  key: string;
+  displayLabel?: string;
+  type: 'TEXT' | 'NUMBER' | 'BOOLEAN' | 'SELECT' | 'MULTI_SELECT' | 'DATE';
+  options?: string[];
+  validationRules?: Record<string, any>;
+  isRequired?: boolean;
+  isFilterable?: boolean;
+  unit?: string;
+  displayOrder?: number;
+}
+
 export const categoriesService = {
   // Fetch full category tree including inactive items for admin
   async getTree(includeInactive: boolean = true): Promise<CategoryItem[]> {
@@ -129,6 +159,36 @@ export const categoriesService = {
   // Delete category
   async delete(id: string): Promise<{ success: boolean; message: string }> {
     const res = await apiClient.delete(`/categories/${id}`);
+    return res.data?.data;
+  },
+
+  // Fetch dynamic attributes for a category (including inherited)
+  async getAttributes(categoryId: string): Promise<CategoryAttributeItem[]> {
+    const res = await apiClient.get(`/categories/${categoryId}/attributes`);
+    return (res.data?.data?.attributes || []) as CategoryAttributeItem[];
+  },
+
+  // Add dynamic attribute to category
+  async addAttribute(
+    categoryId: string,
+    payload: CreateAttributePayload
+  ): Promise<CategoryAttributeItem> {
+    const res = await apiClient.post(`/categories/${categoryId}/attributes`, payload);
+    return res.data?.data as CategoryAttributeItem;
+  },
+
+  // Update dynamic attribute
+  async updateAttribute(
+    attrId: string,
+    payload: Partial<CreateAttributePayload>
+  ): Promise<CategoryAttributeItem> {
+    const res = await apiClient.put(`/categories/attributes/${attrId}`, payload);
+    return res.data?.data as CategoryAttributeItem;
+  },
+
+  // Delete dynamic attribute
+  async deleteAttribute(attrId: string): Promise<{ success: boolean; message: string }> {
+    const res = await apiClient.delete(`/categories/attributes/${attrId}`);
     return res.data?.data;
   },
 };

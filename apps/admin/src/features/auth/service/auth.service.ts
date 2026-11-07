@@ -119,13 +119,19 @@ export const authService = {
     return { user, tokens: data.data.tokens };
   },
 
-  // Requests fresh authentication tokens using the HTTP-only refresh cookie.
+  // Requests fresh authentication tokens using the HTTP-only admin refresh cookie.
   // Fastify verifies the cookie against the database hash and rotates tokens.
   async refreshToken(): Promise<AuthTokens> {
     const { data } = await axios.post<ApiResponse<AuthTokens>>(
       '/api/v1/auth/refresh',
       {},
-      { withCredentials: true }
+      {
+        withCredentials: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-App-Context': 'admin',
+        },
+      }
     );
     return data.data;
   },

@@ -112,3 +112,92 @@ export function useDeleteCategoryMutation() {
   });
 }
 
+export function useAddCategoryAttributeMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      categoryId,
+      payload,
+    }: {
+      categoryId: string;
+      payload: any;
+    }) => categoriesService.addAttribute(categoryId, payload),
+    onSuccess: (_, variables) => {
+      toast.success('Dynamic specification attribute added successfully');
+      queryClient.invalidateQueries({
+        queryKey: CATEGORIES_QUERY_KEYS.attributes(variables.categoryId),
+      });
+      queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEYS.all });
+    },
+    onError: (error: any) => {
+      const msg =
+        error.response?.data?.error?.message ||
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to add attribute';
+      toast.error(msg);
+    },
+  });
+}
+
+export function useUpdateCategoryAttributeMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      categoryId,
+      attributeId,
+      payload,
+    }: {
+      categoryId: string;
+      attributeId: string;
+      payload: any;
+    }) => categoriesService.updateAttribute(attributeId, payload),
+    onSuccess: (_, variables) => {
+      toast.success('Dynamic specification attribute updated successfully');
+      queryClient.invalidateQueries({
+        queryKey: CATEGORIES_QUERY_KEYS.attributes(variables.categoryId),
+      });
+      queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEYS.all });
+    },
+    onError: (error: any) => {
+      const msg =
+        error.response?.data?.error?.message ||
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to update attribute';
+      toast.error(msg);
+    },
+  });
+}
+
+export function useDeleteCategoryAttributeMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      categoryId,
+      attributeId,
+    }: {
+      categoryId: string;
+      attributeId: string;
+    }) => categoriesService.deleteAttribute(attributeId),
+    onSuccess: (_, variables) => {
+      toast.success('Attribute deleted successfully');
+      queryClient.invalidateQueries({
+        queryKey: CATEGORIES_QUERY_KEYS.attributes(variables.categoryId),
+      });
+      queryClient.invalidateQueries({ queryKey: CATEGORIES_QUERY_KEYS.all });
+    },
+    onError: (error: any) => {
+      const msg =
+        error.response?.data?.error?.message ||
+        error.response?.data?.message ||
+        error.message ||
+        'Failed to delete attribute';
+      toast.error(msg);
+    },
+  });
+}
+
