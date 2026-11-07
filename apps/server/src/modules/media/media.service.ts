@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
 import { buildMediaPath, buildMediaDirectory, MediaResource } from '@olx/shared';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
@@ -111,6 +112,19 @@ export class MediaService {
         variants,
       },
     });
+
+    // Immediately write initial image file to storage variant locations so URLs resolve with 200 OK without 404 delays
+    try {
+      const fileBuffer = await fs.promises.readFile(tempPath);
+      await Promise.all([
+        defaultStorage.writeVariantFile(largePath, fileBuffer),
+        defaultStorage.writeVariantFile(cardPath, fileBuffer),
+        defaultStorage.writeVariantFile(thumbnailPath, fileBuffer),
+        defaultStorage.writeVariantFile(mediumPath, fileBuffer),
+      ]);
+    } catch (writeErr) {
+      console.warn('[MediaService] Instant storage sync warning:', writeErr);
+    }
 
     // Add job to BullMQ queue without blocking
     const job = await queueMediaProcessingJob({
