@@ -90,3 +90,4 @@ export interface ServerToClientEvents {
   'presence.update': (data: { userId: string; isOnline: boolean }) => void;
   error: (data: { code: string; message: string }) => void;
 }
+

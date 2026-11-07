@@ -61,3 +61,4 @@ describe('ChatAbuseService - Anti-Abuse & Scam Detection', () => {
     expect(badExt.valid).toBe(false);
   });
 });
+

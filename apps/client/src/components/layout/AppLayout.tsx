@@ -5,7 +5,6 @@ import { Footer } from './Footer';
 import { AuthModal } from '../AuthModal';
 import { PostAdModal } from '../PostAdModal';
 import { MyAdsModal } from '../MyAdsModal';
-import { ChatModal } from '../ChatModal';
 import { WishlistModal } from '../WishlistModal';
 import { UserProfileModal } from '../UserProfileModal';
 import { UserFeatureModal } from '../UserFeatureModal';
@@ -24,6 +23,7 @@ export const AppLayout: React.FC = () => {
 
   // Show main Navbar only on the Home page ('/')
   const isHomePage = location.pathname === '/';
+  const isChatPage = location.pathname.startsWith('/chat');
 
   const handleOpenPostAd = () => {
     if (!user) {
@@ -33,13 +33,23 @@ export const AppLayout: React.FC = () => {
     }
   };
 
-  const handleOpenChat = (ad?: any, initialMessage?: string) => {
+  const handleOpenChat = (ad?: any) => {
+    const targetUrl = ad?.id ? `/chat?adId=${ad.id}` : '/chat';
     if (!user) {
-      openAuthModal(() => ui.openChat(ad, initialMessage));
+      openAuthModal(() => navigate(targetUrl));
     } else {
-      ui.openChat(ad, initialMessage);
+      navigate(targetUrl);
     }
   };
+
+  // Redirect any legacy chat triggers to dedicated full-page /chat route
+  React.useEffect(() => {
+    if (ui.isChatOpen) {
+      const targetAd = ui.chatTargetAd;
+      ui.closeChat();
+      navigate(targetAd?.id ? `/chat?adId=${targetAd.id}` : '/chat');
+    }
+  }, [ui.isChatOpen, ui.chatTargetAd, navigate, ui]);
 
   const handleOpenMyAds = () => {
     navigate('/my-ads');
@@ -83,7 +93,7 @@ export const AppLayout: React.FC = () => {
       </main>
 
       {/* Footer */}
-      <Footer onOpenAdminPortal={handleOpenAdminPortal} />
+      {!isChatPage && <Footer onOpenAdminPortal={handleOpenAdminPortal} />}
 
       {/* Modals managed by Zustand UI Store */}
       <AuthModal />
@@ -98,12 +108,6 @@ export const AppLayout: React.FC = () => {
         isOpen={ui.isMyAdsOpen}
         onClose={ui.closeMyAds}
         onOpenPostAd={handleOpenPostAd}
-      />
-
-      <ChatModal
-        isOpen={ui.isChatOpen}
-        onClose={ui.closeChat}
-        initialAd={ui.chatTargetAd}
       />
 
       <WishlistModal

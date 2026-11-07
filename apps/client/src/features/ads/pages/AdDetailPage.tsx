@@ -76,17 +76,14 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
     }
   };
 
-  const handleStartChat = (initialMessage?: string) => {
+  const handleStartChat = () => {
     if (!ad) return;
+    const targetUrl = `/chat?adId=${ad.id}`;
     if (!user) {
-      openAuthModal(() => {
-        if (onOpenChat) onOpenChat(ad, initialMessage);
-        else ui.openChat(ad, initialMessage);
-      });
+      openAuthModal(() => navigate(targetUrl));
       return;
     }
-    if (onOpenChat) onOpenChat(ad, initialMessage);
-    else ui.openChat(ad, initialMessage);
+    navigate(targetUrl);
   };
 
   if (isLoading) {

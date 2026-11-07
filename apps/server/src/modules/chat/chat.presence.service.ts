@@ -126,3 +126,4 @@ export class ChatPresenceService {
     return sockets ? Array.from(sockets) : [];
   }
 }
+

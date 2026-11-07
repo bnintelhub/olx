@@ -7,6 +7,7 @@ import { SearchPage } from './features/search/pages/SearchPage';
 import { SellPage } from './features/sell/pages/SellPage';
 import { MyAdsPage } from './features/ads/pages/MyAdsPage';
 import { PlansPage } from './features/plans/pages/PlansPage';
+import { ChatPage } from './features/chat/pages/ChatPage';
 
 interface OutletContextType {
   onOpenPostAd: () => void;
@@ -33,6 +34,8 @@ export const App: React.FC = () => {
         <Route path="search" element={<SearchPage />} />
         <Route path="sell" element={<SellPage />} />
         <Route path="plans" element={<PlansPage />} />
+        <Route path="chat" element={<ChatPage />} />
+        <Route path="chat/:conversationId" element={<ChatPage />} />
         <Route path="my-ads" element={<MyAdsPage />} />
         <Route path="ads" element={<MyAdsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
