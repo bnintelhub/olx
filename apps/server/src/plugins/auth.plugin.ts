@@ -31,32 +31,39 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
     const url = request.url || '';
     const isAdminRoute = url.includes('/admin');
 
-    // 1. Isolate HTTP-only cookies strictly by application context.
-    // Admin console sessions use 'admin_access_token', while public client sessions use 'access_token'.
-    let token: string | undefined;
-
+    // 1. Collect candidate access tokens from cookies and Authorization header
+    const candidateTokens: string[] = [];
     if (appContext === 'admin' || isAdminRoute) {
-      token = request.cookies?.admin_access_token;
+      if (request.cookies?.admin_access_token) candidateTokens.push(request.cookies.admin_access_token);
     } else {
-      token = request.cookies?.access_token || request.cookies?.token;
+      if (request.cookies?.access_token) candidateTokens.push(request.cookies.access_token);
+      if (request.cookies?.token) candidateTokens.push(request.cookies.token);
+    }
+    if (request.headers.authorization?.startsWith('Bearer ')) {
+      candidateTokens.push(request.headers.authorization.substring(7).trim());
     }
 
-    // 2. If cookie is absent, fallback to Authorization Bearer header (for mobile apps and APIs)
-    if (!token && request.headers.authorization) {
-      const authHeader = request.headers.authorization;
-      if (authHeader.startsWith('Bearer ')) {
-        token = authHeader.substring(7).trim();
-      }
-    }
-
-    // 3. Reject if neither cookie nor authorization header is provided
-    if (!token) {
+    if (candidateTokens.length === 0) {
       throw new AppError(401, 'UNAUTHORIZED', 'Authentication token is required');
     }
 
+    let decoded: { userId: string; role: UserRole; phoneNumber?: string } | null = null;
+    let lastError: any = null;
+
+    for (const tok of candidateTokens) {
+      try {
+        decoded = fastify.jwt.verify<{ userId: string; role: UserRole; phoneNumber?: string }>(tok);
+        if (decoded?.userId) break;
+      } catch (err: any) {
+        lastError = err;
+      }
+    }
+
+    if (!decoded || !decoded.userId) {
+      throw new AppError(401, 'INVALID_TOKEN', lastError?.message || 'Session has expired. Please log in again.');
+    }
+
     try {
-      // 4. Verify token signature and expiration
-      const decoded = fastify.jwt.verify<{ userId: string; role: UserRole; phoneNumber?: string }>(token);
       const cacheKey = `user:${decoded.userId}`;
 
       let cached = await getCache<AuthUser>(cacheKey);

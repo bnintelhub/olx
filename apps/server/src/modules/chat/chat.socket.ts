@@ -2,6 +2,8 @@ import { Server as SocketIOServer, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { env } from '../../config/env';
 import { prisma } from '../../config/prisma';
+import { HashUtil } from '../../shared/utils/hash.util';
+import { AuthRepository } from '../auth/auth.repository';
 import { ChatService } from './chat.service';
 import { ChatPresenceService } from './chat.presence.service';
 import { SendMessagePayload } from './chat.types';
@@ -56,7 +58,7 @@ export function broadcastChatMessage(conversationId: string, message: any, sende
 export function setupChatSocket(io: SocketIOServer) {
   chatIO = io;
 
-  // Global Handshake Authentication & Token Extraction
+  // Global Handshake Authentication & Token Extraction with automatic refresh fallback
   io.use(async (socket: Socket, next) => {
     try {
       let rawToken =
@@ -73,22 +75,51 @@ export function setupChatSocket(io: SocketIOServer) {
         token = clientMatch?.[1] || adminMatch?.[1] || '';
       }
 
-      if (!token) {
-        return next(new Error('AUTHENTICATION_REQUIRED'));
+      let userId: string | null = null;
+      let userRole: string = 'USER';
+      let userPhone: string | undefined;
+      let userEmail: string | undefined;
+
+      // 1. Try verifying access token
+      if (token) {
+        try {
+          const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
+          userId = decoded.userId || decoded.id || decoded.sub;
+          userRole = decoded.role || 'USER';
+          userPhone = decoded.phoneNumber;
+          userEmail = decoded.email;
+        } catch {
+          // Token expired, fallback to refresh cookie below
+        }
       }
 
-      const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
-      const userId = decoded.userId || decoded.id || decoded.sub;
+      // 2. If access token is expired or missing, fallback to 30-day refresh_token cookie
+      if (!userId && socket.handshake.headers?.cookie) {
+        const rawCookies = socket.handshake.headers.cookie;
+        const refreshMatch = rawCookies.match(/(?:^|;\s*)(?:admin_refresh_token|refresh_token)=([^;]+)/);
+        if (refreshMatch?.[1]) {
+          const refreshToken = refreshMatch[1];
+          const tokenHash = HashUtil.sha256(refreshToken);
+          const user = await AuthRepository.findUserByRefreshTokenHash(tokenHash);
+          if (user && user.status === 'ACTIVE') {
+            userId = user.id;
+            userRole = user.role;
+            userPhone = user.phoneNumber || undefined;
+            userEmail = user.email || undefined;
+          }
+        }
+      }
+
       if (!userId) {
-        return next(new Error('INVALID_TOKEN_PAYLOAD'));
+        return next(new Error('AUTHENTICATION_REQUIRED'));
       }
 
       (socket as any).user = {
         id: userId,
         userId,
-        role: decoded.role,
-        phoneNumber: decoded.phoneNumber,
-        email: decoded.email,
+        role: userRole,
+        phoneNumber: userPhone,
+        email: userEmail,
       };
       next();
     } catch (err: any) {

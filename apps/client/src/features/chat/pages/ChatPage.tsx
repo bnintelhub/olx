@@ -47,7 +47,8 @@ export const ChatPage: React.FC = () => {
   useEffect(() => {
     if (!user?.id) return;
     const activeToken = getActiveToken();
-    const socket = io({
+    const socketUrl = typeof window !== 'undefined' && window.location.origin ? window.location.origin : '/';
+    const socket = io(socketUrl, {
       path: '/socket.io',
       auth: { token: activeToken || '', accessToken: activeToken || '' },
       query: { token: activeToken || '' },
@@ -55,6 +56,10 @@ export const ChatPage: React.FC = () => {
       withCredentials: true,
     });
     socketRef.current = socket;
+
+    socket.on('connect_error', (err) => {
+      console.warn('[Chat Socket] Connect error:', err.message);
+    });
 
     socket.on('connect', () => {
       if (activeConvIdRef.current) {
@@ -150,13 +155,10 @@ export const ChatPage: React.FC = () => {
     };
   }, [user?.id]);
 
-  // 2. Room membership join / leave when active conversation switches
+  // 2. Room membership join when active conversation switches
   useEffect(() => {
     if (!activeConvId || !socketRef.current?.connected) return;
     socketRef.current.emit('conversation.join', { conversationId: activeConvId });
-    return () => {
-      socketRef.current?.emit('conversation.leave', { conversationId: activeConvId });
-    };
   }, [activeConvId]);
 
   // 3. Fetch conversations inbox and handle adId deep link
