@@ -141,9 +141,9 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   };
 
   return (
-    <div className="flex-grow flex flex-col bg-white min-w-0 relative">
+    <div className="flex-1 h-full flex flex-col bg-white min-w-0 min-h-0 relative overflow-hidden">
       {/* Active Chat Header */}
-      <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3 shadow-xs">
+      <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3 shadow-xs flex-shrink-0">
         <div className="flex items-center gap-3 truncate">
           <div className="relative flex-shrink-0">
             <img src={adThumb} alt="" className="w-11 h-11 rounded object-cover border border-gray-200" />
@@ -211,13 +211,13 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       </div>
 
       {/* Safety Notice Header */}
-      <div className="bg-amber-50/70 border-b border-amber-200/60 px-4 py-2 flex items-center gap-2 text-[11px] text-amber-900">
+      <div className="bg-amber-50/70 border-b border-amber-200/60 px-4 py-2 flex items-center gap-2 text-[11px] text-amber-900 flex-shrink-0">
         <ShieldAlert className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
         <span>Safety Notice: Never send advance money via QR codes or UPI. Inspect item physically before payment.</span>
       </div>
 
       {/* Message Thread Scroll View */}
-      <div className="flex-grow overflow-y-auto p-4 space-y-3 bg-[#f8f9fa]">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-[#f8f9fa] no-scrollbar overscroll-contain">
         {hasMoreOlder && (
           <div className="text-center py-1">
             <button

@@ -38,14 +38,14 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
   onSelectConversation,
 }) => {
   return (
-    <div className="w-full sm:w-80 md:w-96 border-r border-gray-200 flex flex-col bg-gray-50 flex-shrink-0">
-      <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between">
+    <div className="w-full h-full flex flex-col bg-gray-50 flex-1 min-h-0 overflow-hidden">
+      <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between flex-shrink-0">
         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">
           Conversations ({conversations.length})
         </span>
       </div>
 
-      <div className="overflow-y-auto flex-grow divide-y divide-gray-100">
+      <div className="overflow-y-auto flex-1 min-h-0 divide-y divide-gray-100 no-scrollbar overscroll-contain">
         {loading ? (
           <div className="p-8 text-center text-xs text-gray-500">
             <div className="w-6 h-6 border-2 border-[#002f34] border-t-transparent rounded-full animate-spin mx-auto mb-2" />

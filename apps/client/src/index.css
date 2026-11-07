@@ -25,6 +25,15 @@ body {
   background: #a8a8a8;
 }
 
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+}
+.no-scrollbar {
+  -ms-overflow-style: none !important;
+  scrollbar-width: none !important;
+}
+
 /* Cardmorphism Utilities */
 .cardmorphism {
   background: rgba(255, 255, 255, 0.96);

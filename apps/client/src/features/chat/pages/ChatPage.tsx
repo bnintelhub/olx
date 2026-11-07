@@ -1,18 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
-import {
-  MessageSquare, ArrowLeft, ShieldCheck, AlertCircle, Sparkles, LogIn, ChevronLeft,
-} from 'lucide-react';
+import { ArrowLeft, ShieldCheck, AlertCircle, LogIn, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import {
-  ChatConversationList,
-  ConversationItem,
-} from '../components/ChatConversationList';
-import {
-  ChatMessageThread,
-  MessageItem,
-} from '../components/ChatMessageThread';
+import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
+import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
@@ -179,11 +171,7 @@ export const ChatPage: React.FC = () => {
       if (targetAdId) {
         const startRes = await fetch('/api/v1/chat/conversations', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${activeToken}`,
-            'X-App-Context': 'client',
-          },
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
           body: JSON.stringify({ adId: targetAdId }),
         });
         const startData = await startRes.json();
@@ -315,18 +303,12 @@ export const ChatPage: React.FC = () => {
     try {
       const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${activeToken}`,
-          'X-App-Context': 'client',
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${activeToken}`, 'X-App-Context': 'client' },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok && data.success && data.data) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m))
-        );
+        setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m)));
         if (data.safetyNotice) setChatAlert(data.safetyNotice);
       } else {
         setChatAlert(data.message || 'Unable to send message');
@@ -361,9 +343,7 @@ export const ChatPage: React.FC = () => {
     try {
       const res = await fetch(`/api/v1/chat/messages/${messageId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getActiveToken()}` } });
       if (res.ok) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m)));
-    } catch (err) {
-      console.error('Failed to delete message', err);
-    }
+    } catch (err) { console.error('Failed to delete message', err); }
   };
 
   const handleBlockUser = async (targetUserId: string) => {
@@ -373,32 +353,24 @@ export const ChatPage: React.FC = () => {
         setConversations((prev) => prev.map((c) => (c.otherParty.id === targetUserId ? { ...c, isBlocked: true } : c)));
         setChatAlert('User blocked. Messaging is restricted.');
       }
-    } catch (err) {
-      console.error('Failed to block user', err);
-    }
+    } catch (err) { console.error('Failed to block user', err); }
   };
 
   const handleReportChat = async (reason: string, details?: string) => {
     try {
       const res = await fetch('/api/v1/chat/reports', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getActiveToken()}` }, body: JSON.stringify({ conversationId: activeConvId, reason, details }) });
       if (res.ok) setChatAlert('Report submitted to moderation team. Thank you.');
-    } catch (err) {
-      console.error('Failed to submit report', err);
-    }
+    } catch (err) { console.error('Failed to submit report', err); }
   };
 
   if (!user) {
     return (
       <div className="min-h-[80vh] flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center space-y-6">
-          <div className="w-16 h-16 rounded-full bg-teal-50 text-teal-800 flex items-center justify-center mx-auto text-3xl shadow-sm">
-            💬
-          </div>
+          <div className="w-16 h-16 rounded-full bg-teal-50 text-teal-800 flex items-center justify-center mx-auto text-3xl shadow-sm">💬</div>
           <div>
             <h2 className="text-2xl font-bold text-[#002f34]">Sign In to Chat</h2>
-            <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">
-              Directly talk with buyers and sellers, negotiate prices, and organize pickups securely.
-            </p>
+            <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">Directly talk with buyers and sellers, negotiate prices, and organize pickups securely.</p>
           </div>
           <button
             onClick={() => openAuthModal()}
@@ -415,7 +387,7 @@ export const ChatPage: React.FC = () => {
   const activeConversation = conversations.find((c) => c.id === activeConvId) || null;
 
   return (
-    <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-4 flex flex-col h-[calc(100vh-80px)]">
+    <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6 py-2 sm:py-3 flex flex-col h-[calc(100vh-1rem)] sm:h-[calc(100vh-2rem)]">
       {/* Top Header Bar */}
       <div className="bg-[#002f34] text-white px-4 py-3 rounded-t-2xl flex items-center justify-between border-b border-[#003d44] shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -464,10 +436,10 @@ export const ChatPage: React.FC = () => {
       )}
 
       {/* Chat Split Container */}
-      <div className="flex flex-1 overflow-hidden bg-white border-x border-b border-gray-200 rounded-b-2xl shadow-lg">
+      <div className="flex flex-1 min-h-0 overflow-hidden bg-white border-x border-b border-gray-200 rounded-b-2xl shadow-lg">
         {/* Left Side: Conversation List */}
         <div
-          className={`w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col ${
+          className={`w-full md:w-80 lg:w-96 flex-shrink-0 border-r border-gray-200 flex flex-col min-h-0 h-full ${
             mobileShowThread ? 'hidden md:flex' : 'flex'
           }`}
         >
@@ -484,7 +456,7 @@ export const ChatPage: React.FC = () => {
 
         {/* Right Side: Message Thread */}
         <div
-          className={`flex-1 flex flex-col min-w-0 ${
+          className={`flex-1 flex flex-col min-w-0 min-h-0 h-full ${
             !mobileShowThread ? 'hidden md:flex' : 'flex'
           }`}
         >
