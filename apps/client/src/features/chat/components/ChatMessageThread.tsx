@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { ConversationItem } from './ChatConversationList';
+import { apiClient } from '@/lib/api-client';
 
 export interface MessageItem {
   id: string;
@@ -46,20 +47,6 @@ interface ChatMessageThreadProps {
   onLoadOlder?: () => void;
   isSending?: boolean;
 }
-
-const TYPO_MAP: Record<string, string> = {
-  availble: 'available', avalable: 'available', avaliable: 'available', avialable: 'available',
-  pirce: 'price', prce: 'price', conditon: 'condition', conidtion: 'condition',
-  locaton: 'location', dilvery: 'delivery', delivary: 'delivery', whare: 'where',
-  teh: 'the', recive: 'receive', recieved: 'received', adress: 'address',
-  plz: 'please', pls: 'please', thx: 'thanks', inspecton: 'inspection',
-};
-
-const autoCorrectText = (text: string): string =>
-  text ? text.replace(/\b[a-zA-Z]+\b/g, (w) => {
-    const c = TYPO_MAP[w.toLowerCase()];
-    return c ? (w[0] === w[0].toUpperCase() ? c[0].toUpperCase() + c.slice(1) : c) : w;
-  }) : text;
 
 export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   conversation,
@@ -156,28 +143,34 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
 
   const handleSendWithImage = async () => {
     if (isSending || conversation.isBlocked) return;
-    const cleanText = autoCorrectText(inputText.trim());
+    const textToSend = inputText.trim();
     if (selectedImage) {
       setUploadingImage(true);
       try {
         const formData = new FormData();
         formData.append('file', selectedImage);
-        const res = await fetch('/api/v1/uploads', {
-          method: 'POST',
-          body: formData,
+        const res = await apiClient.post('/media/images?resource=chats', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
-        const data = await res.json();
-        const uploadedUrl = data.url || data.data?.url;
-        onSendMessage(cleanText, uploadedUrl);
+        const uploadedUrl =
+          res.data?.data?.[0]?.displayUrl ||
+          res.data?.data?.[0]?.url ||
+          res.data?.data?.[0]?.thumbnailUrl ||
+          res.data?.url ||
+          res.data?.data?.url;
+        onSendMessage(textToSend, uploadedUrl);
         setSelectedImage(null);
         setImagePreviewUrl(null);
-      } catch {
+        onInputChange('');
+      } catch (err) {
+        console.error('Failed to upload image', err);
         alert('Failed to upload image. Please try again.');
       } finally {
         setUploadingImage(false);
       }
-    } else if (cleanText) {
-      onSendMessage(cleanText);
+    } else if (textToSend) {
+      onSendMessage(textToSend);
+      onInputChange('');
     }
     setTimeout(() => textareaRef.current?.focus(), 10);
   };

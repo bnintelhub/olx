@@ -296,7 +296,7 @@ export const ChatPage: React.FC = () => {
     };
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom('smooth'), 50);
-    if (!customText) setInputText('');
+    setInputText('');
 
     setConversations((prev) =>
       prev.map((c) =>
