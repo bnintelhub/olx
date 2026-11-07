@@ -8,11 +8,43 @@ import { SendMessagePayload } from './chat.types';
 
 interface SocketUser {
   id: string;
+  userId?: string;
   role: string;
   phoneNumber?: string;
+  email?: string;
+}
+
+let chatIO: SocketIOServer | null = null;
+
+export function getChatIO(): SocketIOServer | null {
+  return chatIO;
+}
+
+// Broadcasts chat messages across conversation room and recipient's user room
+export function broadcastChatMessage(conversationId: string, message: any, senderId: string, receiverId?: string | null) {
+  if (!chatIO) return;
+
+  // Broadcast to active conversation room
+  chatIO.to(`conv_${conversationId}`).emit('message.new', message);
+
+  // Broadcast to receiver's personal user room
+  if (receiverId) {
+    chatIO.to(`user_${receiverId}`).emit('message.new', message);
+    chatIO.to(`user_${receiverId}`).emit('conversation.updated', {
+      conversationId,
+      lastMessageText: message.content ? message.content.slice(0, 80) : 'Photo',
+      lastMessageAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
+      senderId,
+    });
+  }
+
+  // Broadcast to sender's other devices
+  chatIO.to(`user_${senderId}`).emit('message.new', message);
 }
 
 export function setupChatSocket(io: SocketIOServer) {
+  chatIO = io;
+
   // Global Handshake Authentication & Token Extraction
   io.use(async (socket: Socket, next) => {
     try {
@@ -28,19 +60,30 @@ export function setupChatSocket(io: SocketIOServer) {
       }
 
       if (token) {
-        const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as SocketUser;
-        (socket as any).user = decoded;
+        const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
+        const userId = decoded.userId || decoded.id || decoded.sub;
+        if (userId) {
+          (socket as any).user = {
+            id: userId,
+            userId,
+            role: decoded.role,
+            phoneNumber: decoded.phoneNumber,
+            email: decoded.email,
+          };
+        }
       }
       next();
     } catch {
-      // Allow handshake to complete so public/telemetry rooms function
       next();
     }
   });
 
   io.on('connection', async (socket: Socket) => {
     const user: SocketUser = (socket as any).user;
-    if (!user) return; // Unauthenticated connections cannot interact with private chat
+    if (!user || !user.id) return;
+
+    // Join personal user room for multi-device sync and inbox notifications
+    socket.join(`user_${user.id}`);
 
     // Register user presence
     await ChatPresenceService.setUserOnline(user.id, socket.id);
@@ -100,22 +143,11 @@ export function setupChatSocket(io: SocketIOServer) {
           safetyNotice: safetyNotice || null,
         });
 
-        // Broadcast to conversation room
-        io.to(`conv_${conversationId}`).emit('message.new', message);
+        // Broadcast to conversation room and user rooms
+        broadcastChatMessage(conversationId, message, user.id, message.receiverId);
 
-        // Send conversation inbox update to recipient's personal sockets
+        // If recipient is currently online, mark as delivered
         if (message.receiverId) {
-          const recipientSockets = ChatPresenceService.getUserSockets(message.receiverId);
-          for (const sId of recipientSockets) {
-            io.to(sId).emit('conversation.updated', {
-              conversationId,
-              lastMessageText: message.content.slice(0, 80),
-              lastMessageAt: message.createdAt.toISOString(),
-              senderId: user.id,
-            });
-          }
-
-          // If recipient is currently online, mark as delivered
           const isRecipientOnline = await ChatPresenceService.isUserOnline(message.receiverId);
           if (isRecipientOnline) {
             await prisma.message.update({
@@ -138,8 +170,8 @@ export function setupChatSocket(io: SocketIOServer) {
 
     // 4. Mark Messages as Read
     socket.on('message.read', async ({ conversationId }: { conversationId: string }) => {
+      if (!conversationId) return;
       try {
-        if (!conversationId) return;
         await ChatService.markAsRead(user.id, conversationId);
         io.to(`conv_${conversationId}`).emit('message.read', {
           conversationId,
@@ -147,18 +179,19 @@ export function setupChatSocket(io: SocketIOServer) {
           readAt: new Date().toISOString(),
         });
       } catch {
-        // quiet error on read receipt
+        // ignore
       }
     });
 
-    // 5. Typing Indicators (Ephemerally broadcasted, throttled)
+    // 5. Ephemeral Typing Indicator
     socket.on('typing.start', ({ conversationId }: { conversationId: string }) => {
       if (!conversationId) return;
-      if (ChatPresenceService.shouldThrottleTyping(user.id, conversationId)) return;
-      socket.to(`conv_${conversationId}`).emit('typing.start', {
-        conversationId,
-        userId: user.id,
-      });
+      if (!ChatPresenceService.shouldThrottleTyping(user.id, conversationId)) {
+        socket.to(`conv_${conversationId}`).emit('typing.start', {
+          conversationId,
+          userId: user.id,
+        });
+      }
     });
 
     socket.on('typing.stop', ({ conversationId }: { conversationId: string }) => {
@@ -169,16 +202,12 @@ export function setupChatSocket(io: SocketIOServer) {
       });
     });
 
-    // 6. Presence Subscription
-    socket.on('presence.subscribe', async ({ userIds }: { userIds: string[] }) => {
-      if (!Array.isArray(userIds) || userIds.length === 0) return;
-      const statusMap = await ChatPresenceService.getOnlineStatusBatch(userIds.slice(0, 50));
-      for (const [targetUid, isOnline] of Object.entries(statusMap)) {
-        socket.emit('presence.update', { userId: targetUid, isOnline });
-      }
+    // 6. Presence Heartbeat
+    socket.on('presence.ping', async () => {
+      await ChatPresenceService.touchPresence(user.id);
     });
 
-    // 7. Cleanup on Disconnect
+    // 7. Disconnection
     socket.on('disconnect', async () => {
       const isCompletelyOffline = await ChatPresenceService.setUserOffline(user.id, socket.id);
       if (isCompletelyOffline) {

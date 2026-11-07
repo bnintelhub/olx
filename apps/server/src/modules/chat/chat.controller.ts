@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ChatService } from './chat.service';
+import { broadcastChatMessage } from './chat.socket';
 import {
   startConversationSchema,
   sendMessageSchema,
@@ -31,13 +32,15 @@ export class ChatController {
   static async sendMessage(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const { content, attachmentUrl, clientMessageId, replyToMessageId } = sendMessageSchema.parse(request.body);
-    const result = await ChatService.sendMessage(request.user!.id, {
+    const userId = request.user!.id || (request.user as any)!.userId;
+    const result = await ChatService.sendMessage(userId, {
       conversationId: id,
       content,
       attachmentUrl,
       clientMessageId,
       replyToMessageId,
     });
+    broadcastChatMessage(id, result.message, userId, result.message.receiverId);
     return reply.status(201).send({ success: true, data: result.message, safetyNotice: result.safetyNotice });
   }
 

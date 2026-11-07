@@ -16,7 +16,7 @@ import {
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const targetAdId = searchParams.get('adId');
 
   const { user, token, openAuthModal } = useAuth();
@@ -32,6 +32,9 @@ export const ChatPage: React.FC = () => {
   const [mobileShowThread, setMobileShowThread] = useState(false);
 
   const socketRef = useRef<Socket | null>(null);
+  const activeConvIdRef = useRef<string | null>(null);
+  activeConvIdRef.current = activeConvId;
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
 
@@ -39,9 +42,9 @@ export const ChatPage: React.FC = () => {
     return token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
   };
 
-  // 1. Socket.IO connection
+  // 1. Initialize persistent Socket.IO connection (Once per authenticated user session)
   useEffect(() => {
-    if (!user) return;
+    if (!user?.id) return;
     const activeToken = getActiveToken();
     const socket = io('/', {
       path: '/socket.io',
@@ -52,71 +55,104 @@ export const ChatPage: React.FC = () => {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      if (activeConvId) {
-        socket.emit('conversation.join', { conversationId: activeConvId });
+      if (activeConvIdRef.current) {
+        socket.emit('conversation.join', { conversationId: activeConvIdRef.current });
       }
     });
 
     socket.on('message.new', (msg: MessageItem) => {
-      if (msg.conversationId === activeConvId) {
-        setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-        socket.emit('message.read', { conversationId: activeConvId });
+      const currentActiveId = activeConvIdRef.current;
+      if (msg.conversationId === currentActiveId) {
+        setMessages((prev) => {
+          const idx = prev.findIndex(
+            (m) => m.id === msg.id || (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
+          );
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = msg;
+            return next;
+          }
+          return [...prev, msg];
+        });
+        socket.emit('message.read', { conversationId: currentActiveId });
       }
+
       setConversations((prev) =>
         prev.map((c) =>
           c.id === msg.conversationId
             ? {
                 ...c,
                 lastMessageText: msg.content || 'Photo',
-                lastMessageAt: msg.createdAt,
-                unreadCount: msg.conversationId === activeConvId ? 0 : c.unreadCount + 1,
+                lastMessageAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
+                unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
               }
             : c
         )
       );
     });
 
+    socket.on('conversation.updated', (data: { conversationId: string; lastMessageText: string; lastMessageAt: string }) => {
+      const currentActiveId = activeConvIdRef.current;
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === data.conversationId
+            ? {
+                ...c,
+                lastMessageText: data.lastMessageText,
+                lastMessageAt: data.lastMessageAt,
+                unreadCount: data.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
+              }
+            : c
+        )
+      );
+    });
+
+    socket.on('message.sent', (data: { messageId: string; clientMessageId?: string; status: string }) => {
+      if (data.clientMessageId) {
+        setMessages((prev) => prev.map((m) => ((m as any).clientMessageId === data.clientMessageId ? { ...m, id: data.messageId, status: data.status as any } : m)));
+      }
+    });
+
     socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
-      if (data.conversationId === activeConvId && data.readerId !== user?.id) {
+      if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
         setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
       }
     });
 
     socket.on('message.delivered', (data: { messageId: string; conversationId: string }) => {
-      if (data.conversationId === activeConvId) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m))
-        );
+      if (data.conversationId === activeConvIdRef.current) {
+        setMessages((prev) => prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m)));
       }
     });
 
     socket.on('typing.start', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvId && data.userId !== user?.id) {
-        setIsOtherTyping(true);
-      }
+      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(true);
     });
 
     socket.on('typing.stop', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvId && data.userId !== user?.id) {
-        setIsOtherTyping(false);
-      }
+      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(false);
     });
 
     socket.on('presence.update', (data: { userId: string; isOnline: boolean }) => {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c
-        )
-      );
+      setConversations((prev) => prev.map((c) => (c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c)));
     });
 
     return () => {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [user, activeConvId]);
+  }, [user?.id]);
 
-  // 2. Fetch conversations and handle adId deep link
+  // 2. Room membership join / leave when active conversation switches
+  useEffect(() => {
+    if (!activeConvId || !socketRef.current?.connected) return;
+    socketRef.current.emit('conversation.join', { conversationId: activeConvId });
+    return () => {
+      socketRef.current?.emit('conversation.leave', { conversationId: activeConvId });
+    };
+  }, [activeConvId]);
+
+  // 3. Fetch conversations inbox and handle adId deep link
   useEffect(() => {
     if (!user) return;
     const fetchConversations = async () => {
@@ -169,7 +205,7 @@ export const ChatPage: React.FC = () => {
     fetchConversations();
   }, [user, targetAdId]);
 
-  // 3. Load active conversation messages
+  // 4. Load active conversation messages
   useEffect(() => {
     if (!activeConvId || !user) return;
     const fetchMessages = async () => {
@@ -218,6 +254,7 @@ export const ChatPage: React.FC = () => {
     if ((!textToSend.trim() && !attachmentUrl) || !activeConvId) return;
 
     const clientMessageId = crypto.randomUUID();
+    const tempId = `temp-${Date.now()}`;
     const payload = {
       conversationId: activeConvId,
       content: textToSend.trim(),
@@ -225,12 +262,35 @@ export const ChatPage: React.FC = () => {
       clientMessageId,
     };
 
+    // Optimistic message append
+    const optimisticMsg: MessageItem = {
+      id: tempId,
+      conversationId: activeConvId,
+      senderId: user!.id,
+      content: textToSend.trim(),
+      attachmentUrl: attachmentUrl || null,
+      status: 'SENT',
+      createdAt: new Date().toISOString(),
+      isDeleted: false,
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    if (!customText) setInputText('');
+
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeConvId
+          ? { ...c, lastMessageText: textToSend.trim() || 'Photo', lastMessageAt: new Date().toISOString() }
+          : c
+      )
+    );
+
+    // Fast WebSocket delivery
     if (socketRef.current?.connected) {
       socketRef.current.emit('message.send', payload);
-      if (!customText) setInputText('');
       return;
     }
 
+    // Direct HTTP Fallback if socket is reconnecting
     const activeToken = getActiveToken();
     try {
       const res = await fetch(`/api/v1/chat/conversations/${activeConvId}/messages`, {
@@ -244,12 +304,13 @@ export const ChatPage: React.FC = () => {
       });
       const data = await res.json();
       if (res.ok && data.success && data.data) {
-        if (!customText) setInputText('');
-        setMessages((prev) => (prev.some((m) => m.id === data.data.id) ? prev : [...prev, data.data]));
+        setMessages((prev) =>
+          prev.map((m) => (m.id === tempId ? { ...data.data, isDeleted: false } : m))
+        );
         if (data.safetyNotice) setChatAlert(data.safetyNotice);
       }
     } catch (err) {
-      console.error('Failed to send message', err);
+      console.error('Failed to send message via HTTP', err);
     }
   };
 
