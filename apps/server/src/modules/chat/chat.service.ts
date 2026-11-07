@@ -71,14 +71,16 @@ export class ChatService {
       throw new AppError(403, 'USER_BLOCKED', 'Communication is restricted with this user');
     }
 
+    const convInclude = {
+      ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' as const } } } },
+      buyer: { select: { id: true, profile: true } },
+      seller: { select: { id: true, profile: true } },
+    };
+
     // 1. Check if conversation already exists for this ad
     let conversation = await prisma.conversation.findUnique({
       where: { adId_buyerId_sellerId: { adId, buyerId, sellerId } },
-      include: {
-        ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' } } } },
-        buyer: { select: { id: true, profile: true } },
-        seller: { select: { id: true, profile: true } },
-      },
+      include: convInclude,
     });
 
     if (!conversation) {
@@ -93,38 +95,45 @@ export class ChatService {
         throw new AppError(400, 'MESSAGE_REJECTED', spamCheck.reason || 'Message violates safety guidelines');
       }
 
-      conversation = await prisma.$transaction(async (tx) => {
-        const createdConv = await tx.conversation.create({
-          data: {
-            adId, buyerId, sellerId, lastMessageText: text.slice(0, 500), lastMessageAt: new Date(),
-            buyerUnreadCount: 0, sellerUnreadCount: 1, status: 'ACTIVE',
-          },
+      try {
+        conversation = await prisma.$transaction(async (tx) => {
+          const createdConv = await tx.conversation.create({
+            data: {
+              adId, buyerId, sellerId, lastMessageText: text.slice(0, 500), lastMessageAt: new Date(),
+              buyerUnreadCount: 0, sellerUnreadCount: 1, status: 'ACTIVE',
+            },
+          });
+
+          const createdMsg = await tx.message.create({
+            data: {
+              conversationId: createdConv.id, senderId: buyerId, receiverId: sellerId,
+              type: MessageType.TEXT, content: text, status: MessageStatus.SENT, clientMessageId,
+            },
+          });
+
+          await tx.conversation.update({ where: { id: createdConv.id }, data: { lastMessageId: createdMsg.id } });
+
+          return tx.conversation.findUniqueOrThrow({
+            where: { id: createdConv.id },
+            include: convInclude,
+          });
         });
 
-        const createdMsg = await tx.message.create({
-          data: {
-            conversationId: createdConv.id, senderId: buyerId, receiverId: sellerId,
-            type: MessageType.TEXT, content: text, status: MessageStatus.SENT, clientMessageId,
-          },
+        void dispatchNotificationJob({
+          userId: sellerId, type: 'CHAT_MESSAGE', title: 'New buyer inquiry',
+          body: `${conversation.buyer.profile?.name || 'A buyer'} sent you an inquiry on "${ad.title}"`,
+          data: { conversationId: conversation.id },
         });
-
-        await tx.conversation.update({ where: { id: createdConv.id }, data: { lastMessageId: createdMsg.id } });
-
-        return tx.conversation.findUniqueOrThrow({
-          where: { id: createdConv.id },
-          include: {
-            ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' } } } },
-            buyer: { select: { id: true, profile: true } },
-            seller: { select: { id: true, profile: true } },
-          },
-        });
-      });
-
-      void dispatchNotificationJob({
-        userId: sellerId, type: 'CHAT_MESSAGE', title: 'New buyer inquiry',
-        body: `${conversation.buyer.profile?.name || 'A buyer'} sent you an inquiry on "${ad.title}"`,
-        data: { conversationId: conversation.id },
-      });
+      } catch (err: any) {
+        if (err.code === 'P2002' || err.message?.includes('Unique constraint')) {
+          conversation = await prisma.conversation.findUniqueOrThrow({
+            where: { adId_buyerId_sellerId: { adId, buyerId, sellerId } },
+            include: convInclude,
+          });
+        } else {
+          throw err;
+        }
+      }
     }
 
     const isBuyer = conversation.buyerId === buyerId;
