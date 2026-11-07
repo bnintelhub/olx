@@ -45,7 +45,10 @@ export async function executeSilentRefresh(): Promise<boolean> {
       }
     )
     .then((res) => {
-      const newToken = res.data?.data?.tokens?.accessToken || res.data?.tokens?.accessToken;
+      const newToken =
+        res.data?.data?.accessToken ||
+        res.data?.data?.tokens?.accessToken ||
+        res.data?.tokens?.accessToken;
       if (newToken) {
         localStorage.setItem('olx_access_token', newToken);
         localStorage.setItem('token', newToken);

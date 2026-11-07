@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
 import { ArrowLeft, ShieldCheck, AlertCircle, LogIn, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, executeSilentRefresh } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
 
@@ -48,118 +48,125 @@ export const ChatPage: React.FC = () => {
     if (!user?.id) return;
     if (socketRef.current?.connected) return;
 
-    const activeToken = getActiveToken();
-    const socketUrl =
-      typeof window !== 'undefined' && (window.location.port === '5173' || window.location.port === '5174')
-        ? 'http://127.0.0.1:5000'
-        : '/';
+    let socket: Socket | null = null;
+    let isMounted = true;
 
-    const socket = io(socketUrl, {
-      path: '/socket.io',
-      auth: { token: activeToken || '', accessToken: activeToken || '' },
-      query: { token: activeToken || '' },
-      transports: ['polling', 'websocket'],
-      withCredentials: true,
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-    });
-    socketRef.current = socket;
-
-    socket.on('connect_error', (err) => {
-      console.warn('[Chat Socket] Connect error:', err.message);
-    });
-
-    socket.on('connect', () => {
-      if (activeConvIdRef.current) {
-        socket.emit('conversation.join', { conversationId: activeConvIdRef.current });
+    const initSocket = async () => {
+      let activeToken = getActiveToken();
+      if (!activeToken) {
+        await executeSilentRefresh();
+        activeToken = getActiveToken();
       }
-    });
+      if (!isMounted) return;
 
-    socket.on('chat:ready', () => {
-      if (activeConvIdRef.current) {
-        socket.emit('conversation.join', { conversationId: activeConvIdRef.current });
-      }
-    });
-
-    socket.on('message.new', (msg: MessageItem) => {
-      const currentActiveId = activeConvIdRef.current;
-      if (msg.conversationId === currentActiveId) {
-        setMessages((prev) => {
-          const idx = prev.findIndex(
-            (m) =>
-              m.id === msg.id ||
-              ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
-              (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
-          );
-          if (idx !== -1) {
-            const next = [...prev];
-            next[idx] = msg;
-            return next;
-          }
-          return [...prev, msg];
-        });
-        setTimeout(() => scrollToBottom('smooth'), 50);
-        socket.emit('message.read', { conversationId: currentActiveId });
-        void apiClient.patch(`/chat/conversations/${currentActiveId}/read`);
-      }
-
-      setConversations((prev) => {
-        const exists = prev.some((c) => c.id === msg.conversationId);
-        if (!exists) {
-          void fetchInbox(false);
-          return prev;
-        }
-        return prev.map((c) =>
-          c.id === msg.conversationId
-            ? {
-                ...c,
-                lastMessageText: msg.content || 'Photo',
-                lastMessageAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
-                unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
-              }
-            : c
-        );
+      const socketUrl = typeof window !== 'undefined' ? window.location.origin : '/';
+      socket = io(socketUrl, {
+        path: '/socket.io',
+        auth: { token: activeToken || '', accessToken: activeToken || '' },
+        query: { token: activeToken || '' },
+        transports: ['websocket', 'polling'],
+        withCredentials: true,
+        reconnection: true,
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
       });
-    });
+      socketRef.current = socket;
 
-    socket.on('conversation.updated', (data: { conversationId: string; lastMessageText: string; lastMessageAt: string }) => {
-      const currentActiveId = activeConvIdRef.current;
-      setConversations((prev) => prev.map((c) => c.id === data.conversationId ? { ...c, lastMessageText: data.lastMessageText, lastMessageAt: data.lastMessageAt, unreadCount: data.conversationId === currentActiveId ? 0 : c.unreadCount + 1 } : c));
-    });
+      socket.on('connect_error', (err) => console.warn('[Chat Socket] Connect error:', err.message));
+      socket.on('disconnect', (reason) => {
+        if (reason === 'io server disconnect') socket?.connect();
+      });
 
-    socket.on('message.sent', (data: { messageId: string; clientMessageId?: string; status: string }) => {
-      if (data.clientMessageId) {
-        setMessages((prev) => prev.map((m) => ((m as any).clientMessageId === data.clientMessageId ? { ...m, id: data.messageId, status: data.status as any } : m)));
-      }
-    });
+      socket.on('connect', () => {
+        if (activeConvIdRef.current) socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
+      });
 
-    socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
-      if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
-        setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
-      }
-    });
+      socket.on('chat:ready', () => {
+        if (activeConvIdRef.current) socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
+      });
 
-    socket.on('message.delivered', (data: { messageId: string; conversationId: string }) => {
-      if (data.conversationId === activeConvIdRef.current) {
-        setMessages((prev) => prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m)));
-      }
-    });
+      socket.on('message.new', (msg: MessageItem) => {
+        const currentActiveId = activeConvIdRef.current;
+        if (msg.conversationId === currentActiveId) {
+          setMessages((prev) => {
+            const idx = prev.findIndex(
+              (m) =>
+                m.id === msg.id ||
+                ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
+                (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
+            );
+            if (idx !== -1) {
+              const next = [...prev];
+              next[idx] = msg;
+              return next;
+            }
+            return [...prev, msg];
+          });
+          setTimeout(() => scrollToBottom('smooth'), 50);
+          socket?.emit('message.read', { conversationId: currentActiveId });
+          void apiClient.patch(`/chat/conversations/${currentActiveId}/read`);
+        }
 
-    socket.on('typing.start', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(true);
-    });
+        setConversations((prev) => {
+          const exists = prev.some((c) => c.id === msg.conversationId);
+          if (!exists) {
+            void fetchInbox(false);
+            return prev;
+          }
+          return prev.map((c) =>
+            c.id === msg.conversationId
+              ? {
+                  ...c,
+                  lastMessageText: msg.content || 'Photo',
+                  lastMessageAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
+                  unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
+                }
+              : c
+          );
+        });
+      });
 
-    socket.on('typing.stop', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(false);
-    });
+      socket.on('conversation.updated', (data: { conversationId: string; lastMessageText: string; lastMessageAt: string }) => {
+        const currentActiveId = activeConvIdRef.current;
+        setConversations((prev) => prev.map((c) => c.id === data.conversationId ? { ...c, lastMessageText: data.lastMessageText, lastMessageAt: data.lastMessageAt, unreadCount: data.conversationId === currentActiveId ? 0 : c.unreadCount + 1 } : c));
+      });
 
-    socket.on('presence.update', (data: { userId: string; isOnline: boolean }) => {
-      setConversations((prev) => prev.map((c) => (c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c)));
-    });
+      socket.on('message.sent', (data: { messageId: string; clientMessageId?: string; status: string }) => {
+        if (data.clientMessageId) {
+          setMessages((prev) => prev.map((m) => ((m as any).clientMessageId === data.clientMessageId ? { ...m, id: data.messageId, status: data.status as any } : m)));
+        }
+      });
+
+      socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
+        if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
+          setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
+        }
+      });
+
+      socket.on('message.delivered', (data: { messageId: string; conversationId: string }) => {
+        if (data.conversationId === activeConvIdRef.current) {
+          setMessages((prev) => prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m)));
+        }
+      });
+
+      socket.on('typing.start', (data: { conversationId: string; userId: string }) => {
+        if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(true);
+      });
+
+      socket.on('typing.stop', (data: { conversationId: string; userId: string }) => {
+        if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(false);
+      });
+
+      socket.on('presence.update', (data: { userId: string; isOnline: boolean }) => {
+        setConversations((prev) => prev.map((c) => (c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c)));
+      });
+    };
+
+    void initSocket();
 
     return () => {
-      socket.disconnect();
+      isMounted = false;
+      socket?.disconnect();
       socketRef.current = null;
     };
   }, [user?.id]);

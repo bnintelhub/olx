@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '@/types';
 import { authService } from '../service/auth.service';
+import { executeSilentRefresh } from '@/lib/api-client';
 
 interface AuthState {
   user: User | null;
@@ -72,8 +73,14 @@ export const useAuthStore = create<AuthState>()(
         try {
           const res = await authService.getMe();
           if (res?.success && res.data) {
+            let activeToken = get().token || localStorage.getItem('olx_access_token');
+            if (!activeToken) {
+              await executeSilentRefresh();
+              activeToken = localStorage.getItem('olx_access_token');
+            }
             set({
               user: res.data,
+              token: activeToken,
               isAuthenticated: true,
               isLoading: false,
             });

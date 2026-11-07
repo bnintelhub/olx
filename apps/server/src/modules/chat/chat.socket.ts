@@ -80,7 +80,7 @@ export function setupChatSocket(io: SocketIOServer) {
       let userPhone: string | undefined;
       let userEmail: string | undefined;
 
-      // 1. Try verifying access token
+      // 1. Try verifying access token from handshake payload
       if (token) {
         try {
           const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
@@ -89,11 +89,30 @@ export function setupChatSocket(io: SocketIOServer) {
           userPhone = decoded.phoneNumber;
           userEmail = decoded.email;
         } catch {
-          // Token expired, fallback to refresh cookie below
+          // Token expired, fallback to cookies below
         }
       }
 
-      // 2. If access token is expired or missing, fallback to 30-day refresh_token cookie
+      // 2. If token invalid or missing, check access_token cookie
+      if (!userId && socket.handshake.headers?.cookie) {
+        const rawCookies = socket.handshake.headers.cookie;
+        const clientMatch = rawCookies.match(/(?:^|;\s*)access_token=([^;]+)/);
+        const adminMatch = rawCookies.match(/(?:^|;\s*)admin_access_token=([^;]+)/);
+        const cookieToken = clientMatch?.[1] || adminMatch?.[1];
+        if (cookieToken) {
+          try {
+            const decoded = jwt.verify(cookieToken, env.JWT_ACCESS_SECRET) as any;
+            userId = decoded.userId || decoded.id || decoded.sub;
+            userRole = decoded.role || 'USER';
+            userPhone = decoded.phoneNumber;
+            userEmail = decoded.email;
+          } catch {
+            // Cookie access token expired
+          }
+        }
+      }
+
+      // 3. If access token is expired or missing, fallback to 30-day refresh_token cookie
       if (!userId && socket.handshake.headers?.cookie) {
         const rawCookies = socket.handshake.headers.cookie;
         const refreshMatch = rawCookies.match(/(?:^|;\s*)(?:admin_refresh_token|refresh_token)=([^;]+)/);
