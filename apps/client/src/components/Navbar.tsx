@@ -9,6 +9,7 @@ import { CategoriesRibbon } from './CategoriesRibbon';
 import { NavbarCityDropdown } from './navbar/NavbarCityDropdown';
 import { NavbarSearchBar, SuggestionItem } from './navbar/NavbarSearchBar';
 import { NavbarUserMenu } from './navbar/NavbarUserMenu';
+import { useChatUnreadStore } from '@/features/chat/stores/useChatUnreadStore';
 
 interface NavbarProps {
   onOpenAdminPortal?: () => void;
@@ -41,6 +42,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isSearchPage = location.pathname === '/search' || location.pathname.startsWith('/search');
   const { user, openAuthModal, logout } = useAuth();
   const hasStaffAccess = user?.role === 'ADMIN' || user?.role === 'MODERATOR';
+  const storeUnreadCount = useChatUnreadStore((s) => s.unreadCount);
+  const totalUnreadMessages = typeof unreadCount === 'number' && unreadCount > 0 ? unreadCount : storeUnreadCount;
 
   const [cities, setCities] = useState<LocationItem[]>([]);
   const [selectedCity, setSelectedCity] = useState('All India');
@@ -198,9 +201,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Chat with Buyers and Sellers"
           >
             <MessageSquare size={20} />
-            {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#00a49f] text-[10px] font-bold text-white">
-                {unreadCount}
+            {totalUnreadMessages > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[#00a49f] text-[10px] font-bold text-white shadow-xs animate-in fade-in zoom-in-75">
+                {totalUnreadMessages > 99 ? '99+' : totalUnreadMessages}
               </span>
             )}
           </button>
@@ -225,6 +228,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <NavbarUserMenu
               user={user}
               hasStaffAccess={hasStaffAccess}
+              unreadCount={totalUnreadMessages}
               onOpenProfile={onOpenProfile}
               onOpenMyAds={onOpenMyAds}
               onOpenWishlist={onOpenWishlist}

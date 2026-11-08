@@ -97,6 +97,8 @@ export class MediaService {
     };
     const diskPath = buildMediaDirectory({ resource, resourceId, mediaType, mediaId });
 
+    const initialScope = resource === 'chats' ? 'CHAT_ATTACHMENT' : 'UNATTACHED';
+
     // Create database record with initial PROCESSING status
     await prisma.media.create({
       data: {
@@ -104,7 +106,7 @@ export class MediaService {
         userId,
         type: 'IMAGE',
         status: 'PROCESSING',
-        scope: 'UNATTACHED',
+        scope: initialScope,
         originalName: path.basename(part.filename || 'image.jpg'),
         mimeType: validated.mimeType,
         fileSize: size,
@@ -253,6 +255,23 @@ export class MediaService {
     });
 
     for (const orphan of orphans) {
+      // Self-heal: protect chat message attachments from deletion
+      const messageWithAttachment = await prisma.message.findFirst({
+        where: { attachmentUrl: { contains: orphan.id } },
+        select: { id: true },
+      });
+      if (messageWithAttachment) {
+        await prisma.media.update({
+          where: { id: orphan.id },
+          data: {
+            isAttached: true,
+            attachedToId: messageWithAttachment.id,
+            scope: 'CHAT_ATTACHMENT',
+          },
+        }).catch(() => {});
+        continue;
+      }
+
       const { deletePhysicalMedia } = await import('../admin/admin.media.service');
       await deletePhysicalMedia(orphan);
       await prisma.media.delete({ where: { id: orphan.id } }).catch(() => {});

@@ -7,6 +7,8 @@ import { AuthRepository } from '../auth/auth.repository';
 import { ChatService } from './chat.service';
 import { ChatPresenceService } from './chat.presence.service';
 import { SendMessagePayload } from './chat.types';
+import { fcmService } from '../../integrations/push/fcm.service';
+import { fcmDecisionService } from '../../integrations/push/fcm.decision.service';
 
 interface SocketUser {
   id: string;
@@ -20,6 +22,20 @@ let chatIO: SocketIOServer | null = null;
 
 export function getChatIO(): SocketIOServer | null {
   return chatIO;
+}
+
+export function isUserInsideConversation(userId: string, conversationId: string): boolean {
+  if (!chatIO) return false;
+  const userRoom = chatIO.sockets.adapter.rooms.get(`user_${userId}`);
+  const convRoom = chatIO.sockets.adapter.rooms.get(`conv_${conversationId}`);
+  if (!userRoom || !convRoom) return false;
+
+  for (const socketId of userRoom) {
+    if (convRoom.has(socketId)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 // Broadcasts chat messages across conversation room and recipient's user room
@@ -49,6 +65,44 @@ export function broadcastChatMessage(conversationId: string, message: any, sende
       lastMessageAt: payload.createdAt,
       senderId,
     });
+
+    // Evaluate OLX Action-Required Notification Decision Engine
+    void (async () => {
+      try {
+        const decision = await fcmDecisionService.evaluatePush({
+          senderId,
+          recipientId: receiverId,
+          conversationId,
+          messageId: payload.id,
+          content: payload.content,
+          attachmentUrl: payload.attachmentUrl,
+          isDeleted: payload.isDeleted,
+        });
+
+        if (!decision.shouldPush) {
+          console.log(`[Push Decision] Skip push for conv_${conversationId}: ${decision.reason}`);
+          return;
+        }
+
+        const senderName = message.sender?.profile?.name || 'New Message';
+        const senderAvatar = message.sender?.profile?.avatarUrl || null;
+        const messageText = decision.bundledBody || payload.content || (payload.attachmentUrl ? '📷 Photo' : 'Sent an attachment');
+
+        await fcmService.sendChatMessagePush({
+          recipientId: receiverId,
+          senderId,
+          senderName,
+          senderAvatar,
+          messageText,
+          conversationId,
+          messageId: payload.id,
+          attachmentUrl: payload.attachmentUrl,
+          priority: decision.priority,
+        });
+      } catch (err) {
+        console.warn('[Push Decision] Error dispatching push:', err);
+      }
+    })();
   }
 
   // Broadcast to sender's other devices
@@ -224,18 +278,38 @@ export function setupChatSocket(io: SocketIOServer) {
         // Broadcast to conversation room and user rooms
         broadcastChatMessage(conversationId, message, user.id, message.receiverId);
 
-        // If recipient is currently online, mark as delivered
+        // If recipient is currently inside conversation room, immediately mark as READ!
         if (message.receiverId) {
-          const isRecipientOnline = await ChatPresenceService.isUserOnline(message.receiverId);
-          if (isRecipientOnline) {
+          const isRecipientInChat = isUserInsideConversation(message.receiverId, conversationId);
+          if (isRecipientInChat) {
             await prisma.message.update({
               where: { id: message.id },
-              data: { status: 'DELIVERED' },
+              data: { status: 'READ' },
             });
-            io.to(`conv_${conversationId}`).emit('message.delivered', {
-              messageId: message.id,
+            message.status = 'READ';
+            io.to(`conv_${conversationId}`).emit('message.read', {
               conversationId,
+              readerId: message.receiverId,
+              readAt: new Date().toISOString(),
             });
+            chatIO?.to(`user_${user.id}`).emit('message.read', {
+              conversationId,
+              readerId: message.receiverId,
+              readAt: new Date().toISOString(),
+            });
+          } else {
+            const isRecipientOnline = await ChatPresenceService.isUserOnline(message.receiverId);
+            if (isRecipientOnline) {
+              await prisma.message.update({
+                where: { id: message.id },
+                data: { status: 'DELIVERED' },
+              });
+              message.status = 'DELIVERED';
+              io.to(`conv_${conversationId}`).emit('message.delivered', {
+                messageId: message.id,
+                conversationId,
+              });
+            }
           }
         }
       } catch (err: any) {
@@ -259,6 +333,20 @@ export function setupChatSocket(io: SocketIOServer) {
           readerId: user.id,
           readAt: new Date().toISOString(),
         });
+
+        // Ensure other participant's personal room updates in real time
+        const conv = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { buyerId: true, sellerId: true },
+        });
+        if (conv) {
+          const otherUserId = conv.buyerId === user.id ? conv.sellerId : conv.buyerId;
+          chatIO?.to(`user_${otherUserId}`).emit('message.read', {
+            conversationId,
+            readerId: user.id,
+            readAt: new Date().toISOString(),
+          });
+        }
       } catch {
         // ignore
       }

@@ -1,15 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import { io, Socket } from 'socket.io-client';
-import { ArrowLeft, ShieldCheck, AlertCircle, LogIn, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient, executeSilentRefresh } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
+import { ChatAuthRequired } from '../components/ChatAuthRequired';
+import { playNewMessageSound } from '../utils/chatSound';
+import { useChatUnreadStore } from '../stores/useChatUnreadStore';
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { conversationId: routeConvId } = useParams();
+  const targetConvIdParam = searchParams.get('conversationId') || routeConvId || null;
   const targetAdId = searchParams.get('adId');
 
   const { user, token, openAuthModal } = useAuth();
@@ -87,6 +92,9 @@ export const ChatPage: React.FC = () => {
 
       socket.on('message.new', (msg: MessageItem) => {
         const currentActiveId = activeConvIdRef.current;
+        if (msg.senderId !== user?.id) {
+          playNewMessageSound();
+        }
         if (msg.conversationId === currentActiveId) {
           setMessages((prev) => {
             const idx = prev.findIndex(
@@ -104,7 +112,8 @@ export const ChatPage: React.FC = () => {
           });
           setTimeout(() => scrollToBottom('smooth'), 50);
           socket?.emit('message.read', { conversationId: currentActiveId });
-          void apiClient.patch(`/chat/conversations/${currentActiveId}/read`);
+          void apiClient.patch(`/chat/conversations/${currentActiveId}/read`).catch(() => {});
+          useChatUnreadStore.getState().fetchUnreadCount();
         }
 
         setConversations((prev) => {
@@ -113,16 +122,12 @@ export const ChatPage: React.FC = () => {
             void fetchInbox(false);
             return prev;
           }
-          return prev.map((c) =>
-            c.id === msg.conversationId
-              ? {
-                  ...c,
-                  lastMessageText: msg.content || 'Photo',
-                  lastMessageAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
-                  unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
-                }
-              : c
-          );
+          return prev.map((c) => (c.id === msg.conversationId ? {
+            ...c,
+            lastMessageText: msg.content || 'Photo',
+            lastMessageAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
+            unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
+          } : c));
         });
       });
 
@@ -133,12 +138,20 @@ export const ChatPage: React.FC = () => {
 
       socket.on('message.sent', (data: { messageId: string; clientMessageId?: string; status: string }) => {
         if (data.clientMessageId) {
-          setMessages((prev) => prev.map((m) => ((m as any).clientMessageId === data.clientMessageId ? { ...m, id: data.messageId, status: data.status as any } : m)));
+          setMessages((prev) =>
+            prev.map((m) => {
+              if ((m as any).clientMessageId === data.clientMessageId) {
+                const finalStatus = (m.status === 'READ' || data.status === 'READ') ? 'READ' : ((data.status as any) || m.status);
+                return { ...m, id: data.messageId, status: finalStatus };
+              }
+              return m;
+            })
+          );
         }
       });
 
       socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
-        if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
+        if (data.conversationId === activeConvIdRef.current) {
           setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
         }
       });
@@ -173,9 +186,31 @@ export const ChatPage: React.FC = () => {
 
   // 2. Room membership join when active conversation switches
   useEffect(() => {
-    if (!activeConvId || !socketRef.current?.connected) return;
-    socketRef.current.emit('conversation.join', { conversationId: activeConvId });
+    useChatUnreadStore.getState().setActiveConversationId(activeConvId);
+    if (!activeConvId) return;
+
+    if (typeof window !== 'undefined' && window.location.pathname.startsWith('/chat')) {
+      window.history.replaceState(null, '', `/chat?conversationId=${activeConvId}`);
+    }
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('conversation.join', { conversationId: activeConvId });
+    }
+
+    return () => {
+      useChatUnreadStore.getState().setActiveConversationId(null);
+      socketRef.current?.emit('conversation.leave', { conversationId: activeConvId });
+    };
   }, [activeConvId]);
+
+  const markConversationAsRead = React.useCallback((convId: string) => {
+    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0 } : c)));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('message.read', { conversationId: convId });
+    }
+    void apiClient.patch(`/chat/conversations/${convId}/read`).catch(() => {});
+    void useChatUnreadStore.getState().fetchUnreadCount();
+  }, []);
 
   // 3. Fetch conversations inbox and handle adId deep link
   const fetchInbox = React.useCallback(async (isInitial = false) => {
@@ -205,20 +240,31 @@ export const ChatPage: React.FC = () => {
       if (targetConvItem && !convList.some((c) => c.id === targetConvItem!.id)) {
         convList = [targetConvItem, ...convList];
       }
+
+      const initialActiveId = targetConvId || targetConvIdParam || (convList.length > 0 && !activeConvIdRef.current ? convList[0].id : activeConvIdRef.current);
+      if (initialActiveId) {
+        convList = convList.map((c) => (c.id === initialActiveId ? { ...c, unreadCount: 0 } : c));
+      }
       setConversations(convList);
 
       if (targetConvId) {
         setActiveConvId(targetConvId);
+        markConversationAsRead(targetConvId);
+        setMobileShowThread(true);
+      } else if (targetConvIdParam && convList.some((c) => c.id === targetConvIdParam)) {
+        setActiveConvId(targetConvIdParam);
+        markConversationAsRead(targetConvIdParam);
         setMobileShowThread(true);
       } else if (convList.length > 0 && !activeConvIdRef.current) {
         setActiveConvId(convList[0].id);
+        markConversationAsRead(convList[0].id);
       }
     } catch (err) {
       console.error('Failed to load conversations', err);
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [user, targetAdId]);
+  }, [user, targetAdId, markConversationAsRead]);
 
   useEffect(() => {
     void fetchInbox(true);
@@ -239,6 +285,7 @@ export const ChatPage: React.FC = () => {
             setActiveConvDetails(res.data.data.conversation);
           }
           setTimeout(() => scrollToBottom('auto'), 50);
+          markConversationAsRead(activeConvId);
         }
       } catch (err) {
         console.error('Failed to fetch messages', err);
@@ -249,7 +296,7 @@ export const ChatPage: React.FC = () => {
     return () => {
       isMounted = false;
     };
-  }, [activeConvId, user]);
+  }, [activeConvId, user, markConversationAsRead]);
 
   const handleInputChange = (val: string) => {
     setInputText(val);
@@ -299,24 +346,21 @@ export const ChatPage: React.FC = () => {
     setInputText('');
 
     setConversations((prev) =>
-      prev.map((c) =>
-        c.id === activeConvId
-          ? { ...c, lastMessageText: textToSend || 'Photo', lastMessageAt: new Date().toISOString() }
-          : c
-      )
+      prev.map((c) => (c.id === activeConvId ? { ...c, lastMessageText: textToSend || 'Photo', lastMessageAt: new Date().toISOString() } : c))
     );
 
     try {
-      // Fast WebSocket delivery with ack callback, fallback to HTTP if disconnected
       if (socketRef.current?.connected) {
         socketRef.current.emit('message.send', payload, (res: any) => {
           if (res?.success && res.data) {
             setMessages((prev) =>
-              prev.map((m) =>
-                m.id === tempId || (m as any).clientMessageId === clientMessageId
-                  ? { ...res.data, isDeleted: false }
-                  : m
-              )
+              prev.map((m) => {
+                if (m.id === tempId || (m as any).clientMessageId === clientMessageId) {
+                  const finalStatus = (m.status === 'READ' || res.data.status === 'READ') ? 'READ' : (res.data.status || m.status);
+                  return { ...res.data, status: finalStatus, isDeleted: false };
+                }
+                return m;
+              })
             );
             if (res.safetyNotice) setChatAlert(res.safetyNotice);
           } else if (res?.error) {
@@ -384,21 +428,7 @@ export const ChatPage: React.FC = () => {
   };
 
   if (!user) {
-    return (
-      <div className="min-h-[80vh] flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-2xl shadow-xl border border-gray-200 p-8 text-center space-y-6">
-          <div className="w-16 h-16 rounded-full bg-teal-50 text-teal-800 flex items-center justify-center mx-auto text-3xl shadow-sm">💬</div>
-          <div>
-            <h2 className="text-2xl font-bold text-[#002f34]">Sign In to Chat</h2>
-            <p className="text-sm text-gray-500 mt-2 max-w-sm mx-auto">Directly talk with buyers and sellers, negotiate prices, and organize pickups securely.</p>
-          </div>
-          <button onClick={() => openAuthModal()} className="w-full bg-[#002f34] hover:bg-[#003d44] text-white py-3.5 rounded-xl font-bold text-sm shadow transition flex items-center justify-center gap-2 cursor-pointer">
-            <LogIn className="w-4 h-4" />
-            <span>Login / Register</span>
-          </button>
-        </div>
-      </div>
-    );
+    return <ChatAuthRequired onLogin={openAuthModal} />;
   }
 
   const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;
@@ -450,6 +480,7 @@ export const ChatPage: React.FC = () => {
             loading={loading}
             onSelectConversation={(id) => {
               setActiveConvId(id);
+              markConversationAsRead(id);
               setMobileShowThread(true);
             }}
           />
@@ -470,22 +501,14 @@ export const ChatPage: React.FC = () => {
           )}
 
           <ChatMessageThread
-            conversation={activeConversation}
-            currentUserId={user?.id}
-            messages={messages}
-            inputText={inputText}
-            onInputChange={handleInputChange}
-            onSendMessage={handleSendMessage}
-            onDeleteMessage={handleDeleteMessage}
-            onBlockUser={handleBlockUser}
-            onReportChat={handleReportChat}
-            isOtherTyping={isOtherTyping}
-            messagesEndRef={messagesEndRef}
-            messagesContainerRef={messagesContainerRef}
-            hasMoreOlder={Boolean(nextCursor)}
-            loadingOlder={loadingOlder}
-            onLoadOlder={handleLoadOlder}
-            isSending={isSending}
+            conversation={activeConversation} currentUserId={user?.id}
+            messages={messages} inputText={inputText}
+            onInputChange={handleInputChange} onSendMessage={handleSendMessage}
+            onDeleteMessage={handleDeleteMessage} onBlockUser={handleBlockUser}
+            onReportChat={handleReportChat} isOtherTyping={isOtherTyping}
+            messagesEndRef={messagesEndRef} messagesContainerRef={messagesContainerRef}
+            hasMoreOlder={Boolean(nextCursor)} loadingOlder={loadingOlder}
+            onLoadOlder={handleLoadOlder} isSending={isSending}
           />
         </div>
       </div>

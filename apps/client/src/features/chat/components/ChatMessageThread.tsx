@@ -149,13 +149,11 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       try {
         const formData = new FormData();
         formData.append('file', selectedImage);
-        const res = await apiClient.post('/media/images?resource=chats', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const res = await apiClient.post('/media/images?resource=chats', formData);
         const uploadedUrl =
-          res.data?.data?.[0]?.displayUrl ||
           res.data?.data?.[0]?.url ||
-          res.data?.data?.[0]?.thumbnailUrl ||
+          res.data?.data?.[0]?.displayUrl ||
+          res.data?.data?.[0]?.variants?.large ||
           res.data?.url ||
           res.data?.data?.url;
         onSendMessage(textToSend, uploadedUrl);
@@ -296,12 +294,13 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
 
                 {/* Image attachment */}
                 {msg.attachmentUrl && !msg.isDeleted && (
-                  <div className="mb-2 rounded-lg overflow-hidden border border-black/10">
+                  <div className="mb-2 rounded-lg overflow-hidden border border-black/10 bg-black/5 inline-block max-w-full">
                     <img
                       src={msg.attachmentUrl}
                       alt="Attachment"
-                      className="max-h-60 w-auto object-cover rounded cursor-pointer hover:opacity-95"
+                      className="max-h-80 max-w-full w-auto h-auto object-contain rounded-lg cursor-pointer hover:opacity-95 block"
                       onClick={() => window.open(msg.attachmentUrl!, '_blank')}
+                      loading="lazy"
                     />
                   </div>
                 )}
@@ -316,11 +315,11 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
                   </span>
                   {isMine && !msg.isDeleted && (
                     msg.status === 'READ' ? (
-                      <span title="Read"><CheckCheck className="w-3 h-3 text-[#ffce32]" /></span>
+                      <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
                     ) : msg.status === 'DELIVERED' ? (
-                      <span title="Delivered"><CheckCheck className="w-3 h-3 text-gray-300" /></span>
+                      <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-gray-300" /></span>
                     ) : (
-                      <span title="Sent"><Check className="w-3 h-3 text-gray-400" /></span>
+                      <span title="Sent"><Check className="w-3.5 h-3.5 text-gray-400" /></span>
                     )
                   )}
                 </div>

@@ -60,16 +60,9 @@ export class ChatService {
 
     // Check bidirectional user blocking
     const isBlocked = await prisma.block.findFirst({
-      where: {
-        OR: [
-          { blockerId: buyerId, blockedId: sellerId },
-          { blockerId: sellerId, blockedId: buyerId },
-        ],
-      },
+      where: { OR: [{ blockerId: buyerId, blockedId: sellerId }, { blockerId: sellerId, blockedId: buyerId }] },
     });
-    if (isBlocked) {
-      throw new AppError(403, 'USER_BLOCKED', 'Communication is restricted with this user');
-    }
+    if (isBlocked) throw new AppError(403, 'USER_BLOCKED', 'Communication is restricted with this user');
 
     const convInclude = {
       ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' as const } } } },
@@ -333,12 +326,7 @@ export class ChatService {
 
     // Check bidirectional blocks
     const isUserBlocked = await prisma.block.findFirst({
-      where: {
-        OR: [
-          { blockerId: userId, blockedId: recipientId },
-          { blockerId: recipientId, blockedId: userId },
-        ],
-      },
+      where: { OR: [{ blockerId: userId, blockedId: recipientId }, { blockerId: recipientId, blockedId: userId }] },
     });
     if (isUserBlocked) {
       throw new AppError(403, 'USER_BLOCKED', 'Messaging is blocked between you and this user');
@@ -350,16 +338,20 @@ export class ChatService {
       throw new AppError(429, 'RATE_LIMIT_EXCEEDED', `Message sending rate limit exceeded. Retry in ${rateCheck.retryAfter || 10}s.`);
     }
 
-    // Spam & Content Risk Analysis
-    const recentMessages = await prisma.message.findMany({
-      where: { senderId: userId },
-      take: 5,
-      orderBy: { createdAt: 'desc' },
-      select: { content: true },
-    });
-    const spamCheck = ChatAbuseService.analyzeMessageRisk(textContent, recentMessages.map((m) => m.content));
-    if (!spamCheck.allowed) {
-      throw new AppError(400, 'MESSAGE_REJECTED', spamCheck.reason || 'Message violates marketplace safety guidelines');
+    // Spam & Content Risk Analysis (only if text is present; image attachments without text are allowed)
+    let safetyNotice: string | null = null;
+    if (textContent) {
+      const recentMessages = await prisma.message.findMany({
+        where: { senderId: userId },
+        take: 5,
+        orderBy: { createdAt: 'desc' },
+        select: { content: true },
+      });
+      const spamCheck = ChatAbuseService.analyzeMessageRisk(textContent, recentMessages.map((m) => m.content));
+      if (!spamCheck.allowed) {
+        throw new AppError(400, 'MESSAGE_REJECTED', spamCheck.reason || 'Message violates marketplace safety guidelines');
+      }
+      safetyNotice = spamCheck.safetyNotice || null;
     }
 
     // Database Transaction
@@ -370,7 +362,7 @@ export class ChatService {
           senderId: userId,
           receiverId: recipientId,
           type: attachmentUrl ? MessageType.IMAGE : MessageType.TEXT,
-          content: textContent,
+          content: textContent || (attachmentUrl ? 'Photo' : ''),
           attachmentUrl: attachmentUrl || null,
           replyToMessageId: replyToMessageId || null,
           clientMessageId: clientMessageId || null,
@@ -380,6 +372,16 @@ export class ChatService {
           sender: { select: { id: true, profile: { select: { name: true, avatarUrl: true } } } },
         },
       });
+
+      if (attachmentUrl) {
+        const mediaMatch = attachmentUrl.match(/med_[a-zA-Z0-9_]+/);
+        if (mediaMatch) {
+          await tx.media.updateMany({
+            where: { id: mediaMatch[0] },
+            data: { isAttached: true, attachedToId: created.id, scope: 'CHAT_ATTACHMENT' },
+          });
+        }
+      }
 
       await tx.conversation.update({
         where: { id: conversationId },
@@ -402,7 +404,7 @@ export class ChatService {
       userId: recipientId,
       type: 'CHAT_MESSAGE',
       title: 'New message',
-      body: `${message.sender.profile?.name || 'Someone'}: ${textContent.slice(0, 60)}`,
+      body: `${message.sender.profile?.name || 'Someone'}: ${(textContent || 'Sent a photo').slice(0, 60)}`,
       data: { conversationId, messageId: message.id },
     });
 
@@ -411,7 +413,7 @@ export class ChatService {
         ...message,
         isDeleted: false,
       },
-      safetyNotice: spamCheck.safetyNotice,
+      safetyNotice,
     };
   }
 

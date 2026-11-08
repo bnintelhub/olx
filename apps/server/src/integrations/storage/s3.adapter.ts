@@ -121,33 +121,37 @@ export class S3StorageAdapter implements IStorageAdapter {
     if (this.bucketChecked) return;
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
-      this.bucketChecked = true;
     } catch {
       try {
         await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
-        const publicReadPolicy = JSON.stringify({
-          Version: '2012-10-17',
-          Statement: [
-            {
-              Sid: 'PublicReadVariants',
-              Effect: 'Allow',
-              Principal: '*',
-              Action: ['s3:GetObject'],
-              Resource: [`arn:aws:s3:::${this.bucket}/*`],
-            },
-          ],
-        });
-        await this.client.send(
-          new PutBucketPolicyCommand({
-            Bucket: this.bucket,
-            Policy: publicReadPolicy,
-          })
-        );
       } catch {
         // Bucket might have already been created concurrently
       }
-      this.bucketChecked = true;
     }
+
+    try {
+      const publicReadPolicy = JSON.stringify({
+        Version: '2012-10-17',
+        Statement: [
+          {
+            Sid: 'PublicReadVariants',
+            Effect: 'Allow',
+            Principal: '*',
+            Action: ['s3:GetObject'],
+            Resource: [`arn:aws:s3:::${this.bucket}/*`],
+          },
+        ],
+      });
+      await this.client.send(
+        new PutBucketPolicyCommand({
+          Bucket: this.bucket,
+          Policy: publicReadPolicy,
+        })
+      );
+    } catch {
+      // Bucket policy might already exist or restricted
+    }
+    this.bucketChecked = true;
   }
 
   async writeVariantFile(
@@ -168,6 +172,16 @@ export class S3StorageAdapter implements IStorageAdapter {
       key = `variants/${this.getVariantSubpath(targetPathOrMediaId)}/${safeFilename}`;
       buffer = maybeBuffer!;
     }
+
+    // Mirror to local uploads directory for immediate availability
+    try {
+      const localFilePath = path.join(this.uploadDir, key);
+      const localDir = path.dirname(localFilePath);
+      if (!fs.existsSync(localDir)) {
+        fs.mkdirSync(localDir, { recursive: true });
+      }
+      await fs.promises.writeFile(localFilePath, buffer);
+    } catch {}
 
     await this.client.send(
       new PutObjectCommand({

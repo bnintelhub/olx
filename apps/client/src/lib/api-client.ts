@@ -15,6 +15,9 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   config.headers['X-App-Context'] = 'client';
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   const token = typeof window !== 'undefined' ? (localStorage.getItem('olx_access_token') || localStorage.getItem('token')) : null;
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;

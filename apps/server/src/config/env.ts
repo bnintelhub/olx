@@ -40,6 +40,15 @@ const envSchema = z
     PAYU_ENVIRONMENT: z.enum(['test', 'production']).default('test'),
     PAYU_SUCCESS_URL: z.string().optional(),
     PAYU_FAILURE_URL: z.string().optional(),
+    // Firebase Cloud Messaging configuration
+    FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('gen-lang-client-0067863163-firebase-adminsdk-fbsvc-3a9115427b.json'),
+    FIREBASE_API_KEY: z.string().optional(),
+    FIREBASE_AUTH_DOMAIN: z.string().optional(),
+    FIREBASE_PROJECT_ID: z.string().optional(),
+    FIREBASE_STORAGE_BUCKET: z.string().optional(),
+    FIREBASE_MESSAGING_SENDER_ID: z.string().optional(),
+    FIREBASE_APP_ID: z.string().optional(),
+    FIREBASE_MEASUREMENT_ID: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production' && data.PAYU_ENVIRONMENT === 'production') {

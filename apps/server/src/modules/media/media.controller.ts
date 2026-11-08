@@ -81,7 +81,7 @@ export class MediaController {
       variants: item.variants,
       url: item.variants.large,
       thumbnailUrl: item.variants.thumbnail,
-      displayUrl: item.variants.card,
+      displayUrl: resource === 'chats' ? item.variants.large : item.variants.card,
     }));
 
     return reply.status(201).send({

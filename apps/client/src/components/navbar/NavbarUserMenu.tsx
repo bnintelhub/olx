@@ -20,6 +20,7 @@ import { UserFeatureType } from '../UserFeatureModal';
 interface NavbarUserMenuProps {
   user: any;
   hasStaffAccess: boolean;
+  unreadCount?: number;
   onOpenProfile?: () => void;
   onOpenMyAds?: () => void;
   onOpenWishlist?: () => void;
@@ -32,6 +33,7 @@ interface NavbarUserMenuProps {
 export const NavbarUserMenu: React.FC<NavbarUserMenuProps> = ({
   user,
   hasStaffAccess,
+  unreadCount = 0,
   onOpenProfile,
   onOpenMyAds,
   onOpenWishlist,
@@ -129,10 +131,17 @@ export const NavbarUserMenu: React.FC<NavbarUserMenuProps> = ({
                 setIsOpen(false);
                 if (onOpenChat) onOpenChat();
               }}
-              className="flex w-full items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 font-medium cursor-pointer"
+              className="flex w-full items-center justify-between px-4 py-2.5 text-gray-700 hover:bg-gray-50 font-medium cursor-pointer"
             >
-              <MessageSquare size={15} className="text-teal-700" />
-              <span>Messages & Chats</span>
+              <div className="flex items-center gap-3">
+                <MessageSquare size={15} className="text-teal-700" />
+                <span>Messages & Chats</span>
+              </div>
+              {unreadCount > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#00a49f] text-white text-[10px] font-bold flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
           </div>
 

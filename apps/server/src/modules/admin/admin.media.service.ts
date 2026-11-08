@@ -481,6 +481,10 @@ export class AdminMediaService {
       resource = 'system';
       mediaType = 'banner';
       resourceId = existing.attachedToId || id;
+    } else if (existing.scope === 'CHAT_ATTACHMENT') {
+      resource = 'chats';
+      mediaType = 'attachments';
+      resourceId = existing.attachedToId || 'drafts';
     }
 
     const largePath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'large', format: 'webp' });
@@ -642,6 +646,24 @@ export class AdminMediaService {
             isAttached: true,
             attachedToId: orphan.categories[0]?.id || orphan.adImages[0]?.id,
             scope: orphan.categories.length > 0 ? 'CATEGORY_BANNER' : 'LISTING_IMAGE',
+          },
+        });
+        healedCount++;
+        continue;
+      }
+
+      // Consistency self-heal: if media is referenced in a chat message attachment
+      const messageWithAttachment = await prisma.message.findFirst({
+        where: { attachmentUrl: { contains: orphan.id } },
+        select: { id: true },
+      });
+      if (messageWithAttachment) {
+        await prisma.media.update({
+          where: { id: orphan.id },
+          data: {
+            isAttached: true,
+            attachedToId: messageWithAttachment.id,
+            scope: 'CHAT_ATTACHMENT',
           },
         });
         healedCount++;

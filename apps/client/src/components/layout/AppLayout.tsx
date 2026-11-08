@@ -13,8 +13,13 @@ import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { useUIStore } from '@/stores/useUIStore';
 import { useQueryClient } from '@tanstack/react-query';
 import { ADS_QUERY_KEYS } from '@/features/ads/hook/useAdsQuery';
+import { useChatNotificationListener } from '@/features/chat/hooks/useChatNotificationListener';
+import { PushNotificationPrompt } from '@/features/notifications/components/PushNotificationPrompt';
+import { usePushNotifications } from '@/features/notifications/usePushNotifications';
 
 export const AppLayout: React.FC = () => {
+  useChatNotificationListener();
+  usePushNotifications();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
@@ -67,6 +72,9 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex flex-col bg-[#F5F7F8] ${isChatPage ? 'h-screen overflow-hidden' : ''}`}>
+      {/* WhatsApp-style Push Notification Permission Prompt */}
+      <PushNotificationPrompt />
+
       {/* Navbar (Rendered only on the Home page) */}
       {isHomePage && (
         <Navbar
