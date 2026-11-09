@@ -32,6 +32,6 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @olx/database db:generate
 
-      - name: Build Workers
-        run: pnpm --filter @olx/workers build
+      - name: Build Workers and Dependencies
+        run: pnpm --filter @olx/workers... build
 

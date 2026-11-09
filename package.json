@@ -13,8 +13,8 @@
     "build": "turbo run build",
     "build:admin": "pnpm --filter @olx/admin build",
     "build:client": "pnpm --filter @olx/client build",
-    "build:server": "pnpm --filter @olx/server build",
-    "build:workers": "pnpm --filter @olx/workers build",
+    "build:server": "pnpm --filter @olx/server... build",
+    "build:workers": "pnpm --filter @olx/workers... build",
     "build:packages": "pnpm --filter \"@olx/*\" build",
     "start:server": "pnpm --filter @olx/server start",
     "start:workers": "pnpm --filter @olx/workers start",
@@ -36,9 +36,11 @@
     "infra": "docker compose up -d postgres redis minio",
     "docker:build": "docker compose build",
     "docker:logs": "docker compose logs -f",
-    "docker:ps": "docker compose ps"
+    "docker:ps": "docker compose ps",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "husky": "^9.1.7",
     "playwright": "^1.65.0",
     "turbo": "^2.4.4"
   }
