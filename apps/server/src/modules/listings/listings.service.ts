@@ -1,4 +1,5 @@
 import { prisma } from '../../config/prisma';
+import { getCache, setCache } from '../../config/redis';
 import { AppError } from '../../shared/errors/app-error';
 import { AdStatus } from '@prisma/client';
 import { checkContentForFraud } from '../../shared/utils/anti-fraud.util';
@@ -184,6 +185,10 @@ export class ListingsService {
   }
 
   static async getById(id: string) {
+    const cacheKey = `ad:details:${id}`;
+    const cached = await getCache<any>(cacheKey);
+    if (cached) return cached;
+
     const ad = await prisma.ad.findFirst({
       where: { OR: [{ id }, { slug: id }] },
       include: {
@@ -258,19 +263,15 @@ export class ListingsService {
     });
 
     const attributes = (ad.attributesCache as Record<string, any>) || {};
-
-    return {
+    const result = {
       ...ad,
       attributes,
       attributesCache: attributes,
-      seller: {
-        ...ad.user,
-        maskedPhone,
-        adsCount: sellerAdsCount,
-        phoneNumber: undefined,
-      },
+      seller: { ...ad.user, maskedPhone, adsCount: sellerAdsCount, phoneNumber: undefined },
       user: undefined,
     };
+    void setCache(cacheKey, result, 60);
+    return result;
   }
 
   static async update(userId: string, role: string, id: string, data: UpdateListingInput) {

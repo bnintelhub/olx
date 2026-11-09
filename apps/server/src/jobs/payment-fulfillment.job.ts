@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import { env } from '../config/env';
+import { getRedisBullConnection } from '../config/redis';
 
 export interface PaymentFulfillmentJobData {
   paymentOrderId: string;
@@ -11,10 +12,7 @@ export interface PaymentFulfillmentJobData {
   amount: number;
 }
 
-const connection = {
-  url: env.REDIS_URL,
-  maxRetriesPerRequest: null,
-};
+const connection = getRedisBullConnection();
 
 // Queue for asynchronous, idempotent payment fulfillment
 export const paymentFulfillmentQueue = new Queue<PaymentFulfillmentJobData>('payment-fulfillment', {

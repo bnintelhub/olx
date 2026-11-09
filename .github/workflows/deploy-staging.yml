@@ -1,0 +1,21 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+jobs:
+  deploy-staging:
+    name: Staging Deployment
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Staging Stack
+        run: |
+          echo "Deploying to Staging Environment..."
+          # docker compose -f infrastructure/compose/docker-compose.staging.yml up -d
+

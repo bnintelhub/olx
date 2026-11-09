@@ -49,6 +49,11 @@ const envSchema = z
     FIREBASE_MESSAGING_SENDER_ID: z.string().optional(),
     FIREBASE_APP_ID: z.string().optional(),
     FIREBASE_MEASUREMENT_ID: z.string().optional(),
+    // Rate Limiting flexibility (Disabled by default in local dev, enabled in production)
+    ENABLE_RATE_LIMIT: z
+      .string()
+      .transform((v) => v === 'true' || v === '1')
+      .default(process.env.NODE_ENV === 'production' ? 'true' : 'false'),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production' && data.PAYU_ENVIRONMENT === 'production') {

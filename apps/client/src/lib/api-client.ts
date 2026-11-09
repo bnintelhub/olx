@@ -104,6 +104,19 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Automatic Load Balancer Failover Retry:
+    // If a server replica crashes mid-flight (502 Bad Gateway, 503 Unavailable, 504 Timeout, or network drop),
+    // retry idempotent GET requests once so the Load Balancer routes to an active healthy server replica.
+    const status = error.response?.status;
+    const isFailoverCandidate = !error.response || status === 502 || status === 503 || status === 504;
+    const isSafeMethod = !originalRequest.method || originalRequest.method.toLowerCase() === 'get';
+
+    if (isFailoverCandidate && isSafeMethod && !originalRequest._failoverRetry) {
+      originalRequest._failoverRetry = true;
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      return apiClient(originalRequest);
+    }
+
     return Promise.reject(error);
   }
 );

@@ -6,6 +6,7 @@ import { checkDatabaseConnection, prisma } from './config/prisma';
 import { setupChatSocket } from './modules/chat/chat.socket';
 import { setupAdminMetricsSocket } from './modules/admin/admin.socket';
 import { closeOtpQueue } from './jobs/otp.job';
+import { setupSocketRedisAdapter, closeSocketRedisAdapter } from './integrations/redis/socket.adapter';
 
 async function startServer() {
   try {
@@ -15,19 +16,17 @@ async function startServer() {
     // 2. Build Fastify app
     const app = await buildApp();
 
-    // 3. Attach Socket.IO
+    // 3. Attach Socket.IO & Redis Adapter for Multi-Replica Scaling
     const io = new SocketIOServer(app.server, {
       cors: {
         origin: (origin, callback) => {
           if (!origin) return callback(null, true);
-          if (
-            env.NODE_ENV !== 'production' &&
-            (origin.includes('localhost') || origin.includes('127.0.0.1'))
-          ) {
+          if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
             return callback(null, true);
           }
           const allowed = [
             env.CLIENT_URL,
+            'http://localhost',
             'http://localhost:5173',
             'http://localhost:5174',
             'http://127.0.0.1:5173',
@@ -44,6 +43,7 @@ async function startServer() {
       },
     });
 
+    await setupSocketRedisAdapter(io);
     setupChatSocket(io);
     setupAdminMetricsSocket(io);
 
@@ -68,6 +68,7 @@ async function startServer() {
     const closeGracefully = async (signal: string) => {
       console.log(`\nReceived ${signal}, closing server gracefully...`);
       io.close();
+      await closeSocketRedisAdapter();
       await closeOtpQueue();
       await app.close();
       await prisma.$disconnect();

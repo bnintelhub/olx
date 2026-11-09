@@ -1,5 +1,6 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { env } from '../config/env';
+import { getRedisBullConnection } from '../config/redis';
 import { EmailService } from '../integrations/email/email.service';
 
 export interface OtpJobData {
@@ -8,10 +9,7 @@ export interface OtpJobData {
   purpose: string;
 }
 
-const connection = {
-  url: env.REDIS_URL,
-  maxRetriesPerRequest: null,
-};
+const connection = getRedisBullConnection();
 
 export const otpQueue = new Queue<OtpJobData>('otp-dispatch', {
   connection,

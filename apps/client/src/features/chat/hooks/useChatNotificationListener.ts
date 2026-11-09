@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
+import { executeSilentRefresh } from '@/lib/api-client';
 import { useChatUnreadStore } from '../stores/useChatUnreadStore';
 import { playNewMessageSound } from '../utils/chatSound';
 
@@ -34,11 +35,28 @@ export function useChatNotificationListener(): void {
       transports: ['websocket', 'polling'],
       auth: { token: activeToken || '' },
       withCredentials: true,
-      reconnectionAttempts: 5,
+      reconnection: true,
+      reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      randomizationFactor: 0.5,
+      timeout: 10000,
     });
 
     socketRef.current = socket;
+
+    socket.on('connect_error', async (err) => {
+      if (err.message.includes('AUTHENTICATION_REQUIRED')) {
+        await executeSilentRefresh();
+        const freshToken = localStorage.getItem('olx_access_token');
+        if (freshToken && socketRef.current) socketRef.current.auth = { token: freshToken };
+      }
+    });
+
+    // Refresh unread count on reconnecting to a server replica
+    socket.on('connect', () => {
+      void fetchUnreadCount();
+    });
 
     const clientBurstMap = new Map<string, { count: number; time: number }>();
 

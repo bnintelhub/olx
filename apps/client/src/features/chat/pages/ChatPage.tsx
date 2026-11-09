@@ -31,22 +31,18 @@ export const ChatPage: React.FC = () => {
   const [activeConvDetails, setActiveConvDetails] = useState<ConversationItem | null>(null);
   const [isSending, setIsSending] = useState(false);
   const lastSentRef = useRef<{ text: string; time: number }>({ text: '', time: 0 });
-
   const socketRef = useRef<Socket | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
   activeConvIdRef.current = activeConvId;
-
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
+  const fetchConversationMessagesRef = useRef<((id: string) => void) | null>(null);
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior });
   };
-
-  const getActiveToken = (): string | null => {
-    return token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
-  };
+  const getActiveToken = (): string | null => token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
 
   // 1. Initialize persistent Socket.IO connection (Once per authenticated user session)
   useEffect(() => {
@@ -69,21 +65,27 @@ export const ChatPage: React.FC = () => {
         path: '/socket.io',
         auth: { token: activeToken || '', accessToken: activeToken || '' },
         query: { token: activeToken || '' },
-        transports: ['websocket', 'polling'],
-        withCredentials: true,
-        reconnection: true,
-        reconnectionAttempts: Infinity,
-        reconnectionDelay: 1000,
+        transports: ['websocket', 'polling'], withCredentials: true, reconnection: true,
+        reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000,
+        randomizationFactor: 0.5, timeout: 10000,
       });
       socketRef.current = socket;
 
-      socket.on('connect_error', (err) => console.warn('[Chat Socket] Connect error:', err.message));
-      socket.on('disconnect', (reason) => {
-        if (reason === 'io server disconnect') socket?.connect();
+      socket.on('connect_error', async (err) => {
+        console.warn('[Chat Socket] Connect error:', err.message);
+        if (err.message.includes('AUTHENTICATION_REQUIRED')) {
+          await executeSilentRefresh();
+          const newToken = getActiveToken();
+          if (newToken && socketRef.current) socketRef.current.auth = { token: newToken, accessToken: newToken };
+        }
       });
+      socket.on('disconnect', (reason) => { if (reason === 'io server disconnect') socket?.connect(); });
 
       socket.on('connect', () => {
-        if (activeConvIdRef.current) socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
+        if (activeConvIdRef.current) {
+          socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
+          fetchConversationMessagesRef.current?.(activeConvIdRef.current);
+        }
       });
 
       socket.on('chat:ready', () => {
@@ -111,9 +113,11 @@ export const ChatPage: React.FC = () => {
             return [...prev, msg];
           });
           setTimeout(() => scrollToBottom('smooth'), 50);
-          socket?.emit('message.read', { conversationId: currentActiveId });
-          void apiClient.patch(`/chat/conversations/${currentActiveId}/read`).catch(() => {});
-          useChatUnreadStore.getState().fetchUnreadCount();
+          if (msg.senderId !== user?.id) {
+            socket?.emit('message.read', { conversationId: currentActiveId });
+            void apiClient.patch(`/chat/conversations/${currentActiveId}/read`).catch(() => {});
+            useChatUnreadStore.getState().fetchUnreadCount();
+          }
         }
 
         setConversations((prev) => {
@@ -141,8 +145,7 @@ export const ChatPage: React.FC = () => {
           setMessages((prev) =>
             prev.map((m) => {
               if ((m as any).clientMessageId === data.clientMessageId) {
-                const finalStatus = (m.status === 'READ' || data.status === 'READ') ? 'READ' : ((data.status as any) || m.status);
-                return { ...m, id: data.messageId, status: finalStatus };
+                return { ...m, id: data.messageId, status: (data.status as any) || m.status || 'SENT' };
               }
               return m;
             })
@@ -151,7 +154,7 @@ export const ChatPage: React.FC = () => {
       });
 
       socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
-        if (data.conversationId === activeConvIdRef.current) {
+        if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
           setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
         }
       });
@@ -247,17 +250,11 @@ export const ChatPage: React.FC = () => {
       }
       setConversations(convList);
 
-      if (targetConvId) {
-        setActiveConvId(targetConvId);
-        markConversationAsRead(targetConvId);
-        setMobileShowThread(true);
-      } else if (targetConvIdParam && convList.some((c) => c.id === targetConvIdParam)) {
-        setActiveConvId(targetConvIdParam);
-        markConversationAsRead(targetConvIdParam);
-        setMobileShowThread(true);
-      } else if (convList.length > 0 && !activeConvIdRef.current) {
-        setActiveConvId(convList[0].id);
-        markConversationAsRead(convList[0].id);
+      const selectedId = targetConvId || (targetConvIdParam && convList.some((c) => c.id === targetConvIdParam) ? targetConvIdParam : (!activeConvIdRef.current && convList.length > 0 ? convList[0].id : null));
+      if (selectedId) {
+        setActiveConvId(selectedId);
+        markConversationAsRead(selectedId);
+        if (targetConvId || targetConvIdParam) setMobileShowThread(true);
       }
     } catch (err) {
       console.error('Failed to load conversations', err);
@@ -270,33 +267,27 @@ export const ChatPage: React.FC = () => {
     void fetchInbox(true);
   }, [fetchInbox]);
 
-  // 4. Load active conversation messages once on conversation switch
-  useEffect(() => {
-    if (!activeConvId || !user) return;
-    let isMounted = true;
-
-    const fetchMessages = async () => {
-      try {
-        const res = await apiClient.get(`/chat/conversations/${activeConvId}/messages?limit=30`);
-        if (isMounted && res.data?.success && res.data.data?.messages) {
-          setMessages(res.data.data.messages);
-          setNextCursor(res.data.data.nextCursor || null);
-          if (res.data.data.conversation) {
-            setActiveConvDetails(res.data.data.conversation);
-          }
-          setTimeout(() => scrollToBottom('auto'), 50);
-          markConversationAsRead(activeConvId);
-        }
-      } catch (err) {
-        console.error('Failed to fetch messages', err);
+  // 4. Load active conversation messages on conversation switch or auto-reconnect
+  const fetchConversationMessages = React.useCallback(async (convId: string) => {
+    if (!convId || !user) return;
+    try {
+      const res = await apiClient.get(`/chat/conversations/${convId}/messages?limit=30`);
+      if (res.data?.success && res.data.data?.messages) {
+        setMessages(res.data.data.messages);
+        setNextCursor(res.data.data.nextCursor || null);
+        if (res.data.data.conversation) setActiveConvDetails(res.data.data.conversation);
+        setTimeout(() => scrollToBottom('auto'), 50);
+        markConversationAsRead(convId);
       }
-    };
+    } catch (err) {
+      console.error('Failed to fetch messages', err);
+    }
+  }, [user, markConversationAsRead]);
+  fetchConversationMessagesRef.current = fetchConversationMessages;
 
-    void fetchMessages();
-    return () => {
-      isMounted = false;
-    };
-  }, [activeConvId, user, markConversationAsRead]);
+  useEffect(() => {
+    if (activeConvId) void fetchConversationMessages(activeConvId);
+  }, [activeConvId, fetchConversationMessages]);
 
   const handleInputChange = (val: string) => {
     setInputText(val);
@@ -344,7 +335,6 @@ export const ChatPage: React.FC = () => {
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom('smooth'), 50);
     setInputText('');
-
     setConversations((prev) =>
       prev.map((c) => (c.id === activeConvId ? { ...c, lastMessageText: textToSend || 'Photo', lastMessageAt: new Date().toISOString() } : c))
     );
@@ -356,8 +346,7 @@ export const ChatPage: React.FC = () => {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id === tempId || (m as any).clientMessageId === clientMessageId) {
-                  const finalStatus = (m.status === 'READ' || res.data.status === 'READ') ? 'READ' : (res.data.status || m.status);
-                  return { ...res.data, status: finalStatus, isDeleted: false };
+                  return { ...res.data, status: res.data.status || 'SENT', isDeleted: false };
                 }
                 return m;
               })
@@ -399,8 +388,7 @@ export const ChatPage: React.FC = () => {
         setMessages((prev) => [...res.data.data.messages, ...prev]);
         setNextCursor(res.data.data.nextCursor || null);
       }
-    } catch (err) { console.error('Failed loading older messages', err); }
-    finally { setLoadingOlder(false); }
+    } catch (err) { console.error('Failed loading older messages', err); } finally { setLoadingOlder(false); }
   };
 
   const handleDeleteMessage = async (messageId: string) => {
@@ -427,10 +415,7 @@ export const ChatPage: React.FC = () => {
     } catch (err) { console.error('Failed to submit report', err); }
   };
 
-  if (!user) {
-    return <ChatAuthRequired onLogin={openAuthModal} />;
-  }
-
+  if (!user) return <ChatAuthRequired onLogin={openAuthModal} />;
   const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;
 
   return (
@@ -490,10 +475,7 @@ export const ChatPage: React.FC = () => {
         <div className={`flex-1 flex flex-col min-w-0 min-h-0 h-full ${!mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
           {mobileShowThread && (
             <div className="md:hidden bg-gray-50 border-b border-gray-200 px-3 py-2 flex items-center flex-shrink-0">
-              <button
-                onClick={() => setMobileShowThread(false)}
-                className="flex items-center gap-1.5 text-xs font-bold text-[#002f34] p-1.5 rounded-lg hover:bg-gray-200 transition cursor-pointer"
-              >
+              <button onClick={() => setMobileShowThread(false)} className="flex items-center gap-1.5 text-xs font-bold text-[#002f34] p-1.5 rounded-lg hover:bg-gray-200 transition cursor-pointer">
                 <ChevronLeft className="w-4 h-4" />
                 <span>All Conversations</span>
               </button>

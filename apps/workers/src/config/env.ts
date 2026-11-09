@@ -16,3 +16,22 @@ export const env = {
   S3_PUBLIC_URL: process.env.S3_PUBLIC_URL || 'http://localhost:9000/olx-media',
 };
 
+export function getRedisBullConnection() {
+  try {
+    const parsed = new URL(env.REDIS_URL);
+    return {
+      host: parsed.hostname || '127.0.0.1',
+      port: parsed.port ? Number(parsed.port) : 6379,
+      password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
+      username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+      maxRetriesPerRequest: null,
+    };
+  } catch {
+    return {
+      host: '127.0.0.1',
+      port: 6379,
+      maxRetriesPerRequest: null,
+    };
+  }
+}
+

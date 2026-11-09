@@ -1,0 +1,37 @@
+name: Worker CI/CD
+
+on:
+  push:
+    paths:
+      - 'apps/workers/**'
+      - 'packages/**'
+      - '.github/workflows/worker.yml'
+    branches: [main, develop]
+
+jobs:
+  test-workers:
+    name: Build Background Workers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @olx/database db:generate
+
+      - name: Build Workers
+        run: pnpm --filter @olx/workers build
+

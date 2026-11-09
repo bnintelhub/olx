@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { env } from '../config/env';
+import { env, getRedisBullConnection } from '../config/env';
 import { prisma, BoostStatus, BoostType } from '@olx/database';
 
 export interface PaymentFulfillmentJobData {
@@ -14,10 +14,7 @@ export interface PaymentFulfillmentJobData {
 
 // Durable background worker to fulfill verified payments asynchronously
 export function startPaymentFulfillmentWorker(): Worker<PaymentFulfillmentJobData> {
-  const connection = {
-    url: env.REDIS_URL,
-    maxRetriesPerRequest: null,
-  };
+  const connection = getRedisBullConnection();
 
   const worker = new Worker<PaymentFulfillmentJobData>(
     'payment-fulfillment',

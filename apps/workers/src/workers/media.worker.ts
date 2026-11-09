@@ -13,7 +13,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { buildMediaPath, buildMediaDirectory, MediaResource } from '@olx/shared';
 import { prisma } from '@olx/database';
-import { env } from '../config/env';
+import { env, getRedisBullConnection } from '../config/env';
 
 export interface MediaProcessJobData {
   mediaId: string;
@@ -174,10 +174,7 @@ function resolveUploadDir(): string {
 }
 
 export function startMediaWorker() {
-  const connection = {
-    url: env.REDIS_URL,
-    maxRetriesPerRequest: null,
-  };
+  const connection = getRedisBullConnection();
 
   // Dead Letter Queue instance for archiving permanently failed or poisoned jobs
   const mediaDeadLetterQueue = new Queue('media-dead-letter', {

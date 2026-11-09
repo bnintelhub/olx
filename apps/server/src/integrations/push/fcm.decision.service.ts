@@ -50,7 +50,7 @@ class FcmDecisionService {
     }
 
     // 3. Don't notify if user is actively viewing THIS conversation
-    if (isUserInsideConversation(recipientId, conversationId)) {
+    if (await isUserInsideConversation(recipientId, conversationId)) {
       return { shouldPush: false, reason: 'Recipient is currently viewing this chat' };
     }
 

@@ -9,6 +9,24 @@ export class SearchService {
     const limit = Math.min(50, Math.max(1, Number(params.limit) || 20));
     const skip = (page - 1) * limit;
 
+    // Cache key for search feeds to absorb traffic spikes and protect database
+    const cacheKey = `search:feed:${JSON.stringify({
+      p: page,
+      l: limit,
+      q: params.q?.trim() || '',
+      c: params.categoryId || params.categorySlug || '',
+      loc: params.locationId || params.citySlug || '',
+      s: params.sort || 'newest',
+      min: params.minPrice,
+      max: params.maxPrice,
+      attrs: params.attributes || {},
+    })}`;
+
+    const cachedResult = await getCache<any>(cacheKey);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     const where: Prisma.AdWhereInput = {
       status: AdStatus.ACTIVE,
       expiresAt: { gt: new Date() },
@@ -139,7 +157,7 @@ export class SearchService {
 
     const facets = await this.computeFacets(where);
 
-    return {
+    const result = {
       ads,
       pagination: {
         total,
@@ -150,6 +168,11 @@ export class SearchService {
       },
       facets,
     };
+
+    // Cache feed in Redis for 20 seconds to prevent DB saturation during load spikes
+    void setCache(cacheKey, result, 20);
+
+    return result;
   }
 
   private static async computeFacets(baseWhere: Prisma.AdWhereInput) {

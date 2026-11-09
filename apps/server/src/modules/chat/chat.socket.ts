@@ -24,18 +24,24 @@ export function getChatIO(): SocketIOServer | null {
   return chatIO;
 }
 
-export function isUserInsideConversation(userId: string, conversationId: string): boolean {
+export async function isUserInsideConversation(userId: string, conversationId: string): Promise<boolean> {
   if (!chatIO) return false;
+  const isOnline = await ChatPresenceService.isUserOnline(userId);
+  if (!isOnline) return false;
+
+  // 1. Check local instance rooms (fastest)
   const userRoom = chatIO.sockets.adapter.rooms.get(`user_${userId}`);
   const convRoom = chatIO.sockets.adapter.rooms.get(`conv_${conversationId}`);
-  if (!userRoom || !convRoom) return false;
-
-  for (const socketId of userRoom) {
-    if (convRoom.has(socketId)) {
-      return true;
+  if (userRoom && convRoom) {
+    for (const socketId of userRoom) {
+      if (convRoom.has(socketId)) {
+        return true;
+      }
     }
   }
-  return false;
+
+  // 2. Check distributed Redis presence for multi-server replicas
+  return ChatPresenceService.isUserInsideConversation(userId, conversationId);
 }
 
 // Broadcasts chat messages across conversation room and recipient's user room
@@ -184,8 +190,11 @@ export function setupChatSocket(io: SocketIOServer) {
       }
 
       if (!userId) {
+        console.warn(`[Socket Auth] Connection rejected for ${socket.id}: No valid credentials provided`);
         return next(new Error('AUTHENTICATION_REQUIRED'));
       }
+
+      console.log(`[Socket Auth] User ${userId} (${userRole}) authenticated on socket ${socket.id}`);
 
       (socket as any).user = {
         id: userId,
@@ -232,14 +241,15 @@ export function setupChatSocket(io: SocketIOServer) {
         }
 
         socket.join(`conv_${conversationId}`);
+        socket.data.activeConversationId = conversationId;
+        await ChatPresenceService.setUserActiveConversation(user.id, conversationId);
 
         // Automatically mark messages as read and broadcast receipt
         await ChatService.markAsRead(user.id, conversationId);
-        io.to(`conv_${conversationId}`).emit('message.read', {
-          conversationId,
-          readerId: user.id,
-          readAt: new Date().toISOString(),
-        });
+        const readReceipt = { conversationId, readerId: user.id, readAt: new Date().toISOString() };
+        io.to(`conv_${conversationId}`).emit('message.read', readReceipt);
+        const otherUserId = conv.buyerId === user.id ? conv.sellerId : conv.buyerId;
+        chatIO?.to(`user_${otherUserId}`).emit('message.read', readReceipt);
       } catch {
         socket.emit('error', { code: 'CHAT_ERROR', message: 'Failed to join conversation room' });
       }
@@ -249,6 +259,10 @@ export function setupChatSocket(io: SocketIOServer) {
     socket.on('conversation.leave', ({ conversationId }: { conversationId: string }) => {
       if (conversationId) {
         socket.leave(`conv_${conversationId}`);
+        void ChatPresenceService.clearUserActiveConversation(user.id, conversationId);
+        if (socket.data.activeConversationId === conversationId) {
+          delete socket.data.activeConversationId;
+        }
       }
     });
 
@@ -278,38 +292,23 @@ export function setupChatSocket(io: SocketIOServer) {
         // Broadcast to conversation room and user rooms
         broadcastChatMessage(conversationId, message, user.id, message.receiverId);
 
-        // If recipient is currently inside conversation room, immediately mark as READ!
+        // Real-time delivery acknowledgment: if recipient is currently online, mark DELIVERED
         if (message.receiverId) {
-          const isRecipientInChat = isUserInsideConversation(message.receiverId, conversationId);
-          if (isRecipientInChat) {
+          const isRecipientOnline = await ChatPresenceService.isUserOnline(message.receiverId);
+          if (isRecipientOnline) {
             await prisma.message.update({
               where: { id: message.id },
-              data: { status: 'READ' },
+              data: { status: 'DELIVERED' },
             });
-            message.status = 'READ';
-            io.to(`conv_${conversationId}`).emit('message.read', {
+            message.status = 'DELIVERED';
+            io.to(`conv_${conversationId}`).emit('message.delivered', {
+              messageId: message.id,
               conversationId,
-              readerId: message.receiverId,
-              readAt: new Date().toISOString(),
             });
-            chatIO?.to(`user_${user.id}`).emit('message.read', {
+            chatIO?.to(`user_${user.id}`).emit('message.delivered', {
+              messageId: message.id,
               conversationId,
-              readerId: message.receiverId,
-              readAt: new Date().toISOString(),
             });
-          } else {
-            const isRecipientOnline = await ChatPresenceService.isUserOnline(message.receiverId);
-            if (isRecipientOnline) {
-              await prisma.message.update({
-                where: { id: message.id },
-                data: { status: 'DELIVERED' },
-              });
-              message.status = 'DELIVERED';
-              io.to(`conv_${conversationId}`).emit('message.delivered', {
-                messageId: message.id,
-                conversationId,
-              });
-            }
           }
         }
       } catch (err: any) {
@@ -378,6 +377,9 @@ export function setupChatSocket(io: SocketIOServer) {
 
     // 7. Disconnection
     socket.on('disconnect', async () => {
+      if (socket.data.activeConversationId) {
+        void ChatPresenceService.clearUserActiveConversation(user.id, socket.data.activeConversationId);
+      }
       const isCompletelyOffline = await ChatPresenceService.setUserOffline(user.id, socket.id);
       if (isCompletelyOffline) {
         io.emit('presence.update', { userId: user.id, isOnline: false });

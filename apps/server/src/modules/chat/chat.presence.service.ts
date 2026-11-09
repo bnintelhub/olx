@@ -31,6 +31,10 @@ export class ChatPresenceService {
         try {
           if (redis.status === 'ready' || redis.status === 'connect') {
             await redis.del(`presence:user:${userId}`);
+            const convKeys = await redis.keys(`presence:conv:${userId}:*`);
+            if (convKeys && convKeys.length > 0) {
+              await redis.del(...convKeys);
+            }
           }
         } catch {
           // ignore
@@ -124,6 +128,43 @@ export class ChatPresenceService {
   static getUserSockets(userId: string): string[] {
     const sockets = userSocketsMap.get(userId);
     return sockets ? Array.from(sockets) : [];
+  }
+
+  // Multi-Server / Cluster Active Conversation Room Presence Tracking
+  static async setUserActiveConversation(userId: string, conversationId: string): Promise<void> {
+    try {
+      if (redis.status === 'ready' || redis.status === 'connect') {
+        await redis.set(`presence:conv:${userId}:${conversationId}`, '1', 'EX', 300);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  static async clearUserActiveConversation(userId: string, conversationId: string): Promise<void> {
+    try {
+      if (redis.status === 'ready' || redis.status === 'connect') {
+        await redis.del(`presence:conv:${userId}:${conversationId}`);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  static async isUserInsideConversation(userId: string, conversationId: string): Promise<boolean> {
+    const isOnline = await this.isUserOnline(userId);
+    if (!isOnline) {
+      return false;
+    }
+    try {
+      if (redis.status === 'ready' || redis.status === 'connect') {
+        const val = await redis.get(`presence:conv:${userId}:${conversationId}`);
+        return val === '1';
+      }
+    } catch {
+      // ignore
+    }
+    return false;
   }
 }
 

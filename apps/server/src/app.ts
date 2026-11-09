@@ -99,6 +99,32 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(authPlugin);
   await app.register(errorHandlerPlugin);
 
+  // Load Balancer Liveness Probe: Fast zero-overhead check for load balancers (AWS ALB, NGINX, Traefik)
+  app.get('/health', async (_request, reply) => {
+    return reply.status(200).send({
+      status: 'ok',
+      service: 'olx-fastify-backend',
+      timestamp: new Date().toISOString(),
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  });
+
+  // Load Balancer Readiness Probe: Validates database and cache readiness before routing traffic
+  app.get('/ready', async (_request, reply) => {
+    const [dbHealthy, redisHealthy] = await Promise.all([
+      checkDatabaseConnection(),
+      isRedisHealthy(),
+    ]);
+
+    const isReady = dbHealthy;
+    return reply.status(isReady ? 200 : 503).send({
+      status: isReady ? 'ready' : 'unhealthy',
+      database: dbHealthy ? 'connected' : 'disconnected',
+      redis: redisHealthy ? 'connected' : 'disconnected',
+      uptimeSeconds: Math.floor(process.uptime()),
+    });
+  });
+
   // API v1 Modular Routes
   await app.register(async (api) => {
     // Health Check

@@ -1,9 +1,9 @@
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
-COPY pnpm-workspace.yaml package.json turbo.json .npmrc ./
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* turbo.json .npmrc ./
 COPY packages/database ./packages/database
 COPY packages/shared ./packages/shared
 COPY apps/workers ./apps/workers
@@ -15,3 +15,4 @@ RUN pnpm --filter @olx/shared build
 RUN pnpm --filter @olx/workers build
 
 CMD ["pnpm", "--filter", "@olx/workers", "start"]
+

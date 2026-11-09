@@ -1,6 +1,7 @@
 import { Queue } from 'bullmq';
 import { MediaResource } from '@olx/shared';
 import { env } from '../config/env';
+import { getRedisBullConnection } from '../config/redis';
 
 export interface MediaProcessJobData {
   mediaId: string;
@@ -23,10 +24,7 @@ export interface MediaDeadLetterJobData extends MediaProcessJobData {
   failedAt: string;
 }
 
-const connection = {
-  url: env.REDIS_URL,
-  maxRetriesPerRequest: null,
-};
+const connection = getRedisBullConnection();
 
 // Primary Media Processing Queue with exponential retry policy
 export const mediaQueue = new Queue<MediaProcessJobData>('media-process', {

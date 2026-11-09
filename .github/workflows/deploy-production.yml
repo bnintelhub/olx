@@ -1,0 +1,22 @@
+name: Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  deploy-prod:
+    name: Production Deployment
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy Production Stack
+        run: |
+          echo "Deploying to Production Cluster..."
+          # docker compose -f infrastructure/compose/docker-compose.prod.yml up -d
+

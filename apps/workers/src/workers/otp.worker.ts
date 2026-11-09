@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { env } from '../config/env';
+import { env, getRedisBullConnection } from '../config/env';
 
 export interface OtpJobData {
   to: string;
@@ -8,10 +8,7 @@ export interface OtpJobData {
 }
 
 export function startOtpWorker() {
-  const connection = {
-    url: env.REDIS_URL,
-    maxRetriesPerRequest: null,
-  };
+  const connection = getRedisBullConnection();
 
   const worker = new Worker<OtpJobData>(
     'otp-dispatch',

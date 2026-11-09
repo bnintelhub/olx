@@ -45,20 +45,18 @@ export async function getFirebaseMessaging(): Promise<Messaging | null> {
  * Requests Notification permission and registers FCM token with backend
  */
 export async function requestAndRegisterPushToken(): Promise<string | null> {
-  if (typeof window === 'undefined' || !('Notification' in window) || !('serviceWorker' in navigator)) {
-    console.warn('[FCM] Push notifications are not supported in this environment');
+  if (typeof window === 'undefined' || !isFirebaseConfigured()) return null;
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
     return null;
   }
 
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    console.log('[FCM] Notification permission was not granted:', permission);
     return null;
   }
 
   const messaging = await getFirebaseMessaging();
   if (!messaging) {
-    console.warn('[FCM] Messaging is not supported');
     return null;
   }
 
