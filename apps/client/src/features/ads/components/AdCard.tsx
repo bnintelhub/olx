@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { Heart, MapPin, CheckCircle2 } from 'lucide-react';
 import { AdItem } from '@/types';
 import { formatCurrency, formatRelativeTime } from '@/lib/utils';
@@ -76,14 +75,13 @@ export const AdCard: React.FC<AdCardProps> = ({
     (ad.location?.parent?.name ? `${ad.location.name}, ${ad.location.parent.name}` : 'India');
 
   return (
-    <motion.div
-      whileHover={{ y: -3, transition: { duration: 0.18, ease: 'easeOut' } }}
+    <div
       onClick={handleCardClick}
-      className="group bg-white rounded-xl border border-slate-200/85 overflow-hidden hover:border-slate-300 hover:shadow-md transition-all duration-200 cursor-pointer flex flex-col h-full relative"
+      className="group bg-white rounded-2xl border border-slate-200/80 hover:border-slate-300 overflow-hidden hover:shadow-md hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col h-full relative"
     >
       {/* Featured / Verified Badge */}
       {ad.isFeatured && (
-        <div className="absolute top-2.5 left-2.5 z-10 bg-slate-900/85 backdrop-blur-xs text-white text-[10px] font-medium px-2 py-0.5 rounded flex items-center gap-1 shadow-xs">
+        <div className="absolute top-3 left-3 z-10 bg-slate-900/90 backdrop-blur-md text-white text-[10px] font-semibold px-2.5 py-1 rounded-md flex items-center gap-1.5 shadow-sm border border-white/10">
           <CheckCircle2 className="w-3 h-3 text-amber-400" />
           <span>Featured</span>
         </div>
@@ -94,57 +92,56 @@ export const AdCard: React.FC<AdCardProps> = ({
         <img
           src={coverImage}
           alt={ad.title}
-          className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300 ease-out"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
           loading="lazy"
         />
 
         {/* Wishlist Button */}
-        <motion.button
+        <button
           type="button"
-          whileTap={{ scale: 0.85 }}
           onClick={handleLike}
           aria-label="Save to Wishlist"
-          className="absolute top-2.5 right-2.5 z-10 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-xs transition-colors cursor-pointer"
+          className="absolute top-3 right-3 z-10 w-8 h-8 rounded-full bg-white/90 backdrop-blur-md flex items-center justify-center text-slate-600 hover:text-red-500 hover:bg-white shadow-xs border border-white/40 active:scale-90 hover:scale-105 transition-all duration-150 cursor-pointer"
         >
           <Heart
             size={16}
-            className={`transition-colors ${
+            className={`transition-colors duration-150 ${
               liked ? 'fill-red-500 text-red-500' : 'text-slate-600'
             }`}
           />
-        </motion.button>
+        </button>
       </div>
 
       {/* Content */}
-      <div className="p-3.5 flex flex-col flex-1 justify-between gap-2">
+      <div className="p-4 flex flex-col flex-1 justify-between gap-3">
         <div>
           {/* Price & Negotiation */}
-          <div className="flex items-baseline justify-between">
-            <span className="text-lg font-bold text-slate-900 tracking-tight tabular-nums">
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xl font-bold text-slate-900 tracking-tight tabular-nums font-heading">
               {formatCurrency(ad.price)}
             </span>
             {ad.isNegotiable && (
-              <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+              <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded-full uppercase tracking-wider">
                 Negotiable
               </span>
             )}
           </div>
 
           {/* Title */}
-          <h3 className="text-xs sm:text-sm font-medium text-slate-800 line-clamp-2 mt-1 leading-snug group-hover:text-[#002F34] transition-colors">
+          <h3 className="text-sm font-medium text-slate-800 line-clamp-2 mt-1.5 leading-snug group-hover:text-[#002F34] transition-colors font-body">
             {ad.title}
           </h3>
         </div>
 
         {/* Footer: Location & Time */}
-        <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-          <div className="flex items-center gap-1 truncate max-w-[65%]">
-            <MapPin size={12} className="shrink-0 text-slate-400" />
+        <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-body">
+          <div className="flex items-center gap-1.5 truncate max-w-[65%]">
+            <MapPin size={13} className="shrink-0 text-slate-400" />
             <span className="truncate">{locationText}</span>
           </div>
           <span className="shrink-0 text-slate-400">{formatRelativeTime(ad.createdAt)}</span>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };

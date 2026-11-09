@@ -16,7 +16,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-olx_marketplace}"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     networks:
@@ -35,13 +35,15 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - bharatmarket_net
 
+  # ========================================================
   # MinIO S3-Compatible Object Storage
+  # ========================================================
   minio:
     image: cgr.dev/chainguard/minio:latest
     container_name: bharatmarket_minio
@@ -58,12 +60,13 @@ services:
     networks:
       - bharatmarket_net
 
-  # Backend API Server (Fastify + Prisma + Socket.IO + Redis)
+  # ========================================================
+  # Backend API Server (Fastify + Auto-Reload with tsx watch)
   # ========================================================
   server:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.server
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.server
     container_name: bharatmarket_server
     restart: unless-stopped
     depends_on:
@@ -74,7 +77,7 @@ services:
       minio:
         condition: service_started
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       PORT: 5000
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
@@ -91,6 +94,9 @@ services:
     ports:
       - "5000:5000"
     volumes:
+      - ./apps/server/src:/app/apps/server/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/database/prisma:/app/packages/database/prisma
       - backend_uploads:/app/uploads
     networks:
       bharatmarket_net:
@@ -98,12 +104,12 @@ services:
           - backend
 
   # ========================================================
-  # BullMQ Background Worker Service
+  # BullMQ Background Worker Service (tsx watch Auto-Reload)
   # ========================================================
   workers:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.worker
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.worker
     container_name: bharatmarket_workers
     restart: unless-stopped
     depends_on:
@@ -114,7 +120,7 @@ services:
       minio:
         condition: service_started
     environment:
-      NODE_ENV: production
+      NODE_ENV: development
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
       UPLOAD_DIR: "/app/uploads"
@@ -124,49 +130,68 @@ services:
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-SuperSecurePassword123}
       S3_BUCKET: "olx-media"
     volumes:
+      - ./apps/workers/src:/app/apps/workers/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/database/prisma:/app/packages/database/prisma
       - backend_uploads:/app/uploads
     networks:
       - bharatmarket_net
 
   # ========================================================
-  # Frontend Web Client (React + Vite PWA + Nginx)
+  # Frontend Web Client (Vite Dev Server + Instant HMR)
   # ========================================================
   client:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.client
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.client
     container_name: bharatmarket_client
     restart: unless-stopped
     depends_on:
       - server
+    environment:
+      - VITE_API_TARGET=http://server:5000
     ports:
-      - "${CLIENT_PORT:-5173}:80"
+      - "5173:5173"
+    volumes:
+      - ./apps/client/src:/app/apps/client/src
+      - ./apps/client/public:/app/apps/client/public
+      - ./apps/client/index.html:/app/apps/client/index.html
+      - ./apps/client/vite.config.ts:/app/apps/client/vite.config.ts
+      - ./packages/shared/src:/app/packages/shared/src
     networks:
       - bharatmarket_net
 
   # ========================================================
-  # Admin Operations Client (React + Vite + Nginx)
+  # Admin Operations Client (Vite Dev Server + Instant HMR)
   # ========================================================
   admin:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.admin
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.admin
     container_name: bharatmarket_admin
     restart: unless-stopped
     depends_on:
       - server
+    environment:
+      - VITE_API_TARGET=http://server:5000
     ports:
-      - "5174:80"
+      - "5174:5174"
+    volumes:
+      - ./apps/admin/src:/app/apps/admin/src
+      - ./apps/admin/public:/app/apps/admin/public
+      - ./apps/admin/index.html:/app/apps/admin/index.html
+      - ./apps/admin/vite.config.ts:/app/apps/admin/vite.config.ts
+      - ./packages/shared/src:/app/packages/shared/src
     networks:
       - bharatmarket_net
 
   # ========================================================
-  # Centralized Nginx Gateway & Reverse Proxy
+  # Centralized Nginx Gateway with Full WebSocket / HMR Proxy
   # ========================================================
   nginx:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.nginx
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.nginx
     container_name: bharatmarket_nginx
     restart: unless-stopped
     depends_on:
@@ -175,6 +200,8 @@ services:
       - admin
     ports:
       - "80:80"
+    volumes:
+      - ./infrastructure/nginx/api.dev.conf:/etc/nginx/conf.d/api.conf:ro
     networks:
       - bharatmarket_net
 
