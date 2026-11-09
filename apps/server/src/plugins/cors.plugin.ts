@@ -8,8 +8,10 @@ export const corsPlugin = fp(async (fastify: FastifyInstance) => {
     origin: (origin, cb) => {
       if (!origin) return cb(null, true);
       if (
-        env.NODE_ENV !== 'production' &&
-        (origin.includes('localhost') || origin.includes('127.0.0.1'))
+        (env.NODE_ENV !== 'production' &&
+          (origin.includes('localhost') || origin.includes('127.0.0.1'))) ||
+        origin.includes('github.dev') ||
+        origin.includes('app.github.dev')
       ) {
         return cb(null, true);
       }

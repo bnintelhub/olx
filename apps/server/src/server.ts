@@ -21,7 +21,12 @@ async function startServer() {
       cors: {
         origin: (origin, callback) => {
           if (!origin) return callback(null, true);
-          if (origin.includes('localhost') || origin.includes('127.0.0.1')) {
+          if (
+            origin.includes('localhost') ||
+            origin.includes('127.0.0.1') ||
+            origin.includes('github.dev') ||
+            origin.includes('app.github.dev')
+          ) {
             return callback(null, true);
           }
           const allowed = [

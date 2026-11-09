@@ -74,6 +74,7 @@ All commands can be executed directly from the monorepo root:
 ## System Architecture & Core Workflows
 
 > 🔗 **Detailed Workflow Documentation**:
+> - [Production VPS Deployment Strategy](docs/DEPLOYMENT_STRATEGY.md)
 > - [Ad Creation & Moderation Flow](docs/AD_CREATION_AND_MODERATION_FLOW.md)
 > - [Authentication & OTP Workflow](docs/AUTH_WORKFLOW.md)
 > - [RBAC & Account Capabilities Spec](docs/RBAC_WORKFLOW.md)
