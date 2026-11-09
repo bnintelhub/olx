@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  lint-and-typecheck:
-    name: Lint & Typecheck
+  server:
+    name: Server (API & Backend)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -30,6 +34,82 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @olx/database db:generate
 
-      - name: Typecheck and Build packages
-        run: pnpm build
+      - name: Build Server & Dependencies
+        run: pnpm --filter @olx/server... build
 
+  workers:
+    name: Background Workers
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @olx/database db:generate
+
+      - name: Build Workers & Dependencies
+        run: pnpm --filter @olx/workers... build
+
+  media:
+    name: Media Service Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @olx/database db:generate
+
+      - name: Verify Media Integrity
+        run: pnpm --filter @olx/server... build
+
+  frontend:
+    name: Web Apps (Client & Admin)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.25.0
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Client & Admin
+        run: |
+          pnpm --filter @olx/client build
+          pnpm --filter @olx/admin build
