@@ -5,6 +5,7 @@ import { AppError } from '../../shared/errors/app-error';
 import { AdStatus, Prisma, UserRole } from '@prisma/client';
 import { HashUtil } from '../../shared/utils/hash.util';
 import { delCache } from '../../config/redis';
+import { ListingsDeleteService } from '../listings/listings.delete.service';
 
 export class AdminService {
   // Aggregates high-level marketplace metrics tailored dynamically to the caller's role.
@@ -509,16 +510,9 @@ export class AdminService {
     });
   }
 
-  // Soft-deletes a classified listing by recording the current timestamp in deletedAt.
-  // Preserves ad record data in the database for auditing and dispute resolution.
+  // Deletes an ad and physically removes all associated media files from S3 and local storage.
   static async deleteAd(id: string) {
-    const ad = await prisma.ad.findUnique({ where: { id } });
-    if (!ad) throw new AppError(404, 'AD_NOT_FOUND', 'Listing not found');
-
-    return prisma.ad.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    });
+    return ListingsDeleteService.deleteListing(id);
   }
 
   // Updates an administrator's account information such as contact email and profile bio.

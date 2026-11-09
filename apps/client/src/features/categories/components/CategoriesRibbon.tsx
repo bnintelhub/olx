@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { ChevronDown, LayoutGrid } from 'lucide-react';
 import { useCategoriesTreeQuery } from '../hook/useCategoriesQuery';
 
 export const CategoriesRibbon: React.FC = () => {
@@ -52,19 +52,20 @@ export const CategoriesRibbon: React.FC = () => {
   };
 
   return (
-    <div className="bg-white border-b border-[#E5EAED] select-none text-xs relative">
+    <div className="bg-white border-b border-slate-200/80 select-none text-xs relative">
       <div className="mx-auto flex max-w-[1500px] items-center px-4 sm:px-6 lg:px-8 py-2">
-        {/* All Categories Dropdown Trigger (Placed outside overflow-x container so dropdown is never clipped) */}
-        <div className="relative shrink-0 pr-4 sm:pr-6 border-r border-[#E5EAED]" ref={dropdownRef}>
+        {/* All Categories Dropdown Trigger */}
+        <div className="relative shrink-0 pr-4 sm:pr-6 border-r border-slate-200" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setIsDropdownOpen((prev) => !prev)}
-            className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[#002f34] hover:text-[#008581] transition cursor-pointer"
+            className="flex items-center gap-1.5 font-semibold text-slate-800 hover:text-[#002F34] transition-colors cursor-pointer"
           >
-            <span>ALL CATEGORIES</span>
+            <LayoutGrid size={13} className="text-slate-500" />
+            <span>All categories</span>
             <ChevronDown
-              size={14}
-              className={`transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
+              size={13}
+              className={`transition-transform duration-200 text-slate-400 ${isDropdownOpen ? 'rotate-180' : ''}`}
             />
           </button>
 
@@ -76,21 +77,21 @@ export const CategoriesRibbon: React.FC = () => {
                 onClick={() => setIsDropdownOpen(false)}
               />
 
-              {/* High z-index dropdown, fully positioned below the button */}
-              <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-2xl border border-[#D8DFE2] bg-white p-3 shadow-2xl z-[60] animate-in fade-in-0 zoom-in-95 text-[#002f34]">
+              {/* High z-index dropdown */}
+              <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl z-[60] text-slate-800">
                 <button
                   type="button"
                   onClick={() => handleSelectCategory('')}
-                  className="w-full text-left px-3.5 py-2.5 text-xs font-bold text-[#002f34] rounded-xl hover:bg-[#F2F4F5] transition flex items-center justify-between cursor-pointer"
+                  className="w-full text-left px-3 py-2 text-xs font-medium text-slate-900 rounded-lg hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer"
                 >
                   <span className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    <span>All Marketplace Listings</span>
+                    <LayoutGrid className="w-3.5 h-3.5 text-slate-600" />
+                    <span>All marketplace listings</span>
                   </span>
-                  <span className="text-[10px] font-semibold text-[#70808C] uppercase">Browse All</span>
+                  <span className="text-[10px] font-medium text-slate-400">Browse all</span>
                 </button>
 
-                <div className="my-2 border-t border-[#EBF1F3]" />
+                <div className="my-1.5 border-t border-slate-100" />
 
                 <div className="max-h-96 overflow-y-auto space-y-1 pr-1">
                   {categories.map((cat) => {

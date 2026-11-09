@@ -138,19 +138,19 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-white border-b border-[#E5EAED]">
-      <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-3">
+    <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80">
+      <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-2.5">
         {/* Brand Logo */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => {
               if (onLogoClick) onLogoClick();
             }}
-            className="flex items-center gap-2 focus:outline-none cursor-pointer group transition-transform active:scale-95"
+            className="flex items-center gap-2 focus:outline-none cursor-pointer group transition-transform active:scale-98"
             title="OLX India Marketplace"
           >
             <svg
-              className="h-8 sm:h-9 w-auto text-[#002f34] transition-colors group-hover:text-[#00525C]"
+              className="h-7 sm:h-8 w-auto text-[#002F34] transition-colors"
               viewBox="0 0 102 48"
               fill="currentColor"
               xmlns="http://www.w3.org/2000/svg"
@@ -163,8 +163,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               <path d="M46 5H55V34H66V42H46V5Z" />
               <path d="M70 5H79.5L88 19L96.5 5H106L94 23.5L106 42H96.5L88 28L79.5 42H70L82 23.5L70 5Z" />
             </svg>
-            <span className="hidden sm:inline-block rounded-md bg-[#e6f7f6] border border-[#00a49f]/30 px-1.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-[#008581]">
-              INDIA
+            <span className="hidden sm:inline-block rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+              India
             </span>
           </button>
         </div>
@@ -251,10 +251,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onOpenPostAd}
-            className="group relative flex items-center gap-1.5 rounded-full border-4 border-[#ffce32] bg-white px-4 py-1.5 text-xs font-black uppercase tracking-wider text-[#002f34] shadow-md transition hover:bg-[#ffce32] hover:text-[#002f34] active:scale-95 cursor-pointer"
+            className="group relative flex items-center gap-1.5 rounded-lg bg-[#FFCE32] hover:bg-[#eec128] px-4 py-2 text-xs font-semibold text-[#002F34] transition-colors active:scale-98 cursor-pointer shadow-xs"
           >
-            <Plus size={16} className="transition-transform group-hover:rotate-90" />
-            <span>SELL</span>
+            <Plus size={15} />
+            <span>Sell</span>
           </button>
         </div>
       </div>

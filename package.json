@@ -39,6 +39,7 @@
     "docker:ps": "docker compose ps"
   },
   "devDependencies": {
+    "playwright": "^1.65.0",
     "turbo": "^2.4.4"
   }
 }

@@ -1,5 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ListingsService } from './listings.service';
+import { ListingsDeleteService } from './listings.delete.service';
 import {
   createListingSchema,
   updateListingSchema,
@@ -83,6 +84,16 @@ export class ListingsController {
     return reply.status(200).send({
       success: true,
       message: 'Image removed from listing successfully',
+    });
+  }
+
+  static async delete(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const result = await ListingsDeleteService.deleteListing(id, request.user);
+    return reply.status(200).send({
+      success: true,
+      message: 'Listing and associated images deleted successfully',
+      data: result,
     });
   }
 }

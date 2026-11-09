@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Users, Lock, ArrowRight } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { ArrowRight, ShieldCheck, MapPin, CheckCircle2, MessageCircle, Tag } from 'lucide-react';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
+import { useCategoriesTreeQuery } from '@/features/categories/hook/useCategoriesQuery';
+import { useAdsQuery } from '@/features/ads/hook/useAdsQuery';
+import { formatCurrency, formatRelativeTime } from '@/lib/utils';
 
 interface HeroBannerProps {
   onOpenPostAd?: () => void;
@@ -10,6 +14,24 @@ interface HeroBannerProps {
 export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
   const navigate = useNavigate();
   const { user, openAuthModal } = useAuthStore();
+  const { data: categories = [] } = useCategoriesTreeQuery();
+  const { data: adsData } = useAdsQuery({ limit: 8, sort: 'newest' });
+  const [imageError, setImageError] = useState(false);
+
+  // Extract popular categories dynamically from real database
+  const popularCategories = React.useMemo(() => {
+    if (!Array.isArray(categories) || categories.length === 0) return [];
+    return categories
+      .filter((c) => !c.parentId && c.isActive !== false)
+      .slice(0, 5)
+      .map((c) => ({ label: c.name, query: c.slug }));
+  }, [categories]);
+
+  // Find the first valid ad from database
+  const spotlightAd = React.useMemo(() => {
+    if (!adsData?.ads || adsData.ads.length === 0) return null;
+    return adsData.ads.find((ad) => ad.images && ad.images.length > 0) || adsData.ads[0];
+  }, [adsData]);
 
   const handleStartSelling = () => {
     if (!user) {
@@ -21,87 +43,172 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
     }
   };
 
-  return (
-    <section className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-5">
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#003F46] text-white shadow-sm">
-        {/* Subtle geometric circles background overlay */}
-        <div className="absolute inset-0 pointer-events-none opacity-20">
-          <div className="absolute -left-20 -top-20 w-96 h-96 rounded-full border border-white/20" />
-          <div className="absolute left-40 -top-40 w-[500px] h-[500px] rounded-full border border-white/10" />
-          <div className="absolute left-1/3 -bottom-20 w-80 h-80 rounded-full bg-teal-400/10 blur-3xl" />
-        </div>
+  const adImage =
+    spotlightAd?.images?.find((img) => img.isCover)?.displayUrl ||
+    spotlightAd?.images?.[0]?.displayUrl ||
+    spotlightAd?.images?.[0]?.originalUrl;
 
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 items-center min-h-[360px] lg:min-h-[400px]">
-          {/* Left Column: Hero Content */}
-          <div className="lg:col-span-6 p-6 sm:p-10 lg:py-12 lg:pl-12 flex flex-col justify-between h-full">
-            <div>
-              {/* Badge */}
-              <div className="inline-flex items-center gap-2 rounded-full bg-black/25 px-3.5 py-1.5 text-xs font-medium text-emerald-300 backdrop-blur-sm mb-4 border border-white/10">
-                <ShieldCheck size={15} className="text-emerald-400" />
-                <span>Fast, Free & Safe Classifieds</span>
+  return (
+    <section className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-4 pb-2">
+      <div className="relative overflow-hidden rounded-2xl bg-[#002F34] text-white border border-[#003d44] shadow-sm">
+        {/* Subtle grid backdrop */}
+        <div 
+          className="absolute inset-0 opacity-[0.04] pointer-events-none"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 0)`,
+            backgroundSize: '24px 24px',
+          }}
+        />
+
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center p-6 sm:p-10 lg:p-12">
+          {/* Left Column: Editorial Headline & Actions */}
+          <div className="lg:col-span-7 flex flex-col justify-between">
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
+            >
+              {/* Context Label */}
+              <div className="inline-flex items-center gap-2 rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-emerald-300 mb-4 border border-white/10">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Verified Local Classifieds • India</span>
               </div>
 
-              {/* Main Heading */}
-              <h1 className="text-3xl sm:text-5xl lg:text-[54px] font-black tracking-tight leading-[1.1] text-white">
-                Find it. Buy it.{' '}
-                <span className="text-[#FFD54A]">Sell it.</span>
+              {/* Headline */}
+              <h1 className="text-3xl sm:text-4xl lg:text-[44px] font-semibold tracking-tight text-white leading-[1.15]">
+                Buy, sell, and discover pre-owned goods near you
               </h1>
 
-              {/* Subtitle */}
-              <p className="mt-3 text-base sm:text-lg text-gray-200 font-normal">
-                Great deals from people around you.
+              {/* Subhead */}
+              <p className="mt-3 text-sm sm:text-base text-slate-300 font-normal max-w-xl leading-relaxed">
+                Connect directly with verified neighbours. Inspect in person, negotiate fairly, and trade without platform commissions.
               </p>
 
-              {/* Action Buttons */}
-              <div className="mt-8 flex flex-wrap items-center gap-5">
-                <button
+              {/* Dynamic Category Chips from Database */}
+              {popularCategories.length > 0 && (
+                <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
+                  <span className="text-slate-400 font-medium mr-1">Categories:</span>
+                  {popularCategories.map((chip) => (
+                    <button
+                      key={chip.label}
+                      onClick={() => navigate(`/search?category=${encodeURIComponent(chip.query)}`)}
+                      className="px-2.5 py-1 rounded-md bg-white/5 hover:bg-white/15 text-slate-200 border border-white/10 transition-colors cursor-pointer"
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Primary & Secondary Buttons */}
+              <div className="mt-8 flex flex-wrap items-center gap-4">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   type="button"
                   onClick={() => navigate('/search')}
-                  className="inline-flex items-center gap-2 rounded-full bg-[#FFD54A] hover:bg-[#f5c62d] px-7 py-3.5 text-sm font-bold text-[#102A33] shadow-md transition-all duration-200 hover:scale-[1.02] cursor-pointer"
+                  className="inline-flex items-center gap-2 rounded-lg bg-[#FFCE32] hover:bg-[#eec128] px-6 py-3 text-sm font-semibold text-[#002F34] transition-colors cursor-pointer shadow-xs"
                 >
-                  <span>Explore Listings</span>
-                  <ArrowRight size={17} strokeWidth={2.5} />
-                </button>
+                  <span>Explore listings</span>
+                  <ArrowRight size={16} />
+                </motion.button>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
                   type="button"
                   onClick={handleStartSelling}
-                  className="text-sm font-bold text-white underline underline-offset-8 decoration-2 hover:text-[#FFD54A] transition-colors cursor-pointer"
+                  className="inline-flex items-center gap-2 rounded-lg bg-white/10 hover:bg-white/15 px-6 py-3 text-sm font-semibold text-white border border-white/15 transition-colors cursor-pointer"
                 >
-                  Start Selling
-                </button>
+                  <Tag size={16} className="text-amber-300" />
+                  <span>Post an ad for free</span>
+                </motion.button>
               </div>
-            </div>
+            </motion.div>
 
-            {/* Trust Indicators along bottom */}
-            <div className="mt-10 pt-4 flex flex-wrap items-center gap-6 text-xs text-gray-200">
+            {/* Proof Points */}
+            <div className="mt-10 pt-4 border-t border-white/10 grid grid-cols-3 gap-3 text-xs text-slate-300">
               <div className="flex items-center gap-2">
-                <ShieldCheck size={16} className="text-white" />
-                <span className="font-medium">Verified Listings</span>
+                <ShieldCheck size={16} className="text-emerald-400 shrink-0" />
+                <span className="font-normal truncate">Phone-verified sellers</span>
               </div>
               <div className="flex items-center gap-2">
-                <Users size={16} className="text-white" />
-                <span className="font-medium">Local Buyers & Sellers</span>
+                <MessageCircle size={16} className="text-teal-300 shrink-0" />
+                <span className="font-normal truncate">Instant direct chat</span>
               </div>
               <div className="flex items-center gap-2">
-                <Lock size={16} className="text-white" />
-                <span className="font-medium">Safe & Secure Deals</span>
+                <CheckCircle2 size={16} className="text-amber-300 shrink-0" />
+                <span className="font-normal truncate">Zero listing fees</span>
               </div>
             </div>
           </div>
 
-          {/* Right Column: Product Collage */}
-          <div className="lg:col-span-6 relative h-64 sm:h-80 lg:h-full min-h-[360px] flex items-center justify-center overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-[#003F46] via-transparent to-transparent z-10 hidden lg:block w-24 pointer-events-none" />
-            <img
-              src="/hero-collage.jpg"
-              alt="OLX Marketplace"
-              className="w-full h-full object-cover object-center lg:object-right scale-105"
-            />
-          </div>
+          {/* Right Column: Spotlight of Real Listing from Database */}
+          {spotlightAd && (
+            <div className="lg:col-span-5 flex justify-center">
+              <motion.div
+                initial={{ opacity: 0, y: 16 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.45, delay: 0.1, ease: 'easeOut' }}
+                whileHover={{ y: -4 }}
+                onClick={() => navigate(`/ad/${spotlightAd.id}`)}
+                className="w-full max-w-sm bg-white rounded-xl p-3 shadow-xl text-slate-900 border border-slate-200 cursor-pointer transition-shadow"
+              >
+                {/* Real Product Visual from Database */}
+                <div className="relative aspect-[4/3] rounded-lg overflow-hidden bg-slate-100 flex items-center justify-center">
+                  {adImage && !imageError ? (
+                    <img
+                      src={adImage}
+                      alt={spotlightAd.title}
+                      onError={() => setImageError(true)}
+                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                      loading="eager"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-1.5 p-4 text-center">
+                      <Tag size={28} className="text-slate-300" />
+                      <span className="text-xs font-medium text-slate-500">Verified Marketplace Item</span>
+                    </div>
+                  )}
+                  <span className="absolute top-2.5 left-2.5 rounded bg-slate-900/80 backdrop-blur-xs px-2 py-0.5 text-[11px] font-medium text-white flex items-center gap-1">
+                    <CheckCircle2 size={12} className="text-emerald-400" />
+                    Verified listing
+                  </span>
+                  <span className="absolute bottom-2.5 right-2.5 rounded bg-black/70 backdrop-blur-xs px-2 py-0.5 text-[10px] font-medium text-slate-200">
+                    Latest posting
+                  </span>
+                </div>
+
+                {/* Real Ad Details */}
+                <div className="p-2.5 pt-3">
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-xl font-bold text-slate-900 tracking-tight tabular-nums">
+                      {formatCurrency(spotlightAd.price)}
+                    </span>
+                    {spotlightAd.isNegotiable && (
+                      <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
+                        Negotiable
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-1 text-sm font-medium text-slate-800 line-clamp-1">
+                    {spotlightAd.title}
+                  </p>
+
+                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <div className="flex items-center gap-1 truncate">
+                      <MapPin size={13} className="text-slate-400 shrink-0" />
+                      <span className="truncate">{spotlightAd.location?.name || 'India'}</span>
+                    </div>
+                    <span className="text-slate-400 shrink-0">{formatRelativeTime(spotlightAd.createdAt)}</span>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
         </div>
       </div>
     </section>
   );
 };
-

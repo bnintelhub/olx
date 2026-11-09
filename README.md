@@ -1,56 +1,33 @@
-# OLX Clone — React & Firebase Classifieds Marketplace
+# BharatMarket (OLX Marketplace) — Full-Stack Monorepo
 
-> Open-source classifieds marketplace for **buying and selling online**. Built with **React** and **Firebase** only — no backend server, no Redux, no custom build. List cars, bikes, electronics, property, and more. Includes **real-time chat**, **OTP authentication**, **admin panel**, advanced search, offers, reviews, and SEO-friendly product pages.
-
-**[Visit live demo](https://olx-sijeesh.web.app)**
-
-[![React 17](https://img.shields.io/badge/React-17.0.2-61dafb?logo=react)](https://reactjs.org/)
-[![Firebase 9](https://img.shields.io/badge/Firebase-9.1.x-ffca28?logo=firebase)](https://firebase.google.com/)
-[![Node 16](https://img.shields.io/badge/Node-16.x-339933?logo=node.js)](https://nodejs.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
-
+> Production-grade classifieds marketplace built with **Fastify**, **PostgreSQL**, **Redis**, **BullMQ**, **MinIO (S3)**, **Socket.IO**, and **React (Vite)** inside a high-performance **pnpm + Turborepo** monorepo.
 
 ---
 
 ## Table of Contents
 
-- [Monorepo Architecture (pnpm & Turborepo)](#monorepo-architecture-pnpm--turborepo)
+- [Monorepo Architecture](#monorepo-architecture)
   - [Workspace Structure](#workspace-structure)
   - [Available Monorepo Commands](#available-monorepo-commands)
-- [Backend & Authentication Architecture](#backend--authentication-architecture)
-  - [👉 Classifieds Ad Creation, Automated Moderation & Monetization Architecture (Clickable)](docs/AD_CREATION_AND_MODERATION_FLOW.md)
-  - [👉 Detailed Auth Workflow & API Payloads Documentation (Clickable)](docs/AUTH_WORKFLOW.md)
-  - [👉 RBAC & Account Capabilities Architecture Documentation (Clickable)](docs/RBAC_WORKFLOW.md)
-  - [👉 Universal Media & Smart Crop Pipeline Architecture (Clickable)](docs/media.md)
-- [Features](#features)
-  - [Marketplace and Ads](#marketplace-and-ads)
-  - [Search and Discovery](#search-and-discovery)
-  - [Authentication](#authentication)
-  - [Real-Time Chat](#real-time-chat)
-  - [Offers and Negotiations](#offers-and-negotiations)
-  - [Reviews and Ratings](#reviews-and-ratings)
-  - [User Profiles and Dashboard](#user-profiles-and-dashboard)
-  - [Notifications](#notifications)
-  - [Admin Panel](#admin-panel)
-  - [SEO Built-In](#seo-built-in)
-  - [Security](#security)
-  - [Firebase Services](#firebase-services)
+- [System Architecture & Core Workflows](#system-architecture--core-workflows)
+  - [1. Media Upload & Ad Creation Workflow](#1-media-upload--ad-creation-workflow)
+  - [2. User Registration & BullMQ OTP Queue](#2-user-registration--bullmq-otp-queue)
+  - [3. Password Recovery & Cooldown Flow](#3-password-recovery--cooldown-flow)
+  - [4. Role-Based Access Control (RBAC) & Capabilities](#4-role-based-access-control-rbac--capabilities)
 - [Tech Stack](#tech-stack)
-- [Project Structure](#project-structure)
-- [Firebase Data Model](#firebase-data-model)
+- [Key Features](#key-features)
 - [Getting Started](#getting-started)
-- [Demo & Screenshots](#demo--screenshots)
-- [Deployment](#deployment)
-- [Contributing](#contributing)
+  - [Prerequisites](#prerequisites)
+  - [Environment Setup](#environment-setup)
+  - [Running with Docker Compose](#running-with-docker-compose)
+  - [Running in Local Development Mode](#running-in-local-development-mode)
 - [License](#license)
-- [Contact](#contact)
 
 ---
 
-## Monorepo Architecture (pnpm & Turborepo)
+## Monorepo Architecture
 
-The repository is organized as a high-performance **pnpm + Turborepo monorepo**:
+The repository is organized as a unified, high-performance **pnpm + Turborepo monorepo**:
 
 ### Workspace Structure
 
@@ -58,143 +35,169 @@ The repository is organized as a high-performance **pnpm + Turborepo monorepo**:
 olx/
 ├── apps/
 │   ├── admin/               # React + Tailwind + TanStack Admin Operations Portal (@olx/admin)
-│   ├── client/              # React 18 + Vite Web Application (@olx/client)
-│   ├── server/              # Fastify v4 + TypeScript 7 Backend REST API (@olx/server)
-│   └── workers/             # BullMQ 5.x Background Job Processing Workers (@olx/workers)
+│   ├── client/              # React 18 + Vite + Tailwind Classifieds Marketplace Web App (@olx/client)
+│   ├── server/              # Fastify v4 + TypeScript REST API & Clustered Socket.IO (@olx/server)
+│   └── workers/             # BullMQ 5.x Background Job Workers (Sharp Media & OTP) (@olx/workers)
 ├── packages/
 │   ├── database/            # Prisma 5.22 ORM, PostgreSQL schema, migrations, seed (@olx/database)
 │   └── shared/              # Unified RBAC, capabilities, errors, audit & crypto utils (@olx/shared)
-├── docker-compose.yml        # PostgreSQL 16, Redis 7, Server, Workers & Client containers
-├── pnpm-workspace.yaml       # Monorepo packages mapping (apps/* and packages/*)
-├── turbo.json               # Turbo pipeline definitions, task caching & dependency graphs
-└── package.json             # Root monorepo scripts & orchestration
+├── infrastructure/          # Dockerfiles & deployment configurations
+├── docker-compose.yml       # PostgreSQL 16, Redis 7, MinIO, Server, Workers & Client
+├── pnpm-workspace.yaml      # Monorepo packages mapping
+├── turbo.json               # Turbo pipeline definitions & topological task caching
+└── package.json             # Root monorepo orchestration scripts
 ```
 
 ### Available Monorepo Commands
 
-All commands can be executed from the monorepo root:
+All commands can be executed directly from the monorepo root:
 
 | Command | Action |
 |:---|:---|
 | `pnpm dev` | Starts all applications (`admin`, `client`, `server`, `workers`) concurrently via Turbo |
-| `pnpm dev:admin` | Starts the Admin Operations Portal on port 5174 |
-| `pnpm dev:client` | Starts the React + Vite frontend development server on port 5173 |
-| `pnpm dev:server` | Starts only the Fastify backend API in watch mode via `tsx` on port 5000 |
-| `pnpm dev:workers` | Starts only the BullMQ background worker service in watch mode via `tsx` |
-| `pnpm build` | Compiles all packages and applications via Turbo with topological ordering |
-| `pnpm test` | Runs the full test suite (22 unit, integration, and e2e tests via Vitest) |
+| `pnpm dev:client` | Starts the buyer/seller web application on port `5173` |
+| `pnpm dev:admin` | Starts the Admin Operations Portal on port `5174` |
+| `pnpm dev:server` | Starts the Fastify backend API in watch mode on port `5000` |
+| `pnpm dev:workers` | Starts BullMQ background workers in watch mode |
+| `pnpm build` | Compiles all packages and applications with topological ordering |
+| `pnpm test` | Runs the full test suite (unit, integration, and e2e tests via Vitest) |
 | `pnpm db:generate` | Generates the Prisma Client in `@olx/database` |
-| `pnpm db:push` | Pushes Prisma schema updates directly to PostgreSQL |
-| `pnpm db:studio` | Opens Prisma Studio visual database inspector on port 5555 |
-| `pnpm db:seed` | Seeds database with initial categories, locations, and admin credentials |
-| `pnpm docker:db` | Starts isolated PostgreSQL (port 5433) and Redis (port 6379) containers |
-| `pnpm docker:up` | Boots the full application stack in Docker (Postgres, Redis, Server, Workers, Client) |
+| `pnpm db:push` | Synchronizes Prisma schema changes directly to PostgreSQL |
+| `pnpm db:studio` | Launches Prisma Studio visual database inspector on port `5555` |
+| `pnpm db:seed` | Seeds database with categories, locations, sample ads, and credentials |
+| `pnpm docker:up` | Boots the entire application stack via Docker Compose |
 | `pnpm docker:down` | Gracefully stops all Docker containers |
-| `pnpm docker:build` | Builds production Docker container images for all services |
+| `pnpm docker:build` | Builds production Docker images for server, workers, and clients |
 
 ---
 
-## Backend & Authentication Architecture
+## System Architecture & Core Workflows
 
-> 🔗 **Architecture & Workflow Documentation**:
-> - [👉 Detailed Auth Workflow & BullMQ OTP Documentation](docs/AUTH_WORKFLOW.md)
-> - [👉 RBAC & Account Capabilities Architecture Documentation](docs/RBAC_WORKFLOW.md)
-> - [👉 Universal Media Upload, Optimization & Smart Crop Pipeline](docs/media.md)
+> 🔗 **Detailed Workflow Documentation**:
+> - [Ad Creation & Moderation Flow](docs/AD_CREATION_AND_MODERATION_FLOW.md)
+> - [Authentication & OTP Workflow](docs/AUTH_WORKFLOW.md)
+> - [RBAC & Account Capabilities Spec](docs/RBAC_WORKFLOW.md)
+> - [Universal Media & Smart Crop Pipeline](docs/media.md)
 
-The backend is built with **Fastify v4** following clean modular architecture (`backend/src/modules`), backed by **PostgreSQL 16**, **Redis 7.0**, and **BullMQ 5.x** for background job processing:
+### 1. Media Upload & Ad Creation Workflow
 
-- **Fastify Modular API**: Distinct modules for `auth`, `users`, `listings`, `categories`, `uploads`, `search`, `favourites`, `chat`, `notifications`, `reports`, `payments`, and `admin`.
-- **BullMQ Background Email Queue**: Non-blocking asynchronous OTP dispatch via Redis queue (`otp-dispatch`) with worker retries and exponential backoff.
-- **Enterprise-Grade Security**:
-  - Passwords hashed with `bcrypt` (12 rounds).
-  - OTP values hashed with `SHA-256` before persistence.
-  - Brute-force protection: Max 3 attempts before OTP session lockout.
-  - Rate limiting & 45s resend cooldown enforced via Redis TTL.
-  - Dual-token session security: Short-lived JWT (15 mins) + 40-byte cryptographically random refresh token rotation.
-
-### Registration & BullMQ Background Queue Flow
+Media upload and ad post creation are decoupled into two asynchronous phases to ensure instantaneous UI response times and atomic database persistence:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as "Client (Web / Mobile)"
-    participant Fastify as "Fastify API (/api/v1/auth)"
-    participant DB as "PostgreSQL (Prisma ORM)"
-    participant Redis as "Redis 7.0"
-    participant BullMQ as "BullMQ (otp-dispatch)"
-    participant Worker as "BullMQ Background Worker"
-    participant Email as "Email Delivery Service"
+    actor User as User (Client / Browser)
+    participant Server as Fastify API Server
+    participant Redis as Redis (BullMQ Queue)
+    participant Worker as Background Worker (Sharp)
+    participant S3 as MinIO / S3 Storage
+    participant DB as PostgreSQL (Prisma)
 
-    Client->>Fastify: POST /register { email, password, name }
-    Fastify->>DB: Check uniqueness & hash password (bcrypt)
+    %% PHASE 1: IMAGE UPLOAD
+    rect rgb(240, 248, 255)
+    Note over User, S3: Phase 1: Image Upload & Background Optimization
+    User->>Server: 1. POST /api/v1/media/images?resource=ads (multipart/form-data)
+    Server->>Server: Magic bytes, MIME type & size validate
+    Server->>DB: Media record create (status: PENDING, scope: UNATTACHED)
+    Server->>Redis: Job push to 'media-process' queue
+    Server-->>User: 201 Created (mediaId & temp preview)
+
+    Redis->>Worker: Consume job (mediaId)
+    Worker->>Worker: Sharp engine: WebP variants (thumb, medium, card, large) + BlurHash
+    Worker->>S3: Upload WebP variants (ads/drafts/images/{id}/)
+    Worker->>DB: Update Media (status: READY, variants: {...})
+    end
+
+    %% PHASE 2: POST CREATION
+    rect rgb(245, 255, 245)
+    Note over User, DB: Phase 2: Ad Creation & Atomic Linking
+    User->>Server: 2. POST /api/v1/ads { title, price, categoryId, images: [{ mediaId }] }
+    Server->>Server: Fraud detection & Category dynamic attributes check
+    Server->>DB: Validate mediaId ownership & status (status === 'READY')
+    
+    critical Prisma $transaction (Atomic)
+        Server->>DB: Insert into "ads" table (status: ACTIVE / PENDING_REVIEW)
+        Server->>DB: Insert into "ad_images" table (variants URLs, isCover, sortOrder)
+        Server->>DB: Update "media" table (isAttached: true, attachedToId: ad.id, scope: AD_IMAGE)
+        Server->>DB: Insert "ad_attribute_values"
+    end
+
+    Server->>Redis: Invalidate cache (feed, category counts)
+    Server-->>User: 201 Created { success: true, data: { adId, slug } }
+    end
+```
+
+- **Phase 1 (Image Upload & Optimization)**: The client streams multipart images to Fastify. The server validates image magic bytes and records an unattached `media` row before immediately enqueuing a job in BullMQ. Dedicated workers process the images with Sharp, generate WebP variants (`thumbnail`, `medium`, `card`, `large`) and BlurHash strings, and persist them to MinIO / S3.
+- **Phase 2 (Ad Post Creation)**: When the user submits the listing form, Fastify validates required category specifications and runs anti-fraud heuristics. In a single atomic Prisma transaction (`$transaction`), the `ad` record is inserted, image variants are linked into `ad_images`, and the referenced `media` records are marked as permanently attached (`isAttached = true`).
+
+---
+
+### 2. User Registration & BullMQ OTP Queue
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Client (Web / Mobile)
+    participant Fastify as Fastify API (/api/v1/auth)
+    participant DB as PostgreSQL (Prisma ORM)
+    participant Redis as Redis 7.0
+    participant BullMQ as BullMQ (otp-dispatch)
+    participant Worker as BullMQ Background Worker
+    participant SMS as SMS / Email Gateway
+
+    Client->>Fastify: POST /register { phoneNumber, password, name }
+    Fastify->>DB: Verify uniqueness & hash password (bcrypt)
     Fastify->>DB: Store OtpSession with SHA-256 OTP Hash
-    Fastify->>BullMQ: Enqueue "send-otp-email" job
+    Fastify->>BullMQ: Enqueue "otp-dispatch" job
     Fastify-->>Client: 201 Created { sessionId, expiresInSeconds: 300 }
 
     Note over BullMQ,Worker: Asynchronous Background Processing
-    Worker->>BullMQ: Pop "send-otp-email" job
-    Worker->>Email: Deliver 6-digit OTP code to user's inbox
-    Email-->>Client: Receive OTP via Email
+    Worker->>BullMQ: Pop "otp-dispatch" job
+    Worker->>SMS: Dispatch 6-digit verification OTP
+    SMS-->>Client: Receive OTP code
 
-    Client->>Fastify: POST /verify-email-otp { email, sessionId, otp }
-    Fastify->>DB: Verify SHA-256 hash & check attempt limit (<= 3)
-    Fastify->>DB: Mark isEmailVerified=true & update tokens
+    Client->>Fastify: POST /verify-otp { sessionId, code }
+    Fastify->>DB: Validate SHA-256 hash & check attempt limit (<= 3)
+    Fastify->>DB: Mark user ACTIVE & issue JWT tokens
     Fastify-->>Client: 200 OK { user, tokens: { accessToken, refreshToken } }
 ```
 
-### Password Recovery & Rate Limit Cooldown Flow
+---
+
+### 3. Password Recovery & Cooldown Flow
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as "Client (Web / Mobile)"
-    participant Fastify as "Fastify API"
-    participant Redis as "Redis (Cooldown TTL)"
-    participant DB as "PostgreSQL"
-    participant BullMQ as "BullMQ Worker"
+    actor Client as Client (Web / Mobile)
+    participant Fastify as Fastify API
+    participant Redis as Redis (Cooldown TTL)
+    participant DB as PostgreSQL
+    participant BullMQ as BullMQ Worker
 
-    Client->>Fastify: POST /forgot-password { email }
-    Fastify->>Redis: Check cooldown key "otp_cooldown:<email>"
+    Client->>Fastify: POST /forgot-password { identifier }
+    Fastify->>Redis: Check cooldown key "otp_cooldown:<identifier>"
     alt Within 45-Second Cooldown
         Fastify-->>Client: 429 Too Many Requests (Rate limited)
     else Cooldown Cleared
         Fastify->>DB: Create OtpSession (PASSWORD_RESET, SHA-256)
         Fastify->>Redis: Set cooldown TTL (45s)
-        Fastify->>BullMQ: Enqueue background email
+        Fastify->>BullMQ: Enqueue background dispatch
         Fastify-->>Client: 200 OK { sessionId, expiresInSeconds: 300 }
-        BullMQ->>Client: Send Reset Code Email
+        BullMQ->>Client: Send Verification Code
     end
 
-    Client->>Fastify: POST /reset-password { email, sessionId, otp, newPassword }
+    Client->>Fastify: POST /reset-password { sessionId, code, newPassword }
     Fastify->>DB: Validate OTP hash & update password hash
     Fastify->>Redis: Invalidate cached user session
-    Fastify-->>Client: 200 OK { message: "Password has been reset successfully" }
+    Fastify-->>Client: 200 OK { message: "Password reset successful" }
 ```
 
-### Role-Based Access Control (RBAC) & Account Capabilities
+---
 
-> 🔗 **Quick Link**: [Click here to open the full RBAC & Capabilities Documentation](docs/RBAC_WORKFLOW.md) for permission matrices, authorization guards, and endpoint security specs.
+### 4. Role-Based Access Control (RBAC) & Capabilities
 
-Access control is built upon fine-grained permissions and marketplace account capabilities:
-
-#### 1. Admin Panel Roles (Strict Separation of Duties)
-Universal admin power is explicitly prevented — permissions are granularly assigned to isolate sensitive domains:
-- **Super Admin (`SUPER_ADMIN`)**: Root control with wildcard (`*`) access across all modules and settings.
-- **Admin (`ADMIN`)**: Users, listings, categories, settings, operational moderation (cannot issue financial refunds).
-- **Moderator (`MODERATOR`)**: Review listings and investigate reports (cannot refund, change settings, or ban users).
-- **Customer Support (`CUSTOMER_SUPPORT`)**: Support tickets, dispute review, read-only user and listing lookup.
-- **Finance Admin (`FINANCE_ADMIN`)**: Payments, refunds, invoices, revenue (cannot moderate listings or change security settings).
-- **Content Manager (`CONTENT_MANAGER`)**: Categories, taxonomy attributes, promotional banners, announcements.
-- **Analyst (`ANALYST`)**: Read-only business intelligence, traffic, and platform reports.
-
-#### 2. Marketplace Account Capabilities (Unified Buyer & Seller)
-**Buyer and seller are handled through account capabilities rather than separate mutually exclusive roles.**
-Every registered user can seamlessly buy AND sell items:
-- `can_buy`: Browse listings, chat in real time, make offers, save favourites, report scams.
-- `can_sell`: Create, edit, promote, and manage classified listings.
-- `is_dealer`: Manage bulk dealer inventory, verified showroom profile, and dealer badges.
-
-If an account violates marketplace rules, administrators can revoke `can_sell` while keeping `can_buy` active.
+Access control decouples administrative staff permissions from customer marketplace capabilities:
 
 ```mermaid
 flowchart TD
@@ -215,283 +218,123 @@ flowchart TD
     CheckCap -->|"No"| Deny403C["403 Forbidden<br/>FORBIDDEN_CAPABILITY"]
 ```
 
----
+#### Admin Panel Roles (Separation of Duties)
+- **`SUPER_ADMIN`**: Full wildcard (`*`) access across all modules, platform settings, and audit logs.
+- **`ADMIN`**: User moderation, category taxonomy, listing approvals, general management.
+- **`MODERATOR`**: Investigates user reports, ad moderation, review queues.
+- **`CUSTOMER_SUPPORT`**: Support tickets, dispute resolution, read-only customer records.
+- **`FINANCE_ADMIN`**: Payment transactions, invoices, monetization plans, revenue analytics.
+- **`CONTENT_MANAGER`**: Banners, promotional campaigns, category attributes.
 
-## Features
-
-### Marketplace and Ads
-
-- **Create, edit, delete ads** — Multi-step form with category selection, location, pricing, and delivery options.
-- **Rich media** — Up to 12 images per ad; optional video upload (Remote Config–controlled).
-- **Ad promotion** — Featured (7 days), Urgent badge (7 days), Top ad (14 days) via promote flow.
-- **Price history** — Track and display price changes over time.
-- **Ad expiry** — Configurable expiry (e.g. 30 days) via Remote Config.
-- **Compare ads** — Side-by-side comparison of up to 3 listings.
-- **Marketing score** — Used for home-page recommendations and sorting.
-- **Ad analytics** — Views, favorites, shares tracked in Firestore.
-
-### Search and Discovery
-
-- **Advanced filters** — Price range, location, condition, date posted, ad type, delivery, warranty, verified seller.
-- **Voice search** — Speech-to-text for search queries.
-- **Map view** — Browse ads on a map.
-- **Recent searches** — Stored and shown for quick repeat searches.
-- **Saved searches** — Persist search queries in Firestore for logged-in users.
-- **Trending searches** — Admin-managed trending terms.
-- **Sort options** — Newest, price low/high, relevance.
-- **Nearby ads** — Geolocation-based listings.
-- **Category browsing** — Category pages and category-specific fields.
-
-### Authentication
-
-- **Email/password** — Sign up, sign in, password reset, email verification.
-- **Phone OTP** — Sign-in and link phone via reCAPTCHA.
-- **Google sign-in** — Popup sign-in and account linking.
-- **Email link** — Passwordless sign-in via magic link.
-- **Anonymous/guest** — Browse as guest; upgrade to permanent account later.
-- **Account management** — Reauthentication for sensitive actions, account deletion, unlink providers.
-
-### Real-Time Chat
-
-- **Firestore-backed conversations** — One conversation per buyer–seller–product.
-- **Image attachments** — Send images in chat (Storage rules, 5MB max).
-- **Typing indicators** — Real-time typing status.
-- **Unread count** — Global unread message count in header.
-- **Filters** — Messages list filtered by buying vs selling.
-
-### Offers and Negotiations
-
-- **Make offer** — Send a price offer on an ad.
-- **Counter offer** — Seller can counter; buyer can accept or reject.
-- **Offer history** — All sent and received offers with status (pending, accepted, rejected).
-- **Status tracking** — Real-time offer state via Firestore listeners.
-
-### Reviews and Ratings
-
-- **Seller reviews** — 1–5 star ratings and text (up to 2000 characters).
-- **Seller rating display** — Aggregate rating on profile and seller store.
-- **Review list** — Public list of reviews per seller.
-
-### User Profiles and Dashboard
-
-- **Dashboard** — My ads, saved ads, settings, account management.
-- **Profile** — Avatar upload, edit profile, verification documents, linked accounts (e.g. Google).
-- **Followers / following** — Follow users; view followers and following lists.
-- **Seller store page** — Public store view for a user’s listings.
-- **Watchlist** — Save ads and optional price alerts (Firestore-backed).
-- **Favorites / saved ads** — Quick access from dashboard.
-- **Transaction history** — Buying and selling tabs with transaction records.
-- **Address management** — Add and manage delivery addresses.
-
-### Notifications
-
-- **Real-time in-app notifications** — Firestore listener; notification bell and list.
-- **Unread count** — Badge on bell icon.
-- **Mark as read / mark all read** — Update read state in Firestore.
-
-### Admin Panel
-
-- **Protected admin routes** — Role-based access; only users with admin role can access.
-- **User management** — View and manage users.
-- **Ad moderation** — Moderate product status (e.g. approve, reject).
-- **Report management** — Handle user reports on ads.
-- **Category management** — CRUD for categories.
-- **Analytics dashboard** — Overview metrics (user count, ad count, reports).
-- **Verification approval** — Review and approve verification requests.
-- **Banner management** — Promotional banners (via Firestore/Remote Config).
-
-### SEO Built-In
-
-- **React Helmet** — Dynamic `<title>` and `<meta name="description">` per product page.
-- **Open Graph** — `og:title`, `og:description`, `og:image`, `og:url`, `og:type` for sharing.
-- **JSON-LD structured data** — Schema.org Product schema (name, description, image, category, price, currency).
-- **Breadcrumbs** — Home → Category → Product name on ad view page.
-- **Sitemap page** — `/sitemap` for discovery.
-- **Sanitization** — Safe meta and JSON-LD content (XSS prevention).
-
-### Security
-
-- **Firestore security rules** — Role-based read/write; admin-only fields; owner/admin checks per collection.
-- **Storage rules** — Path-based access; file size (e.g. 5MB) and content-type checks; uid-prefixed paths.
-- **CSP headers** — Content-Security-Policy in `public/index.html`.
-- **Rate limiting** — Utility for limiting sensitive actions.
-- **Input sanitization** — Sanitize user content for meta and structured data.
-- **XSS prevention** — SVG and script restrictions in storage and display.
-
-### Firebase Services
-
-- **Firebase Authentication** — All methods above; email verification; account linking.
-- **Cloud Firestore** — All app data; offline persistence; real-time listeners for notifications, offers, watchlist, chat.
-- **Cloud Storage** — Ad images, chat attachments, profile pictures, verification documents.
-- **Firebase Analytics** — Custom events (ad view/create/edit/delete/share, search, offers, chat, auth, favorites, profile).
-- **Performance Monitoring** — Custom traces and load time measurement.
-- **Remote Config** — Feature flags (e.g. maintenance mode, video upload), dynamic config (max images, ad expiry days), promo banner, min app version.
-- **App Check** — reCAPTCHA v3 (optional; requires `REACT_APP_FIREBASE_APP_CHECK_RECAPTCHA_SITE_KEY`).
+#### Marketplace Account Capabilities
+- **`can_buy`**: Browse listings, initiate real-time chats, negotiate offers, submit reviews.
+- **`can_sell`**: Create, edit, feature, and manage classified listings.
+- **`is_dealer`**: Bulk listing management, verified dealer badge, showroom page.
 
 ---
 
 ## Tech Stack
 
-The app runs entirely on **React** and **Firebase**. No Express server, no Redux, no custom Webpack.
-
-| Layer | Stack |
-|:------|:------|
-| **Frontend** | React 17, React Router 5, Context API (Auth, Post, AllPost, Location, Notification, Offer, Watchlist, Chat, Toast). |
-| **Backend** | Firebase 9 (compat) — Authentication, Firestore, Storage, Analytics, Performance, Remote Config, App Check. |
-| **UI** | Bootstrap 4, custom CSS. Responsive layout; mobile bottom navigation. |
-| **SEO** | React Helmet for dynamic meta tags and JSON-LD. |
-| **Tooling** | Create React App 4, Prettier, ESLint. Node 16.x. |
-
-### Built With
-
-React · Firebase · Firestore · Firebase Auth · Firebase Storage · Bootstrap · React Router · React Helmet
+| Layer | Technology |
+|:---|:---|
+| **Architecture** | pnpm Workspaces + Turborepo monorepo |
+| **API Server** | Fastify v4, TypeScript, Zod Schema Validation |
+| **Database & ORM** | PostgreSQL 16, Prisma 5.22 ORM |
+| **Caching & Queues** | Redis 7, BullMQ 5.x |
+| **Object Storage** | MinIO (Local S3-compatible) / AWS S3 |
+| **Image Processing** | Sharp (WebP variants, BlurHash, metadata extraction) |
+| **Real-Time Engine** | Socket.IO v4 clustered via `@socket.io/redis-adapter` |
+| **Frontend Web** | React 18, Vite, Tailwind CSS, Lucide Icons, GSAP animations |
+| **Admin Portal** | React 18, Tailwind CSS, TanStack Query & Table |
+| **Testing** | Vitest, Supertest, Fastify Inject |
 
 ---
 
-## Firebase Data Model
+## Key Features
 
-Key Firestore collections:
-
-| Collection | Purpose |
-|:-----------|:--------|
-| `users` | User profiles, verification status, role, followers/following counts. |
-| `products` | Ads: name, price, description, images, category, location, status, moderation, stats (views, favorites, shares), marketing score. |
-| `conversations` | Chat threads; subcollection `messages` for messages. |
-| `reports` | User reports on ads (admin read). |
-| `categories` | Product categories (admin write). |
-| `notifications` | User notifications (real-time). |
-| `offers` | Price offers (buyer/seller/admin). |
-| `reviews` | Seller reviews and ratings. |
-| `savedSearches` | Saved search queries per user. |
-| `blockedUsers` | Blocked user references. |
-| `priceHistory` | Price change history per product. |
-| `adPromotions` | Promotion records (featured, urgent, top). |
-| `verifications` | User verification requests (admin update). |
-| `userPreferences` | User preferences. |
-| `trendingSearches` | Trending search terms (admin write). |
-| `activityLog` | Activity logs (admin read). |
-| `transactions` | Purchase transactions (buyer/seller/admin). |
-| `followers` | Follower/following relationships. |
-| `addresses` | User addresses. |
-| `banners` | Promotional banners (admin write). |
-| `feedback` | User feedback. |
-
-Composite indexes are defined in `firebase/firestore.indexes.json` (25 indexes) for products, conversations, notifications, offers, reviews, transactions, followers, and related queries.
+- **Decoupled Media Pipeline**: Non-blocking image uploads with automatic multi-resolution WebP optimization (`large`, `medium`, `card`, `thumbnail`) and blurhash generation.
+- **Atomic Deletion & S3 Cleanup**: Complete physical deletion of image variants and S3 directories upon listing deletion.
+- **Real-Time Clustered Chat**: Instant buyer-seller messaging with Redis pub/sub adapter support for multi-instance horizontal scaling.
+- **Dynamic Category Attributes**: Category-specific specifications (e.g. mileage/year for Cars, RAM/storage for Phones) with dynamic schema validation.
+- **Anti-Fraud & Moderation**: Automated scam detection heuristics flag suspicious listings for manual moderator inspection.
+- **Monetization & Credits**: Featured ads, urgent tags, and category listing limits with paid credits support.
 
 ---
 
 ## Getting Started
 
-**Prerequisites:** Node.js 16.x (use [.nvmrc](.nvmrc) with `nvm use`), npm, and a [Firebase project](https://console.firebase.google.com/) with **Authentication**, **Firestore**, and **Storage** enabled.
+### Prerequisites
 
-### 1. Clone and install
-
-```bash
-git clone https://github.com/sijeeshmiziha/olx.git
-cd olx
-npm install
-```
-
-### 2. Configure Firebase
-
-Copy [.env.example](.env.example) to `.env`. In **Firebase Console → Project settings → General**, add your web app config:
-
-| Variable | Required | Description |
-|:---------|:--------:|:------------|
-| `REACT_APP_FIREBASE_API_KEY` | Yes | Web API key |
-| `REACT_APP_FIREBASE_AUTH_DOMAIN` | Yes | Auth domain (e.g. `project.firebaseapp.com`) |
-| `REACT_APP_FIREBASE_PROJECT_ID` | Yes | Project ID |
-| `REACT_APP_FIREBASE_STORAGE_BUCKET` | Yes | Storage bucket |
-| `REACT_APP_FIREBASE_MESSAGING_SENDER_ID` | Yes | Messaging sender ID |
-| `REACT_APP_FIREBASE_APP_ID` | Yes | Web app ID |
-| `REACT_APP_FIREBASE_MEASUREMENT_ID` | No | Analytics measurement ID |
-| `REACT_APP_FIREBASE_APP_CHECK_RECAPTCHA_SITE_KEY` | No | reCAPTCHA v3 site key for App Check |
-
-Do not commit `.env`.
-
-### 3. Run
-
-```bash
-npm start
-```
-
-Open **http://localhost:3000**
-
-### 4. Deploy Firebase rules and indexes (optional)
-
-If you use your own Firebase project, deploy Firestore rules and indexes:
-
-```bash
-npm run deploy:rules    # Firestore rules + Storage rules
-npm run deploy:indexes  # Firestore indexes
-```
-
-### Available scripts
-
-| Script | Description |
-|:------|:------------|
-| `npm start` | Start dev server |
-| `npm run build` | Production build |
-| `npm test` | Run tests |
-| `npm run deploy` | Build and full Firebase deploy |
-| `npm run deploy:hosting` | Build and deploy only Firebase Hosting |
-| `npm run deploy:rules` | Deploy Firestore and Storage rules |
-| `npm run deploy:indexes` | Deploy Firestore indexes |
-| `npm run format` | Format code with Prettier |
-| `npm run format:check` | Check formatting |
+- **Node.js**: `v20+` or `v22+`
+- **pnpm**: `v10+` (`corepack enable && corepack prepare pnpm@latest --activate`)
+- **Docker & Docker Compose**: For PostgreSQL, Redis, and MinIO storage
 
 ---
 
-## Demo & Screenshots
+### Environment Setup
 
-*See it in action — How to sell using OLX Clone*
+Create `.env` inside `apps/server`:
 
-https://user-images.githubusercontent.com/91063960/137454308-1ec2e004-7f3b-4bdb-aac1-3a57d114f154.mp4
-
-**Sneak peek**
-
-| Home / Listings | Post detail / View |
-|:---------------|:------------------|
-| ![OLX Clone home and listings screenshot showing category grid and featured ads](https://user-images.githubusercontent.com/91063960/139376405-043d6cfd-93b3-4486-a07a-2ff3382846d8.png) | ![OLX Clone view post screenshot showing ad details and seller card](https://user-images.githubusercontent.com/91063960/139376440-1dcd424a-6979-4ec7-bfa0-9e9038ddcbd0.png) |
-
----
-
-## Deployment
-
-1. **Build:** `npm run build` — output is in the `build/` folder.
-
-2. **Firebase Hosting (recommended):**
-   - Install Firebase CLI: `npm install -g firebase-tools`
-   - Login: `firebase login`
-   - Init (if needed): `firebase init hosting` and set `build` as public directory.
-   - Deploy: `npm run deploy:hosting` or `firebase deploy --only hosting`
-   - Set the same environment variables in Firebase Hosting (e.g. via build config or CI secrets).
-
-3. **Other hosts** — Deploy the `build/` folder to **Vercel**, **Netlify**, or any static host. Configure env vars in the hosting dashboard for production.
+```env
+NODE_ENV=development
+PORT=5000
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/olx_marketplace?schema=public"
+REDIS_URL="redis://localhost:6379"
+JWT_ACCESS_SECRET="bharatmarket_super_secure_jwt_access_secret_key_2026"
+JWT_REFRESH_SECRET="bharatmarket_super_secure_jwt_refresh_secret_key_2026"
+SMS_PROVIDER="MOCK"
+MOCK_OTP_CODE="123456"
+CLIENT_URL="http://localhost:5173"
+S3_ENDPOINT="http://localhost:9000"
+S3_PUBLIC_URL="http://localhost:9000/olx-media"
+S3_ACCESS_KEY="admin_olx"
+S3_SECRET_KEY="SuperSecurePassword123"
+S3_BUCKET="olx-media"
+```
 
 ---
 
-## Contributing
+### Running with Docker Compose
 
-Contributions are welcome. Open an issue or submit a pull request. Keep code style consistent and run `npm test` before submitting.
+To boot all infrastructure services (PostgreSQL, Redis, MinIO, API server, Workers, and Client):
+
+```bash
+docker compose up -d
+```
+
+Service endpoints:
+- **Client App**: `http://localhost:5173`
+- **Admin Portal**: `http://localhost:5174`
+- **API Server**: `http://localhost:5000` (Swagger docs: `/docs`, Health: `/api/v1/health`)
+- **MinIO Console**: `http://localhost:9001` (User: `admin_olx`, Password: `SuperSecurePassword123`)
+
+---
+
+### Running in Local Development Mode
+
+1. **Install dependencies:**
+   ```bash
+   pnpm install
+   ```
+
+2. **Start databases & storage:**
+   ```bash
+   pnpm docker:db
+   ```
+
+3. **Initialize database schema & seed data:**
+   ```bash
+   pnpm db:push
+   pnpm db:seed
+   ```
+
+4. **Launch all services in development mode:**
+   ```bash
+   pnpm dev
+   ```
 
 ---
 
 ## License
 
-**MIT.** See [LICENSE](LICENSE) for details.
-
----
-
-## Contact
-
-Feel free to reach out through the links below.
-
-
-<a href="https://www.google.com/search?q=sijeesh+miziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-WEB-FF4088?style=for-the-badge&logo=Google&logoColor=white" alt="Web"></a>
-<a href="https://www.linkedin.com/in/sijeeshmiziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-LinkedIn-0077B5?style=for-the-badge&logo=LinkedIn&logoColor=white" alt="LinkedIn"></a>
-<a href="https://www.instagram.com/sijeeshmiziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-Instagram-E4405F?style=for-the-badge&logo=Instagram&logoColor=white" alt="Instagram"></a>
-<a href="https://twitter.com/sijeeshmiziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-Twitter-1DA1F2?style=for-the-badge&logo=Twitter&logoColor=white" alt="Twitter"></a>
-<a href="mailto:sijeeshmiziha1@gmail.com" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-Gmail-D14836?style=for-the-badge&logo=Gmail&logoColor=white" alt="Gmail"></a>
-<a href="https://www.youtube.com/c/sijeeshmiziha" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/-YouTube-FF0000?style=for-the-badge&logo=YouTube&logoColor=white" alt="YouTube"></a>
-
+This project is licensed under the [MIT License](LICENSE).
