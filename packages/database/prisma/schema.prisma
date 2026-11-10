@@ -255,26 +255,37 @@ model OtpSession {
 // ============================================================================
 
 model Location {
-  id        String     @id @default(uuid()) @db.VarChar(36)
-  name      String     @db.VarChar(100)
-  slug      String     @db.VarChar(120)
-  parentId  String?    @map("parent_id") @db.VarChar(36)
-  type      String     @db.VarChar(20) // STATE, CITY, LOCALITY
-  latitude  Float
-  longitude Float
-  pincode   String?    @db.VarChar(10)
-  isActive  Boolean    @default(true) @map("is_active")
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  id             String     @id @default(uuid()) @db.VarChar(36)
+  name           String     @db.VarChar(100)
+  normalizedName String     @default("") @map("normalized_name") @db.VarChar(100)
+  slug           String     @db.VarChar(120)
+  parentId       String?    @map("parent_id") @db.VarChar(36)
+  type           String     @db.VarChar(20) // country, state, city, locality, area
+  path           String     @default("/") @db.VarChar(500)
+  depth          Int        @default(0)
+  latitude       Float?
+  longitude      Float?
+  pincode        String?    @db.VarChar(10)
+  metadata       Json?
+  isActive       Boolean    @default(true) @map("is_active")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
 
-  parent    Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
-  children  Location[] @relation("LocationHierarchy")
-  ads       Ad[]
-  profiles  Profile[]
+  parent         Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: Restrict)
+  children       Location[] @relation("LocationHierarchy")
+  ads            Ad[]
+  profiles       Profile[]
 
-  @@unique([slug, parentId])
-  @@index([type, parentId])
+  @@index([parentId])
+  @@index([type])
+  @@index([isActive])
+  @@index([slug])
+  @@index([path])
   @@index([latitude, longitude])
+  @@index([parentId, type])
+  @@index([parentId, normalizedName])
+  @@index([parentId, type, normalizedName])
+  @@index([type, isActive])
   @@map("locations")
 }
 
@@ -375,6 +386,8 @@ model Ad {
 
   @@index([status, categoryId, createdAt])
   @@index([status, locationId, createdAt])
+  @@index([locationId])
+  @@index([categoryId, locationId])
   @@index([status, price])
   @@index([userId, status])
   @@index([latitude, longitude])

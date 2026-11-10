@@ -79,10 +79,11 @@ export const AppLayout: React.FC = () => {
       {isHomePage && (
         <Navbar
           onLogoClick={() => navigate('/')}
-          onSearch={(kw, citySlug) => {
+          onSearch={(kw, citySlug, locationId) => {
             const params = new URLSearchParams();
             if (kw) params.set('q', kw);
             if (citySlug) params.set('city', citySlug);
+            if (locationId) params.set('locationId', locationId);
             navigate(`/search?${params.toString()}`);
           }}
           onOpenPostAd={handleOpenPostAd}

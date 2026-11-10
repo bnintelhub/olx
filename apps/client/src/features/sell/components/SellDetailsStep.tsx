@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { IndianRupee, MapPin, FileText, Tag, Check, Sparkles } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Category, LocationItem } from '@/types';
@@ -6,6 +6,7 @@ import {
   PostAdDynamicFields,
   AttributeItem,
 } from '@/features/ads/components/post-ad/PostAdDynamicFields';
+import { LocationPickerModal } from '@/features/locations/components/LocationPickerModal';
 
 interface SellDetailsStepProps {
   category: Category;
@@ -65,6 +66,7 @@ export const SellDetailsStep: React.FC<SellDetailsStepProps> = ({
   onAttributeChange,
   isLoadingAttributes,
 }) => {
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
   const numPrice = Number(price);
   const selectedLocation = locations.find((l) => l.id === selectedLocationId);
 
@@ -167,11 +169,13 @@ export const SellDetailsStep: React.FC<SellDetailsStepProps> = ({
             <MapPin className="w-4 h-4 text-teal-700" />
             <span>Confirm Your Location <span className="text-rose-500">*</span></span>
           </div>
-          {selectedLocation && (
-            <span className="text-xs font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200">
-              Location: {selectedLocation.name}
-            </span>
-          )}
+          <button
+            type="button"
+            onClick={() => setIsPickerOpen(true)}
+            className="text-xs font-bold text-teal-700 hover:underline cursor-pointer"
+          >
+            {selectedLocation ? 'Change Area / GPS' : 'Choose Exact Area / GPS'}
+          </button>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -204,6 +208,21 @@ export const SellDetailsStep: React.FC<SellDetailsStepProps> = ({
             />
           </div>
         </div>
+
+        <LocationPickerModal
+          isOpen={isPickerOpen}
+          onClose={() => setIsPickerOpen(false)}
+          onSelectLocation={(loc) => {
+            if (loc.id) {
+              onLocationChange(loc.id);
+              if (loc.type === 'locality' || loc.type === 'area') {
+                onLocalityChange(loc.name);
+              }
+            }
+          }}
+          selectedLocationId={selectedLocationId}
+          title="Choose Your Location"
+        />
       </div>
 
       {/* 5. Dynamic Category Specifications */}

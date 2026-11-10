@@ -23,20 +23,21 @@ export class ListingsService {
     });
     if (!category) throw new AppError(404, 'CATEGORY_NOT_FOUND', 'Selected category does not exist');
 
-    // Robust location resolution by ID, slug, or fallback city
-    let location = await prisma.location.findFirst({
+    // Canonical location verification & validation
+    const location = await prisma.location.findFirst({
       where: {
         OR: [
           { id: data.locationId },
           { slug: data.locationId.toLowerCase() },
-          { name: { equals: data.locationId, mode: 'insensitive' } },
         ],
       },
     });
+
     if (!location) {
-      location =
-        (await prisma.location.findFirst({ where: { OR: [{ slug: 'patna' }, { type: 'CITY', isActive: true }] } })) ||
-        (await prisma.location.create({ data: { name: 'Patna', slug: 'patna', type: 'CITY', latitude: 25.5941, longitude: 85.1376 } }));
+      throw new AppError(404, 'LOCATION_NOT_FOUND', 'Specified location does not exist');
+    }
+    if (!location.isActive) {
+      throw new AppError(400, 'LOCATION_INACTIVE', 'Specified location is inactive and cannot be selected for listings');
     }
 
     // Dynamic attributes verification
@@ -57,8 +58,8 @@ export class ListingsService {
     const shortId = Math.random().toString(36).substring(2, 8);
     const baseSlug = this.slugify(data.title);
     const slug = `${baseSlug}-${shortId}`;
-    const latitude = data.latitude || location.latitude;
-    const longitude = data.longitude || location.longitude;
+    const latitude = data.latitude ?? location.latitude ?? 0;
+    const longitude = data.longitude ?? location.longitude ?? 0;
 
     const fraudResult = checkContentForFraud(data.title, data.description);
     const initialStatus = fraudResult.isFlagged ? AdStatus.PENDING_REVIEW : AdStatus.ACTIVE;

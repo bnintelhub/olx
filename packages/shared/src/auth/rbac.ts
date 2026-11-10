@@ -31,6 +31,15 @@ export const Permissions = {
   BANNERS_MANAGE: 'banners:manage',
   ANNOUNCEMENTS_MANAGE: 'announcements:manage',
 
+  // Location Hierarchy Management
+  LOCATIONS_READ: 'locations:read',
+  LOCATIONS_CREATE: 'locations:create',
+  LOCATIONS_UPDATE: 'locations:update',
+  LOCATIONS_DELETE: 'locations:delete',
+  LOCATIONS_ACTIVATE: 'locations:activate',
+  LOCATIONS_DEACTIVATE: 'locations:deactivate',
+  LOCATIONS_MANAGE: 'locations:manage',
+
   // Finance & Revenue (Finance Admin)
   PAYMENTS_READ: 'payments:read',
   PAYMENTS_REFUND: 'payments:refund',
@@ -82,6 +91,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permissions.CATEGORIES_MANAGE,
     Permissions.BANNERS_MANAGE,
     Permissions.ANNOUNCEMENTS_MANAGE,
+    Permissions.LOCATIONS_READ,
+    Permissions.LOCATIONS_CREATE,
+    Permissions.LOCATIONS_UPDATE,
+    Permissions.LOCATIONS_DELETE,
+    Permissions.LOCATIONS_ACTIVATE,
+    Permissions.LOCATIONS_DEACTIVATE,
+    Permissions.LOCATIONS_MANAGE,
     Permissions.ANALYTICS_READ,
   ],
 
@@ -120,6 +136,12 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permissions.CATEGORIES_MANAGE,
     Permissions.BANNERS_MANAGE,
     Permissions.ANNOUNCEMENTS_MANAGE,
+    Permissions.LOCATIONS_READ,
+    Permissions.LOCATIONS_CREATE,
+    Permissions.LOCATIONS_UPDATE,
+    Permissions.LOCATIONS_ACTIVATE,
+    Permissions.LOCATIONS_DEACTIVATE,
+    Permissions.LOCATIONS_MANAGE,
     Permissions.LISTINGS_READ,
   ],
 

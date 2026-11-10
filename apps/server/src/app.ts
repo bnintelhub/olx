@@ -18,7 +18,7 @@ import { isRedisHealthy } from './config/redis';
 // Modular Route Imports
 import { authRoutes } from './modules/auth/auth.routes';
 import { categoryRoutes } from './modules/categories/categories.routes';
-import { locationRoutes } from './modules/locations/locations.routes';
+import { locationRoutes, adminLocationRoutes } from './modules/locations/locations.routes';
 import { listingRoutes } from './modules/listings/listings.routes';
 import { userRoutes } from './modules/users/users.routes';
 import { chatRoutes } from './modules/chat/chat.routes';
@@ -169,6 +169,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(reportRoutes, { prefix: '/moderation' });
     await api.register(paymentRoutes, { prefix: '/payments' });
     await api.register(adminRoutes, { prefix: '/admin' });
+    await api.register(adminLocationRoutes, { prefix: '/admin/locations' });
     await api.register(chatAdminRoutes, { prefix: '/admin/chat' });
     await api.register(uploadRoutes, { prefix: '/uploads' });
     await api.register(mediaRoutes, { prefix: '/media' });

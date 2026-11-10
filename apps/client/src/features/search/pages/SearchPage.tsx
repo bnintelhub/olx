@@ -18,6 +18,7 @@ export const SearchPage: React.FC = () => {
   const q = searchParams.get('q') || '';
   const category = searchParams.get('category') || '';
   const city = searchParams.get('city') || '';
+  const locationId = searchParams.get('locationId') || '';
   const sort = searchParams.get('sort') || 'newest';
   const minPrice = searchParams.get('minPrice') || '';
   const maxPrice = searchParams.get('maxPrice') || '';
@@ -146,6 +147,7 @@ export const SearchPage: React.FC = () => {
       q: q || undefined,
       category: category || undefined,
       city: city || undefined,
+      locationId: locationId || undefined,
       sort: sort || undefined,
       minPrice: minPrice ? Number(minPrice) : undefined,
       maxPrice: maxPrice ? Number(maxPrice) : undefined,
@@ -154,7 +156,7 @@ export const SearchPage: React.FC = () => {
 
     searchParams.forEach((val, key) => {
       if (
-        !['q', 'category', 'city', 'sort', 'minPrice', 'maxPrice', 'limit', 'page'].includes(key) &&
+        !['q', 'category', 'city', 'locationId', 'sort', 'minPrice', 'maxPrice', 'limit', 'page'].includes(key) &&
         val
       ) {
         params[key] = val;
@@ -162,7 +164,7 @@ export const SearchPage: React.FC = () => {
     });
 
     return params;
-  }, [q, category, city, sort, minPrice, maxPrice, searchParams]);
+  }, [q, category, city, locationId, sort, minPrice, maxPrice, searchParams]);
 
   const { data: adsResult, isLoading, isFetching } = useAdsQuery(queryParams);
 
@@ -218,9 +220,9 @@ export const SearchPage: React.FC = () => {
     if (category) {
       list.push({ key: 'category', label: 'Category', value: activeCategory?.name || category });
     }
-    if (city) {
-      const c = cities.find((ci) => ci.slug === city);
-      list.push({ key: 'city', label: 'Location', value: c?.name || city });
+    if (locationId || city) {
+      const c = cities.find((ci) => ci.id === locationId || ci.slug === city);
+      list.push({ key: 'location', label: 'Location', value: c?.name || city || 'Custom Location' });
     }
     if (minPrice || maxPrice) {
       const minText = minPrice ? `₹${Number(minPrice).toLocaleString('en-IN')}` : '₹0';
@@ -230,7 +232,7 @@ export const SearchPage: React.FC = () => {
 
     searchParams.forEach((val, k) => {
       if (
-        !['q', 'category', 'city', 'sort', 'minPrice', 'maxPrice', 'limit', 'page'].includes(k) &&
+        !['q', 'category', 'city', 'locationId', 'sort', 'minPrice', 'maxPrice', 'limit', 'page'].includes(k) &&
         val
       ) {
         const attrDef = dynamicAttributes.find((a) => a.key === k);
@@ -240,7 +242,7 @@ export const SearchPage: React.FC = () => {
     });
 
     return list;
-  }, [q, category, activeCategory, city, minPrice, maxPrice, searchParams, cities, dynamicAttributes]);
+  }, [q, category, activeCategory, city, locationId, minPrice, maxPrice, searchParams, cities, dynamicAttributes]);
 
   const removeFilter = (key: string) => {
     if (key === 'price') {
@@ -249,6 +251,11 @@ export const SearchPage: React.FC = () => {
       next.delete('maxPrice');
       setLocalMin('');
       setLocalMax('');
+      setSearchParams(next);
+    } else if (key === 'location' || key === 'city' || key === 'locationId') {
+      const next = new URLSearchParams(searchParams);
+      next.delete('city');
+      next.delete('locationId');
       setSearchParams(next);
     } else {
       updateParam(key, '');
@@ -279,6 +286,8 @@ export const SearchPage: React.FC = () => {
                   activeCategory={activeCategory}
                   cities={cities}
                   selectedCitySlug={city}
+                  selectedLocationId={locationId}
+                  selectedLocationName={cities.find((c) => c.id === locationId || c.slug === city)?.name || city}
                   minPrice={minPrice}
                   maxPrice={maxPrice}
                   localMin={localMin}
@@ -419,6 +428,8 @@ export const SearchPage: React.FC = () => {
                 activeCategory={activeCategory}
                 cities={cities}
                 selectedCitySlug={city}
+                selectedLocationId={locationId}
+                selectedLocationName={cities.find((c) => c.id === locationId || c.slug === city)?.name || city}
                 minPrice={minPrice}
                 maxPrice={maxPrice}
                 localMin={localMin}

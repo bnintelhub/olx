@@ -1,6 +1,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ListingsService } from './listings.service';
 import { ListingsDeleteService } from './listings.delete.service';
+import { ListingsLocationService } from './listings.location.service';
 import {
   createListingSchema,
   updateListingSchema,
@@ -84,6 +85,28 @@ export class ListingsController {
     return reply.status(200).send({
       success: true,
       message: 'Image removed from listing successfully',
+    });
+  }
+
+  static async updateLocation(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const { locationId } = (request.body || {}) as { locationId: string };
+    if (!locationId) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'LOCATION_REQUIRED', message: 'locationId is required' },
+      });
+    }
+    const updated = await ListingsLocationService.updateListingLocation(
+      request.user!.id,
+      request.user!.role,
+      id,
+      locationId
+    );
+    return reply.status(200).send({
+      success: true,
+      data: updated,
+      message: 'Listing location updated successfully',
     });
   }
 

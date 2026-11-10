@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   SlidersHorizontal,
   RotateCcw,
@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Category, LocationItem } from '@/types';
 import { ActiveFilterItem } from './SearchActiveBadges';
+import { LocationPickerModal } from '@/features/locations/components/LocationPickerModal';
 
 export interface CategoryAttributeItem {
   id: string;
@@ -41,6 +42,8 @@ interface SearchFilterSidebarProps {
   onApplyBudget: (min: string, max: string) => void;
   dynamicAttributes: CategoryAttributeItem[];
   isLoadingAttributes: boolean;
+  selectedLocationId?: string;
+  selectedLocationName?: string;
   activeFilters: ActiveFilterItem[];
   onUpdateParam: (key: string, val: string) => void;
   onClearAll: () => void;
@@ -53,6 +56,8 @@ export const SearchFilterSidebar: React.FC<SearchFilterSidebarProps> = ({
   activeCategory,
   cities,
   selectedCitySlug,
+  selectedLocationId,
+  selectedLocationName,
   minPrice,
   maxPrice,
   localMin,
@@ -68,6 +73,8 @@ export const SearchFilterSidebar: React.FC<SearchFilterSidebarProps> = ({
   onClearAll,
   getParamValue,
 }) => {
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+
   const priceRanges = [
     { label: 'Under ₹5,000', min: '0', max: '5000' },
     { label: '₹5,000 - ₹20,000', min: '5000', max: '20000' },
@@ -290,17 +297,29 @@ export const SearchFilterSidebar: React.FC<SearchFilterSidebarProps> = ({
 
       {/* 2. Location / City Filter */}
       <div className="space-y-2.5 pt-3 border-t border-gray-100">
-        <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-          <MapPin className="w-3.5 h-3.5 text-gray-500" />
-          <span>Location</span>
-        </h4>
+        <div className="flex items-center justify-between">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
+            <MapPin className="w-3.5 h-3.5 text-gray-500" />
+            <span>Location</span>
+          </h4>
+          <button
+            type="button"
+            onClick={() => setIsLocationModalOpen(true)}
+            className="text-[11px] font-bold text-teal-700 hover:underline cursor-pointer"
+          >
+            Locality Search
+          </button>
+        </div>
         <div className="relative">
           <select
-            value={selectedCitySlug}
-            onChange={(e) => onUpdateParam('city', e.target.value)}
+            value={selectedLocationId ? '' : selectedCitySlug}
+            onChange={(e) => {
+              onUpdateParam('locationId', '');
+              onUpdateParam('city', e.target.value);
+            }}
             className="w-full text-xs bg-white border border-gray-200 rounded-lg px-2.5 py-2 pr-8 appearance-none focus:outline-none focus:border-teal-700"
           >
-            <option value="">All India</option>
+            <option value="">{selectedLocationName ? `📍 ${selectedLocationName}` : 'All India'}</option>
             {cities.map((c) => (
               <option key={c.id} value={c.slug}>
                 {c.name}
@@ -309,6 +328,22 @@ export const SearchFilterSidebar: React.FC<SearchFilterSidebarProps> = ({
           </select>
           <ChevronDown className="w-3.5 h-3.5 text-gray-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
         </div>
+
+        <LocationPickerModal
+          isOpen={isLocationModalOpen}
+          onClose={() => setIsLocationModalOpen(false)}
+          onSelectLocation={(loc) => {
+            if (loc.id) {
+              onUpdateParam('locationId', loc.id);
+              onUpdateParam('city', loc.slug);
+            } else {
+              onUpdateParam('locationId', '');
+              onUpdateParam('city', '');
+            }
+          }}
+          selectedLocationId={selectedLocationId}
+          showAllOption={true}
+        />
       </div>
 
       {/* 3. Price Filter */}

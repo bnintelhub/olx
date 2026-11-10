@@ -19,7 +19,7 @@ interface NavbarProps {
   onOpenWishlist?: () => void;
   onOpenProfile?: () => void;
   onOpenFeature?: (feature: UserFeatureType) => void;
-  onSearch?: (keyword: string, citySlug?: string) => void;
+  onSearch?: (keyword: string, citySlug?: string, locationId?: string) => void;
   onLogoClick?: () => void;
   initialQuery?: string;
   unreadCount?: number;
@@ -48,6 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [cities, setCities] = useState<LocationItem[]>([]);
   const [selectedCity, setSelectedCity] = useState('All India');
   const [selectedCitySlug, setSelectedCitySlug] = useState('');
+  const [selectedLocationId, setSelectedLocationId] = useState('');
   const [keyword, setKeyword] = useState(initialQuery);
   const [wishlistCount, setWishlistCount] = useState<number>(() => getWishlistIds().length);
 
@@ -118,17 +119,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleSearchSubmit = (searchKeyword: string) => {
     setIsSuggestionsOpen(false);
     if (onSearch) {
-      onSearch(searchKeyword.trim(), selectedCitySlug || undefined);
+      onSearch(searchKeyword.trim(), selectedCitySlug || undefined, selectedLocationId || undefined);
     }
   };
 
   const handleSelectSuggestion = (item: SuggestionItem) => {
     setIsSuggestionsOpen(false);
     if (item.type === 'CATEGORY' && item.categorySlug) {
-      if (onSearch) onSearch('', selectedCitySlug || undefined);
+      if (onSearch) onSearch('', selectedCitySlug || undefined, selectedLocationId || undefined);
       window.location.href = `/search?category=${item.categorySlug}${
         selectedCitySlug ? `&city=${selectedCitySlug}` : ''
-      }`;
+      }${selectedLocationId ? `&locationId=${selectedLocationId}` : ''}`;
     } else if (item.adId) {
       window.location.href = `/ad/${item.adId}`;
     } else {
@@ -173,10 +174,11 @@ export const Navbar: React.FC<NavbarProps> = ({
         <NavbarCityDropdown
           cities={cities}
           selectedCity={selectedCity}
-          onSelectCity={(name, slug) => {
+          onSelectCity={(name, slug, locationId) => {
             setSelectedCity(name);
             setSelectedCitySlug(slug);
-            if (onSearch) onSearch(keyword, slug);
+            setSelectedLocationId(locationId || '');
+            if (onSearch) onSearch(keyword, slug, locationId);
           }}
         />
 

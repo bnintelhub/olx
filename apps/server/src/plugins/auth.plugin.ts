@@ -35,6 +35,7 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
     const candidateTokens: string[] = [];
     if (appContext === 'admin' || isAdminRoute) {
       if (request.cookies?.admin_access_token) candidateTokens.push(request.cookies.admin_access_token);
+      if (request.cookies?.access_token) candidateTokens.push(request.cookies.access_token);
     } else {
       if (request.cookies?.access_token) candidateTokens.push(request.cookies.access_token);
       if (request.cookies?.token) candidateTokens.push(request.cookies.token);

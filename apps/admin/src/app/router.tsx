@@ -12,6 +12,7 @@ import { ListingsPage } from '../features/listings/ListingsPage';
 import { ReportsPage } from '../features/reports/ReportsPage';
 import { ChatModerationPage } from '../features/chat-moderation/ChatModerationPage';
 import { CategoriesPage } from '../features/categories/CategoriesPage';
+import { LocationsPage } from '../features/locations/LocationsPage';
 import { MediaPage } from '../features/media/MediaPage';
 import { PaymentsPage } from '../features/payments/PaymentsPage';
 import { PromotionsPage } from '../features/promotions/PromotionsPage';
@@ -119,6 +120,10 @@ export const router = createBrowserRouter([
       {
         path: 'categories',
         element: <CategoriesPage />,
+      },
+      {
+        path: 'locations',
+        element: <LocationsPage />,
       },
       {
         path: 'media',

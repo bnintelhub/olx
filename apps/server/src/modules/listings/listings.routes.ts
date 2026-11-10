@@ -23,6 +23,7 @@ export async function listingRoutes(fastify: FastifyInstance) {
   fastify.post('/', sellGuard, ListingsController.create);
   fastify.post('/upload-images', sellGuard, MediaController.uploadImages);
   fastify.put('/:id', sellGuard, ListingsController.update);
+  fastify.patch('/:id/location', auth, ListingsController.updateLocation);
   fastify.patch('/:id/status', sellGuard, ListingsController.updateStatus);
   fastify.patch('/:listingId/images', sellGuard, ListingsController.updateImages);
   fastify.delete('/:listingId/images/:mediaId', sellGuard, ListingsController.removeImage);

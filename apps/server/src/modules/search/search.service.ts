@@ -56,19 +56,76 @@ export class SearchService {
       }
     }
 
-    if (params.locationId || params.citySlug) {
-      const locWhere = params.locationId
+    // Hierarchical location search & radius proximity search
+    if (params.locationId || params.citySlug || (params.latitude && params.longitude)) {
+      const locTarget = params.locationId
         ? { id: params.locationId }
-        : { slug: params.citySlug };
+        : params.citySlug
+        ? { slug: params.citySlug }
+        : null;
 
-      const location = await prisma.location.findFirst({
-        where: locWhere,
-        include: { children: { select: { id: true } } },
-      });
+      let targetLoc: any = null;
+      if (locTarget) {
+        targetLoc = await prisma.location.findFirst({
+          where: locTarget,
+          select: { id: true, path: true, latitude: true, longitude: true },
+        });
+      }
 
-      if (location) {
-        const locIds = [location.id, ...location.children.map((l) => l.id)];
-        where.locationId = { in: locIds };
+      const centerLat = params.latitude ? Number(params.latitude) : targetLoc?.latitude;
+      const centerLng = params.longitude ? Number(params.longitude) : targetLoc?.longitude;
+
+      if (params.radiusKm && centerLat !== undefined && centerLng !== undefined) {
+        // Radius/nearby mode: Calculate bounding box & fetch matching locations
+        const radius = Number(params.radiusKm);
+        const latDelta = radius / 111; // ~111km per degree latitude
+        const lngDelta = radius / (111 * Math.cos((centerLat * Math.PI) / 180));
+
+        const candidateLocations = await prisma.location.findMany({
+          where: {
+            isActive: true,
+            latitude: { gte: centerLat - latDelta, lte: centerLat + latDelta },
+            longitude: { gte: centerLng - lngDelta, lte: centerLng + lngDelta },
+          },
+          select: { id: true, latitude: true, longitude: true },
+        });
+
+        // Refine with exact Haversine distance
+        const matchingIds: string[] = [];
+        for (const loc of candidateLocations) {
+          if (loc.latitude && loc.longitude) {
+            const dLat = ((loc.latitude - centerLat) * Math.PI) / 180;
+            const dLon = ((loc.longitude - centerLng) * Math.PI) / 180;
+            const a =
+              Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+              Math.cos((centerLat * Math.PI) / 180) *
+                Math.cos((loc.latitude * Math.PI) / 180) *
+                Math.sin(dLon / 2) *
+                Math.sin(dLon / 2);
+            const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            if (dist <= radius) matchingIds.push(loc.id);
+          }
+        }
+
+        if (targetLoc && !matchingIds.includes(targetLoc.id)) {
+          matchingIds.push(targetLoc.id);
+        }
+
+        where.locationId = { in: matchingIds.length > 0 ? matchingIds : ['none'] };
+      } else if (targetLoc) {
+        // Materialized path hierarchical search: include target location + all its descendants
+        const subtreeLocations = await prisma.location.findMany({
+          where: {
+            OR: [
+              { id: targetLoc.id },
+              { path: { startsWith: `${targetLoc.path}/` } },
+            ],
+          },
+          select: { id: true },
+        });
+
+        const locIds = subtreeLocations.map((l) => l.id);
+        where.locationId = { in: locIds.length > 0 ? locIds : [targetLoc.id] };
       }
     }
 

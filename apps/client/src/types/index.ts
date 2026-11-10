@@ -51,8 +51,22 @@ export interface LocationItem {
   name: string;
   slug: string;
   type: string;
-  latitude: number;
-  longitude: number;
+  parentId?: string | null;
+  path?: string;
+  depth?: number;
+  latitude?: number | null;
+  longitude?: number | null;
+  distanceKm?: number;
+  parent?: {
+    id: string;
+    name: string;
+    type: string;
+    parent?: {
+      id: string;
+      name: string;
+      type: string;
+    } | null;
+  } | null;
 }
 
 export interface AdImageItem {

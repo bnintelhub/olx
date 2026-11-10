@@ -12,30 +12,16 @@ import { ADS_QUERY_KEYS } from '../features/ads/hook/useAdsQuery';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { PostAdCategoryStep } from '@/features/ads/components/post-ad/PostAdCategoryStep';
-import {
-  PostAdDynamicFields,
-  AttributeItem,
-} from '@/features/ads/components/post-ad/PostAdDynamicFields';
-import {
-  PostAdMediaStep,
-  ImageUploadItem,
-} from '@/features/ads/components/post-ad/PostAdMediaStep';
+import { PostAdDynamicFields, AttributeItem } from '@/features/ads/components/post-ad/PostAdDynamicFields';
+import { PostAdMediaStep, ImageUploadItem } from '@/features/ads/components/post-ad/PostAdMediaStep';
 import { PostAdSuccessStep } from '@/features/ads/components/post-ad/PostAdSuccessStep';
+import { LocationPickerModal } from '../features/locations/components/LocationPickerModal';
 
 function numberToIndianWords(num: number): string {
   if (!num || isNaN(num) || num <= 0) return '';
-  if (num >= 10000000) {
-    const cr = (num / 10000000).toFixed(2).replace(/\.00$/, '');
-    return `${cr} Crore`;
-  }
-  if (num >= 100000) {
-    const lakh = (num / 100000).toFixed(2).replace(/\.00$/, '');
-    return `${lakh} Lakh`;
-  }
-  if (num >= 1000) {
-    const k = (num / 1000).toFixed(1).replace(/\.0$/, '');
-    return `${k} Thousand`;
-  }
+  if (num >= 10000000) return `${(num / 10000000).toFixed(2).replace(/\.00$/, '')} Crore`;
+  if (num >= 100000) return `${(num / 100000).toFixed(2).replace(/\.00$/, '')} Lakh`;
+  if (num >= 1000) return `${(num / 1000).toFixed(1).replace(/\.0$/, '')} Thousand`;
   return `${num}`;
 }
 
@@ -67,6 +53,7 @@ export const PostAdModal: React.FC<{
   const [price, setPrice] = useState('');
   const [isNegotiable, setIsNegotiable] = useState(true);
   const [selectedLocationId, setSelectedLocationId] = useState('');
+  const [isLocPickerOpen, setIsLocPickerOpen] = useState(false);
 
   // Media
   const [images, setImages] = useState<ImageUploadItem[]>([]);
@@ -80,18 +67,10 @@ export const PostAdModal: React.FC<{
   useEffect(() => {
     if (!isOpen) return;
 
-    setStep(1);
-    setFormError(null);
-    setCreatedAd(null);
-    setSelectedParentCategory(null);
-    setSelectedCategory(null);
-    setTitle('');
-    setDescription('');
-    setPrice('');
-    setIsNegotiable(true);
-    setImages([]);
-    setAttributeValues({});
-    setCategoryAttributes([]);
+    setStep(1); setFormError(null); setCreatedAd(null);
+    setSelectedParentCategory(null); setSelectedCategory(null);
+    setTitle(''); setDescription(''); setPrice(''); setIsNegotiable(true);
+    setImages([]); setAttributeValues({}); setCategoryAttributes([]);
 
     setIsLoadingTaxonomy(true);
     Promise.all([
@@ -436,22 +415,42 @@ export const PostAdModal: React.FC<{
 
               {/* Location */}
               <div className="space-y-1.5 pt-3 border-t border-gray-100">
-                <label className="text-xs font-bold uppercase tracking-wider text-[#002f34] flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-teal-700" />
-                  <span>Confirm Your City <span className="text-rose-500">*</span></span>
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#002f34] flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-teal-700" />
+                    <span>Confirm Location <span className="text-rose-500">*</span></span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsLocPickerOpen(true)}
+                    className="text-xs font-bold text-teal-700 hover:underline cursor-pointer"
+                  >
+                    Directory / GPS
+                  </button>
+                </div>
                 <select
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value)}
                   className="w-full h-10 text-xs border border-gray-200 rounded-xl px-3 bg-white focus:outline-none focus:border-teal-700"
                 >
-                  <option value="">Select your city</option>
+                  <option value="">Select city or locality</option>
                   {locations.map((loc) => (
                     <option key={loc.id} value={loc.id}>
                       {loc.name}
                     </option>
                   ))}
                 </select>
+                <LocationPickerModal
+                  isOpen={isLocPickerOpen}
+                  onClose={() => setIsLocPickerOpen(false)}
+                  onSelectLocation={(loc) => {
+                    setSelectedLocationId(loc.id);
+                    if (!locations.some((l) => l.id === loc.id)) {
+                      setLocations((prev) => [loc, ...prev]);
+                    }
+                  }}
+                  selectedLocationId={selectedLocationId}
+                />
               </div>
 
               {/* Submit Buttons */}
