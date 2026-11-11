@@ -104,38 +104,46 @@ flowchart LR
 
 ---
 
-## 2. MinIO Security & Private S3 Isolation
+## 2. Local Media Storage & Persistent Volume Architecture
 
-### Why Port 9000 & 9001 Must Never Be Exposed Publicly
+### High-Performance Direct Disk Serving via Nginx
 
-MinIO exposes two distinct services:
-1. **Port `9000` (S3 API Endpoint)**: Accepts raw S3 SDK API calls (`PutObject`, `DeleteObject`, `ListObjects`). Exposing this directly allows attackers to attempt brute-force authentication against root credentials, trigger Denial-of-Service attacks, or execute unauthorized bucket operations.
-2. **Port `9001` (Web Console Dashboard)**: The interactive administrative management UI. Exposing this publicly makes your infrastructure vulnerable to credential stuffing and zero-day admin panel exploits.
+The platform uses a dedicated **Media Microservice (`apps/media-service`)** and local persistent disk volumes mounted at `/data/olx-media` instead of external S3/MinIO.
 
-> [!CAUTION]
-> **Production Rule**: Neither port `9000` nor port `9001` should ever be bound to `0.0.0.0` or open in the VPS firewall (`ufw`).
+1. **Uploads Handling**: Upload requests (`POST /media/images?resource=ads`) are processed by the internal Fastify Media Service (`:5005`), which validates magic bytes and writes raw files to disk before pushing an optimization job to BullMQ.
+2. **Zero-Copy Static Serving**: Public image requests are served directly by Nginx from the local `/data/olx-media` persistent volume with immutable caching headers, bypassing Node.js process overhead entirely.
+
+> [!IMPORTANT]
+> **Production Rule**: The media microservice port (`5005`), database port (`5432`), and Redis port (`6379`) must **never** be exposed to `0.0.0.0` or open in the VPS firewall (`ufw`). Only ports `80` (HTTP) and `443` (HTTPS) should accept public traffic.
 
 ---
 
-### Internal Docker Binding & UFW Firewall Rules
+### Shared Docker Volume (`media_data`) Mounting
 
-In your production `docker-compose.yml`, MinIO must either have **no external port mapping** (accessible only within `bharatmarket_net`), or strictly bind to localhost loopback (`127.0.0.1`):
+In your production `docker-compose.prod.yml`, the persistent `media_data` volume is shared across the `media-service`, `workers`, and Nginx:
 
 ```yaml
-  minio:
-    image: cgr.dev/chainguard/minio:latest
-    container_name: bharatmarket_minio
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+
+services:
+  media-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/Dockerfile.media
+    container_name: bm_media_service
     restart: unless-stopped
-    # NOTICE: Only bind to localhost 127.0.0.1, NEVER 0.0.0.0!
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:5005:5005"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address "127.0.0.1:9001"
+      NODE_ENV: production
+      PORT: 5005
+      MEDIA_ROOT: "/data/olx-media"
+      MEDIA_PUBLIC_BASE_URL: "https://yourdomain.com/media"
     volumes:
-      - minio_data:/data
+      - media_data:/data/olx-media
     networks:
       - bharatmarket_net
 ```
@@ -151,13 +159,12 @@ sudo ufw allow 22/tcp comment 'Secure SSH'
 sudo ufw allow 80/tcp comment 'HTTP Let’s Encrypt challenge'
 sudo ufw allow 443/tcp comment 'HTTPS Public Traffic'
 
-# Explicitly ensure MinIO and DB ports are blocked externally
-sudo ufw deny 9000/tcp
-sudo ufw deny 9001/tcp
+# Explicitly ensure internal ports are blocked externally
+sudo ufw deny 5005/tcp
+sudo ufw deny 5000/tcp
 sudo ufw deny 5432/tcp
 sudo ufw deny 5433/tcp
 sudo ufw deny 6379/tcp
-sudo ufw deny 5000/tcp
 
 sudo ufw enable
 sudo ufw status verbose
@@ -167,7 +174,7 @@ sudo ufw status verbose
 
 ### Secure Public Media Routing via Nginx
 
-Public users only need to download processed images (e.g. `https://media.yourdomain.com/olx-media/ads/large.webp`). We configure Nginx to proxy **read-only GET requests** to MinIO while caching static assets aggressively:
+Public users only download processed images (e.g. `https://media.yourdomain.com/ads/images/large.webp` or `https://yourdomain.com/media/...`). We configure Nginx to serve static assets directly from disk with aggressive caching:
 
 ```nginx
 # /etc/nginx/sites-available/media.yourdomain.com.conf
@@ -182,8 +189,8 @@ server {
     listen 443 ssl http2;
     server_name media.yourdomain.com;
 
-    ssl_certificate /etc/letsencrypt/live/media.yourdomain.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/media.yourdomain.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
@@ -192,42 +199,21 @@ server {
     add_header X-Frame-Options SAMEORIGIN always;
     add_header Access-Control-Allow-Origin "*" always;
 
-    # Limit uploads/methods on public media domain: Only GET and HEAD allowed!
+    # Limit methods on public media domain: Only GET and HEAD allowed!
     if ($request_method !~ ^(GET|HEAD)$) {
         return 405;
     }
 
-    # Proxy public requests to MinIO S3 internal port
+    # Direct static file serving from persistent volume with immutable caching
     location / {
-        proxy_pass http://127.0.0.1:9000;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Disable chunked transfer encoding for S3 compatibility
-        proxy_http_version 1.1;
-        proxy_buffering on;
-        proxy_cache_valid 200 30d;
-        proxy_cache_valid 404 1m;
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000, immutable";
+        alias /var/lib/docker/volumes/bharatmarket_media_data/_data/;
+        expires 365d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        etag on;
+        try_files $uri =404;
     }
 }
 ```
-
----
-
-### Accessing MinIO Console Securely via SSH Tunnel
-
-To view the MinIO Dashboard securely from your local developer machine without exposing port `9001` to the internet:
-
-Run this command from your **local terminal**:
-```bash
-ssh -N -L 9001:127.0.0.1:9001 ubuntu@your-vps-ip -i ~/.ssh/id_rsa
-```
-
-Now open your local browser at **`http://localhost:9001`**. You will be securely connected to your VPS MinIO Web Console through the encrypted SSH tunnel.
 
 ---
 
@@ -240,7 +226,7 @@ Configure these DNS records at your domain registrar / DNS provider (Cloudflare,
 | `A` | `@` (or `www`) | `YOUR_VPS_IP` | Marketplace Client Web App (`https://yourdomain.com`) |
 | `A` | `admin` | `YOUR_VPS_IP` | Admin Operations Portal (`https://admin.yourdomain.com`) |
 | `A` | `api` | `YOUR_VPS_IP` | Fastify REST API & Clustered Socket.IO (`https://api.yourdomain.com`) |
-| `A` | `media` | `YOUR_VPS_IP` | S3 Media Content Delivery (`https://media.yourdomain.com`) |
+| `A` | `media` | `YOUR_VPS_IP` | Media CDN / Static Content Delivery (`https://media.yourdomain.com`) |
 
 ---
 
@@ -328,14 +314,11 @@ REDIS_URL=redis://redis:6379
 JWT_ACCESS_SECRET=c1f4e8b9392c6b4123a6f194bd8293758b9192305a81239c8120394857b29381
 JWT_REFRESH_SECRET=7f82910394b291048291a0c82930492819230948b81923049812930498129304
 
-# MINIO S3 STORAGE (Internal credentials)
-MINIO_ROOT_USER=admin_s3_bharatmarket
-MINIO_ROOT_PASSWORD=SuperComplexRootPasswordMustBeChangedNow123!
-S3_ENDPOINT=http://minio:9000
-S3_PUBLIC_URL=https://media.yourdomain.com/olx-media
-S3_ACCESS_KEY=admin_s3_bharatmarket
-S3_SECRET_KEY=SuperComplexRootPasswordMustBeChangedNow123!
-S3_BUCKET=olx-media
+# LOCAL MEDIA STORAGE (Self-Managed Volume)
+MEDIA_ROOT=/data/olx-media
+MEDIA_PUBLIC_BASE_URL=https://media.yourdomain.com
+MEDIA_SERVICE_PORT=5005
+MEDIA_SERVICE_URL=http://media-service:5005
 
 # SMS GATEWAY (e.g. FAST2SMS / TWILIO / MSG91)
 SMS_PROVIDER=FAST2SMS
@@ -358,7 +341,7 @@ networks:
 volumes:
   postgres_data:
   redis_data:
-  minio_data:
+  media_data:
 
 services:
   # PostgreSQL 16 (No public ports!)
@@ -395,20 +378,29 @@ services:
     networks:
       - bharatmarket_net
 
-  # MinIO S3 Storage (Bound only to 127.0.0.1 for local Nginx reverse proxy)
-  minio:
-    image: cgr.dev/chainguard/minio:latest
-    container_name: bm_minio
+  # Media Microservice (Uploads & Local Storage Engine)
+  media-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.media
+    container_name: bm_media_service
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:5005:5005"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    command: server /data --console-address "127.0.0.1:9001"
+      NODE_ENV: production
+      PORT: 5005
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      MEDIA_ROOT: ${MEDIA_ROOT}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL}
     volumes:
-      - minio_data:/data
+      - media_data:/data/olx-media
     networks:
       - bharatmarket_net
 
@@ -416,7 +408,7 @@ services:
   server:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.server
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.server
     container_name: bm_server
     restart: unless-stopped
     depends_on:
@@ -424,7 +416,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      media-service:
         condition: service_started
     env_file:
       - .env.production
@@ -437,7 +429,7 @@ services:
   admin:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.admin
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.admin
     container_name: bm_admin
     restart: unless-stopped
     depends_on:
@@ -451,7 +443,7 @@ services:
   client:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.client
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.client
     container_name: bm_client
     restart: unless-stopped
     depends_on:
@@ -465,7 +457,7 @@ services:
   workers:
     build:
       context: .
-      dockerfile: ./infrastructure/docker/Dockerfile.worker
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.worker
     container_name: bm_workers
     restart: unless-stopped
     depends_on:
@@ -473,8 +465,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      media-service:
         condition: service_started
+    volumes:
+      - media_data:/data/olx-media
     env_file:
       - .env.production
     networks:
@@ -535,7 +529,7 @@ server {
 }
 
 # ========================================================
-# 2. PRIVATE S3 MEDIA PROXY (media.yourdomain.com)
+# 2. MEDIA STATIC DELIVERY & MICROSERVICE (media.yourdomain.com)
 # ========================================================
 server {
     listen 80;
@@ -555,16 +549,21 @@ server {
         return 405;
     }
 
+    # High-Performance Direct Disk Serving from persistent volume
     location / {
-        proxy_pass http://127.0.0.1:9000;
+        alias /var/lib/docker/volumes/bharatmarket_media_data/_data/;
+        expires 365d;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        etag on;
+        try_files $uri @media_service;
+    }
+
+    location @media_service {
+        proxy_pass http://127.0.0.1:5005;
         proxy_set_header Host $http_host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        proxy_buffering on;
-        expires 30d;
-        add_header Cache-Control "public, max-age=2592000, immutable";
     }
 }
 
@@ -684,8 +683,8 @@ pnpm --filter @olx/shared build
 pnpm --filter @olx/client build
 pnpm --filter @olx/admin build
 
-# Boot database and storage containers first
-docker compose -f docker-compose.prod.yml up -d postgres redis minio
+# Boot database, cache, and media service containers first
+docker compose -f docker-compose.prod.yml up -d postgres redis media-service
 
 # Push Prisma schemas and seed database
 docker compose -f docker-compose.prod.yml exec -T server pnpm --filter @olx/database db:push
@@ -725,10 +724,10 @@ Expected Health Check Output:
 For high scale, split components across dedicated machines:
 
 ### Server 1: Database & Storage Node (`db-node.internal`)
-- Runs **PostgreSQL 16**, **Redis 7**, and **MinIO Cluster**.
+- Runs **PostgreSQL 16**, **Redis 7**, and **Local Media Storage Volume** (`/data/olx-media`).
 - Bound strictly to internal private VPC subnet (e.g., `10.0.0.x`).
 - UFW blocks all public inbound traffic except SSH.
-- `media.yourdomain.com` runs Nginx with read-only proxy to MinIO.
+- `media.yourdomain.com` runs Nginx with direct static disk serving and aggressive caching.
 
 ### Server 2: Backend API & Worker Cluster (`app-node.internal`)
 - Runs multiple instances of `Fastify API` load-balanced via Nginx upstream.
@@ -916,18 +915,16 @@ Make executable:
 sudo chmod +x /etc/cron.daily/backup-postgres.sh
 ```
 
-### MinIO S3 Bucket Disaster Replication
+### Persistent Media Volume Offsite Disaster Backup
 
-To replicate images to an off-site S3 bucket (e.g. AWS S3, Wasabi, Backblaze B2), install MinIO Client (`mc`):
+To replicate images from the persistent media volume to an off-site S3-compatible cloud storage (e.g. AWS S3, Cloudflare R2, Backblaze B2, or secondary backup server), install `rclone`:
 
 ```bash
-# Add local minio alias
-mc alias set local-minio http://127.0.0.1:9000 admin_s3_bharatmarket SuperComplexRootPasswordMustBeChangedNow123!
-
-# Add remote backup S3 alias
-mc alias set offsite-backup https://s3.us-east-1.amazonaws.com ACCESS_KEY SECRET_KEY
-
-# Set continuous one-way replication
-mc mirror --watch local-minio/olx-media offsite-backup/olx-media-backup/
+# Sync local media volume directly to remote offsite backup
+sudo rclone sync /var/lib/docker/volumes/bharatmarket_media_data/_data remote-backup:bharatmarket-media-backup/ \
+  --transfers 8 \
+  --checkers 16 \
+  --fast-list \
+  --log-file=/var/log/rclone-media-backup.log
 ```
 
