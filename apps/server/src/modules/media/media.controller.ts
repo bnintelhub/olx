@@ -2,6 +2,7 @@ import { FastifyReply, FastifyRequest } from 'fastify';
 import { MediaService } from './media.service';
 import { mediaIdParamSchema } from './media.schema';
 import { AppError } from '../../shared/errors/app-error';
+import { toPublicMediaUrl, toPublicMediaVariants } from '../../shared/utils/media-url.util';
 
 export class MediaController {
   // POST /v1/media/images - Uploads up to 10 images, generates WebP variants via worker, and records metadata
@@ -78,10 +79,10 @@ export class MediaController {
       width: null,
       height: null,
       focalPoint: { x: 0.5, y: 0.5 },
-      variants: item.variants,
-      url: item.variants.large,
-      thumbnailUrl: item.variants.thumbnail,
-      displayUrl: resource === 'chats' ? item.variants.large : item.variants.card,
+      variants: toPublicMediaVariants(item.variants, baseUrl),
+      url: toPublicMediaUrl(item.variants.large, baseUrl),
+      thumbnailUrl: toPublicMediaUrl(item.variants.thumbnail, baseUrl),
+      displayUrl: toPublicMediaUrl(resource === 'chats' ? item.variants.large : item.variants.card, baseUrl),
     }));
 
     return reply.status(201).send({

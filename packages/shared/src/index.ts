@@ -7,4 +7,5 @@ export * from './utils/anti-fraud.util';
 export * from './utils/audit.util';
 export * from './utils/hash.util';
 export * from './utils/media-path.util';
+export * from './storage';
 

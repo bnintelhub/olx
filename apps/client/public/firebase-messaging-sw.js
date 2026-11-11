@@ -70,21 +70,22 @@ self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
   const clickAction = event.notification.data?.click_action || '/chat';
+  const targetUrl = new URL(clickAction, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
-      // If a chat tab is already open, focus it and navigate
+      // 1. If any tab on our origin is open, focus it and navigate
       for (const client of windowClients) {
-        if (client.url.includes('/chat') && 'focus' in client) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           if ('navigate' in client) {
-            client.navigate(clickAction);
+            client.navigate(targetUrl);
           }
           return client.focus();
         }
       }
-      // Otherwise open a new window
+      // 2. Otherwise open a new window
       if (clients.openWindow) {
-        return clients.openWindow(clickAction);
+        return clients.openWindow(targetUrl);
       }
     })
   );

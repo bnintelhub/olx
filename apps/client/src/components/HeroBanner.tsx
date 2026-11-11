@@ -26,6 +26,16 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
   return (
     <section className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-5">
       <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#003F46] text-white shadow-sm">
+        {/* Banner Background Image with slight blur and readable overlay */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <img
+            src="/bannerImage.webp"
+            alt="Indian Marketplace Banner"
+            className="w-full h-full object-cover object-center scale-105 filter blur-[3px]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#003F46]/95 via-[#003F46]/85 to-[#003F46]/70" />
+        </div>
+
         {/* Subtle geometric circles background overlay */}
         <div className="absolute inset-0 pointer-events-none opacity-20">
           <div className="absolute -left-20 -top-20 w-96 h-96 rounded-full border border-white/20" />

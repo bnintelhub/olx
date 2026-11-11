@@ -1,3 +1,8 @@
+// Polyfill BigInt serialization for Fastify / JSON.stringify
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
 import fastify, { FastifyInstance } from 'fastify';
 import path from 'path';
 import fs from 'fs';
@@ -91,6 +96,39 @@ export async function buildApp(): Promise<FastifyInstance> {
       // Long-lived immutable caching for pre-processed image variants
       if (pathName.endsWith('.webp') || pathName.endsWith('.avif') || pathName.includes('variants')) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  });
+
+  // Support direct /olx-media/ URLs from local storage mirror
+  await app.register(fastifyStatic, {
+    root: uploadRoots.length > 1 ? uploadRoots : sharedUploadDir,
+    prefix: '/olx-media/',
+    decorateReply: false,
+    setHeaders: (res, pathName) => {
+      if (pathName.endsWith('.webp') || pathName.endsWith('.avif') || pathName.includes('variants')) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  });
+
+  // Support direct /media/ URLs from persistent local filesystem root (MEDIA_ROOT)
+  const mediaRoot = path.resolve(process.env.MEDIA_ROOT || path.join(process.cwd(), 'data/olx-media'));
+  if (!fs.existsSync(mediaRoot)) {
+    try { fs.mkdirSync(mediaRoot, { recursive: true }); } catch {}
+  }
+  await app.register(fastifyStatic, {
+    root: mediaRoot,
+    prefix: '/media/',
+    decorateReply: false,
+    setHeaders: (res, pathName) => {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      // Protect internal directories from direct Fastify serving if attempted
+      if (pathName.startsWith('/temp') || pathName.startsWith('/quarantine') || pathName.startsWith('/trash') || pathName.startsWith('/failed')) {
+        res.statusCode = 403;
+      }
+      if (pathName.endsWith('.webp') || pathName.endsWith('.avif')) {
+        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
       }
     },
   });

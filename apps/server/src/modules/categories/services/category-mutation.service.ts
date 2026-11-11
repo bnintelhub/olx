@@ -81,24 +81,23 @@ export class CategoryMutationService {
           parentId,
           sortOrder,
           level: calculatedLevel,
-          imageMediaId: input.imageMediaId || null,
+          imageMediaAssetId: input.imageMediaId || null,
           iconUrl: input.iconUrl || null,
           isActive: input.isActive ?? true,
         },
         include: {
-          imageMedia: { select: { id: true, variants: true, diskPath: true } },
+          imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         },
       });
 
       if (input.imageMediaId) {
-        await tx.media.update({
+        await tx.mediaAsset.update({
           where: { id: input.imageMediaId },
           data: {
-            isAttached: true,
-            attachedToId: created.id,
-            scope: 'CATEGORY_BANNER',
+            entityType: 'CATEGORY',
+            entityId: created.id,
           },
-        });
+        }).catch(() => {});
       }
 
       return created;
@@ -115,7 +114,7 @@ export class CategoryMutationService {
   static async update(id: string, input: UpdateCategoryInput) {
     const existing = await prisma.category.findUnique({
       where: { id },
-      include: { imageMedia: true },
+      include: { imageMediaAsset: true },
     });
     if (!existing) {
       throw new AppError(404, 'CATEGORY_NOT_FOUND', 'Category not found');
@@ -170,7 +169,7 @@ export class CategoryMutationService {
       }
     }
 
-    if (input.imageMediaId && input.imageMediaId !== existing.imageMediaId) {
+    if (input.imageMediaId && input.imageMediaId !== existing.imageMediaAssetId) {
       await validateMediaImage(input.imageMediaId);
     }
 
@@ -185,18 +184,11 @@ export class CategoryMutationService {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      if (input.imageMediaId !== undefined && input.imageMediaId !== existing.imageMediaId && existing.imageMediaId) {
-        await tx.media.update({
-          where: { id: existing.imageMediaId },
-          data: { isAttached: false, attachedToId: null, scope: 'UNATTACHED' },
-        });
-      }
-
-      if (input.imageMediaId && input.imageMediaId !== existing.imageMediaId) {
-        await tx.media.update({
+      if (input.imageMediaId && input.imageMediaId !== existing.imageMediaAssetId) {
+        await tx.mediaAsset.update({
           where: { id: input.imageMediaId },
-          data: { isAttached: true, attachedToId: id, scope: 'CATEGORY_BANNER' },
-        });
+          data: { entityType: 'CATEGORY', entityId: id },
+        }).catch(() => {});
       }
 
       const res = await tx.category.update({
@@ -208,12 +200,12 @@ export class CategoryMutationService {
           parentId,
           level: newLevel,
           sortOrder: input.sortOrder !== undefined ? input.sortOrder : existing.sortOrder,
-          imageMediaId: input.imageMediaId !== undefined ? input.imageMediaId : existing.imageMediaId,
+          imageMediaAssetId: input.imageMediaId !== undefined ? input.imageMediaId : existing.imageMediaAssetId,
           iconUrl: input.iconUrl !== undefined ? input.iconUrl : existing.iconUrl,
           isActive: input.isActive !== undefined ? input.isActive : existing.isActive,
         },
         include: {
-          imageMedia: { select: { id: true, variants: true, diskPath: true } },
+          imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         },
       });
 
@@ -307,7 +299,7 @@ export class CategoryMutationService {
   static async delete(id: string) {
     const category = await prisma.category.findUnique({
       where: { id },
-      include: { imageMedia: true },
+      include: { imageMediaAsset: true },
     });
     if (!category) {
       throw new AppError(404, 'CATEGORY_NOT_FOUND', 'Category not found');
@@ -338,13 +330,6 @@ export class CategoryMutationService {
     }
 
     await prisma.$transaction(async (tx) => {
-      if (category.imageMediaId) {
-        await tx.media.update({
-          where: { id: category.imageMediaId },
-          data: { isAttached: false, attachedToId: null, scope: 'UNATTACHED' },
-        });
-      }
-
       await tx.categoryAttribute.deleteMany({ where: { categoryId: id } });
       await tx.category.delete({ where: { id } });
     });

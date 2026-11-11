@@ -26,9 +26,20 @@ export default defineConfig({
         target: apiTarget,
         changeOrigin: true,
       },
+      '/media': {
+        target: apiTarget,
+        changeOrigin: true,
+      },
       '/socket.io': {
         target: apiTarget,
         ws: true,
+        changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (err: any) => {
+            if (err.code === 'ECONNABORTED' || err.code === 'ECONNRESET') return;
+            console.error('[ws proxy error]:', err.message);
+          });
+        },
       },
     },
   },

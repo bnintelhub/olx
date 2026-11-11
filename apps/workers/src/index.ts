@@ -1,6 +1,7 @@
 import { startOtpWorker } from './workers/otp.worker';
 import { startMediaWorker } from './workers/media.worker';
 import { startPaymentFulfillmentWorker } from './workers/payment-fulfillment.worker';
+import { startStorageHousekeeping } from './tasks/cleanup.task';
 
 async function bootstrap() {
   console.log('🚀 Starting OLX Monorepo Background Workers...');
@@ -8,11 +9,13 @@ async function bootstrap() {
   const otpWorker = startOtpWorker();
   const mediaWorker = startMediaWorker();
   const paymentWorker = startPaymentFulfillmentWorker();
+  const housekeeping = startStorageHousekeeping();
 
-  console.log('✅ BullMQ Workers are active and listening for background jobs.');
+  console.log('✅ BullMQ Workers & Storage Housekeeping are active.');
 
   const shutdown = async (signal: string) => {
     console.log(`\nReceived ${signal}. Shutting down workers gracefully...`);
+    housekeeping.stop();
     await Promise.all([otpWorker.close(), mediaWorker.close(), paymentWorker.close()]);
     process.exit(0);
   };

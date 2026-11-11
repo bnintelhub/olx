@@ -64,6 +64,22 @@ const STATUS_FILTERS: Array<{ label: string; value: string }> = [
   { label: 'Expired', value: 'EXPIRED' },
 ];
 
+function formatMediaUrl(url?: string | null): string {
+  if (!url) return '';
+  if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+  let clean = url
+    .replace(/^https?:\/\/[^/]+/, '')
+    .replace(/^s3:\/\/[^/]+/, '')
+    .replace(/^[/\\]+/, '')
+    .trim();
+
+  while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
+    clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
+  }
+
+  return clean ? `/media/${clean}` : '';
+}
+
 export function ListingsPage() {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
@@ -301,7 +317,8 @@ export function ListingsPage() {
                 ) : (
                   ads.map((ad) => {
                     const coverImage = ad.images?.find((img) => img.isCover) || ad.images?.[0];
-                    const thumbnailUrl = coverImage?.thumbnailUrl || coverImage?.displayUrl || coverImage?.originalUrl;
+                    const rawThumb = coverImage?.thumbnailUrl || coverImage?.displayUrl || coverImage?.originalUrl;
+                    const thumbnailUrl = formatMediaUrl(rawThumb);
 
                     return (
                       <TableRow key={ad.id} className="transition-colors hover:bg-muted/30">
@@ -315,7 +332,10 @@ export function ListingsPage() {
                                   alt={ad.title}
                                   className="h-full w-full object-cover"
                                   onError={(e) => {
-                                    (e.target as HTMLElement).style.display = 'none';
+                                    // Fallback to placeholder image when thumb fails to load
+                                    const target = e.currentTarget;
+                                    target.onerror = null;
+                                    target.src = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="%2394a3b8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>';
                                   }}
                                 />
                               ) : (
@@ -541,9 +561,11 @@ export function ListingsPage() {
                   {selectedAd.images && selectedAd.images.length > 0 ? (
                     <img
                       src={
-                        selectedAd.images[activeModalImageIdx]?.displayUrl ||
-                        selectedAd.images[activeModalImageIdx]?.originalUrl ||
-                        ''
+                        formatMediaUrl(
+                          selectedAd.images[activeModalImageIdx]?.displayUrl ||
+                          selectedAd.images[activeModalImageIdx]?.originalUrl ||
+                          selectedAd.images[activeModalImageIdx]?.thumbnailUrl
+                        )
                       }
                       alt={selectedAd.title}
                       className="max-h-full max-w-full object-contain"
@@ -568,7 +590,11 @@ export function ListingsPage() {
                           activeModalImageIdx === idx ? 'border-primary ring-2 ring-primary/20' : 'border-border/60 opacity-70 hover:opacity-100'
                         }`}
                       >
-                        <img src={img.thumbnailUrl || img.displayUrl} alt="variant" className="h-full w-full object-cover" />
+                        <img
+                          src={formatMediaUrl(img.thumbnailUrl || img.displayUrl || img.originalUrl)}
+                          alt="variant"
+                          className="h-full w-full object-cover"
+                        />
                       </button>
                     ))}
                   </div>

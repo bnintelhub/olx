@@ -7,6 +7,11 @@ import { defaultStorage, resolveUploadDir } from '../../integrations/storage/sto
 import { validateImageMagicBytes, getImageDimensions } from '../../shared/utils/image-validator.util';
 import { queueMediaProcessingJob } from '../../jobs/media.job';
 import { buildMediaPath, buildMediaDirectory, MediaResource } from '@olx/shared';
+import {
+  toPublicMediaVariants,
+  toPublicMediaUrl,
+  normalizeMediaVariants,
+} from '../../shared/utils/media-url.util';
 import { writeAuditLog } from '../../shared/utils/audit.util';
 import { AdminMediaQueryInput, UpdateMediaMetadataInput } from './admin.media.schema';
 
@@ -22,11 +27,13 @@ export function formatBytes(bytes: number, decimals = 1): string {
 // Thoroughly removes all physical copies of image files & variants from S3 and local disk
 export async function deletePhysicalMedia(media: {
   id: string;
-  diskPath: string;
+  diskPath?: string;
+  storageKey?: string;
   variants?: any;
 }): Promise<void> {
-  const normalizedPath = media.diskPath
-    ? media.diskPath.replace(/^s3:\/\/[^/]+\//, '').replace(/^[/\\]+/, '')
+  const rawPath = media.diskPath || media.storageKey || '';
+  const normalizedPath = rawPath
+    ? rawPath.replace(/^s3:\/\/[^/]+\//, '').replace(/^[/\\]+/, '')
     : '';
 
   // 1. Delete via configured storage adapter (S3 or Disk)
@@ -82,60 +89,76 @@ export class AdminMediaService {
       orphanedCount,
       recentUploads,
     ] = await Promise.all([
-      prisma.media.count(),
-      prisma.media.aggregate({
-        _sum: { fileSize: true },
-        _avg: { fileSize: true },
+      prisma.mediaAsset.count(),
+      prisma.mediaAsset.aggregate({
+        _sum: { sizeBytes: true },
+        _avg: { sizeBytes: true },
       }),
-      prisma.media.groupBy({
+      prisma.mediaAsset.groupBy({
         by: ['status'],
         _count: { id: true },
       }),
-      prisma.media.groupBy({
-        by: ['scope'],
+      prisma.mediaAsset.groupBy({
+        by: ['entityType'],
         _count: { id: true },
+        _sum: { sizeBytes: true },
       }),
-      prisma.media.groupBy({
+      prisma.mediaAsset.groupBy({
         by: ['mimeType'],
         _count: { id: true },
       }),
       // Count genuine unattached orphans (not attached to any category or ad listing)
-      prisma.media.count({
+      prisma.mediaAsset.count({
         where: {
-          isAttached: false,
           categories: { none: {} },
           adImages: { none: {} },
+          banners: { none: {} },
+          messages: { none: {} },
         },
       }),
-      prisma.media.findMany({
+      prisma.mediaAsset.findMany({
         take: 5,
         orderBy: { createdAt: 'desc' },
         select: {
           id: true,
           originalName: true,
           mimeType: true,
-          fileSize: true,
+          sizeBytes: true,
           status: true,
-          scope: true,
+          entityType: true,
           createdAt: true,
           variants: true,
         },
       }),
     ]);
 
-    const storageConsumedBytes = sizeAgg._sum.fileSize || 0;
-    const averageFileSizeBytes = Math.round(sizeAgg._avg.fileSize || 0);
-    const storageDriver = (env.STORAGE_DRIVER || 's3').toLowerCase();
+    const storageConsumedBytes = Number(sizeAgg._sum.sizeBytes || 0);
+    const averageFileSizeBytes = Math.round(Number(sizeAgg._avg.sizeBytes || 0));
 
-    // S3 & CDN sync evaluation
-    const s3FilesCount =
-      storageDriver === 's3'
-        ? totalFiles
-        : await prisma.media.count({
-            where: { diskPath: { startsWith: 's3://' } },
-          });
+    // Scope-level disk consumption breakdown for storage graphs
+    const scopeLabels: Record<string, { label: string; color: string }> = {
+      LISTING: { label: 'Ad Listings', color: '#3b82f6' },
+      USER: { label: 'User Avatars', color: '#10b981' },
+      CATEGORY: { label: 'Categories', color: '#f59e0b' },
+      BANNER: { label: 'Banners', color: '#8b5cf6' },
+      CHAT: { label: 'Chat Attachments', color: '#ec4899' },
+      UNATTACHED: { label: 'Unattached / Temp', color: '#64748b' },
+    };
 
-    const isS3Synced = storageDriver === 's3';
+    const diskBreakdown = scopeCounts.map((item) => {
+      const bytes = Number(item._sum.sizeBytes || 0);
+      const count = item._count.id;
+      const meta = scopeLabels[item.entityType] || { label: item.entityType, color: '#6b7280' };
+      return {
+        scope: item.entityType,
+        name: meta.label,
+        count,
+        bytes,
+        formatted: formatBytes(bytes),
+        color: meta.color,
+        percentage: storageConsumedBytes > 0 ? Math.round((bytes / storageConsumedBytes) * 100) : 0,
+      };
+    });
 
     return {
       totalFiles,
@@ -147,15 +170,16 @@ export class AdminMediaService {
         averageSizeFormatted: formatBytes(averageFileSizeBytes),
       },
       storageInfrastructure: {
-        driver: storageDriver.toUpperCase(),
-        isS3Synchronized: isS3Synced,
-        synchronizedFilesCount: s3FilesCount,
-        synchronizedPercentage: totalFiles > 0 ? Math.round((s3FilesCount / totalFiles) * 100) : 100,
-        syncStatusText: isS3Synced ? 'S3 & CDN synchronized' : 'Local Disk storage mode',
-        bucket: env.S3_BUCKET || 'olx-media',
-        endpoint: env.S3_ENDPOINT || 'http://localhost:9000',
-        publicUrl: env.S3_PUBLIC_URL || 'http://localhost:9000/olx-media',
+        driver: 'LOCAL_DISK',
+        isLocalDisk: true,
+        storageRoot: process.env.MEDIA_ROOT || '/data/olx-media',
+        volumeName: 'media_data',
+        mountPath: '/data/olx-media',
+        syncStatusText: 'Local Persistent Volume (/data/olx-media)',
+        isHealthy: true,
+        publicUrl: process.env.MEDIA_PUBLIC_BASE_URL || 'http://localhost/media',
       },
+      diskBreakdown,
       optimizationTier: {
         tier: 'WebP optimized tier',
         variantsPerImage: 4,
@@ -173,7 +197,7 @@ export class AdminMediaService {
         return acc;
       }, {} as Record<string, number>),
       scopeBreakdown: scopeCounts.reduce((acc, curr) => {
-        acc[curr.scope] = curr._count.id;
+        acc[curr.entityType] = curr._count.id;
         return acc;
       }, {} as Record<string, number>),
       mimeTypeBreakdown: mimeTypeCounts.reduce((acc, curr) => {
@@ -191,10 +215,10 @@ export class AdminMediaService {
           id: m.id,
           originalName: m.originalName,
           mimeType: m.mimeType,
-          fileSize: m.fileSize,
-          fileSizeFormatted: formatBytes(m.fileSize),
+          fileSize: Number(m.sizeBytes),
+          fileSizeFormatted: formatBytes(Number(m.sizeBytes)),
           status: m.status,
-          scope: m.scope,
+          scope: m.entityType,
           thumbnailUrl: variants.thumbnail || variants.card || variants.large || null,
           createdAt: m.createdAt,
         };
@@ -212,33 +236,39 @@ export class AdminMediaService {
       where.status = status;
     }
     if (scope && scope !== 'ALL') {
-      where.scope = scope;
+      if ((scope as string) === 'UNATTACHED') {
+        where.entityId = null;
+      } else {
+        where.entityType = scope;
+      }
     }
     if (mimeType) {
       where.mimeType = mimeType;
     }
     if (userId) {
-      where.userId = userId;
+      where.ownerId = userId;
     }
     if (search && search.trim()) {
       const s = search.trim();
       where.OR = [
         { originalName: { contains: s, mode: 'insensitive' } },
         { id: { contains: s, mode: 'insensitive' } },
-        { userId: { contains: s, mode: 'insensitive' } },
-        { attachedToId: { contains: s, mode: 'insensitive' } },
+        { ownerId: { contains: s, mode: 'insensitive' } },
+        { entityId: { contains: s, mode: 'insensitive' } },
       ];
     }
 
+    const sortField = (sortBy as string) === 'fileSize' ? 'sizeBytes' : sortBy;
+
     const [totalItems, items] = await Promise.all([
-      prisma.media.count({ where }),
-      prisma.media.findMany({
+      prisma.mediaAsset.count({ where }),
+      prisma.mediaAsset.findMany({
         where,
         skip,
         take: limit,
-        orderBy: { [sortBy]: sortOrder },
+        orderBy: { [sortField]: sortOrder },
         include: {
-          user: {
+          owner: {
             select: {
               id: true,
               email: true,
@@ -255,32 +285,31 @@ export class AdminMediaService {
     ]);
 
     const formattedItems = items.map((m) => {
-      const variants = (m.variants as any) || {};
-      const isS3 = m.diskPath.startsWith('s3://') || env.STORAGE_DRIVER === 's3';
+      const publicVariants = toPublicMediaVariants(m.variants);
 
       return {
         id: m.id,
         originalName: m.originalName,
         mimeType: m.mimeType,
-        fileSize: m.fileSize,
-        fileSizeFormatted: formatBytes(m.fileSize),
+        fileSize: Number(m.sizeBytes),
+        fileSizeFormatted: formatBytes(Number(m.sizeBytes)),
         width: m.width,
         height: m.height,
         status: m.status,
-        scope: m.scope,
-        isAttached: m.isAttached,
-        attachedToId: m.attachedToId,
-        diskPath: m.diskPath,
-        storageLocation: isS3 ? 'S3/MinIO' : 'Local Disk',
-        variants,
-        thumbnailUrl: variants.thumbnail || variants.card || variants.large || null,
-        displayUrl: variants.card || variants.large || null,
-        largeUrl: variants.large || null,
+        scope: m.entityType,
+        isAttached: Boolean(m.entityId),
+        attachedToId: m.entityId,
+        diskPath: m.storageKey,
+        storageLocation: 'Local Disk',
+        variants: publicVariants,
+        thumbnailUrl: publicVariants.thumbnail || publicVariants.card || publicVariants.large || null,
+        displayUrl: publicVariants.card || publicVariants.large || null,
+        largeUrl: publicVariants.large || null,
         uploader: {
-          id: m.user.id,
-          email: m.user.email,
-          name: m.user.profile?.name || null,
-          phoneNumber: m.user.phoneNumber,
+          id: m.owner.id,
+          email: m.owner.email,
+          name: m.owner.profile?.name || null,
+          phoneNumber: m.owner.phoneNumber,
         },
         createdAt: m.createdAt,
         updatedAt: m.updatedAt,
@@ -302,10 +331,10 @@ export class AdminMediaService {
 
   // Returns full single media details with attached listing and focal point data
   static async getMediaById(id: string) {
-    const media = await prisma.media.findUnique({
+    const media = await prisma.mediaAsset.findUnique({
       where: { id },
       include: {
-        user: {
+        owner: {
           select: {
             id: true,
             email: true,
@@ -336,35 +365,34 @@ export class AdminMediaService {
       throw new AppError(404, 'MEDIA_NOT_FOUND', `Media record "${id}" was not found`);
     }
 
-    const variants = (media.variants as any) || {};
-    const isS3 = media.diskPath.startsWith('s3://') || env.STORAGE_DRIVER === 's3';
+    const publicVariants = toPublicMediaVariants(media.variants);
 
     return {
       id: media.id,
       originalName: media.originalName,
       mimeType: media.mimeType,
-      fileSize: media.fileSize,
-      fileSizeFormatted: formatBytes(media.fileSize),
+      fileSize: Number(media.sizeBytes),
+      fileSizeFormatted: formatBytes(Number(media.sizeBytes)),
       width: media.width,
       height: media.height,
       status: media.status,
-      scope: media.scope,
-      isAttached: media.isAttached,
-      attachedToId: media.attachedToId,
-      diskPath: media.diskPath,
-      storageLocation: isS3 ? 'S3/MinIO' : 'Local Disk',
-      focalPoint: media.focalPoint,
-      blurhash: media.blurhash,
-      errorMessage: media.errorMessage,
-      variants,
-      thumbnailUrl: variants.thumbnail || variants.card || variants.large || null,
-      displayUrl: variants.card || variants.large || null,
-      largeUrl: variants.large || null,
+      scope: media.entityType,
+      isAttached: Boolean(media.entityId),
+      attachedToId: media.entityId,
+      diskPath: media.storageKey,
+      storageLocation: 'Local Disk',
+      focalPoint: (media.metadata as any)?.focalPoint || { x: 0.5, y: 0.5 },
+      blurhash: null,
+      errorMessage: media.failureReason,
+      variants: publicVariants,
+      thumbnailUrl: publicVariants.thumbnail || publicVariants.card || publicVariants.large || null,
+      displayUrl: publicVariants.card || publicVariants.large || null,
+      largeUrl: publicVariants.large || null,
       uploader: {
-        id: media.user.id,
-        email: media.user.email,
-        name: media.user.profile?.name || null,
-        phoneNumber: media.user.phoneNumber,
+        id: media.owner.id,
+        email: media.owner.email,
+        name: media.owner.profile?.name || null,
+        phoneNumber: media.owner.phoneNumber,
       },
       attachedAd: media.adImages[0]?.ad || null,
       createdAt: media.createdAt,
@@ -374,18 +402,17 @@ export class AdminMediaService {
 
   // Updates metadata fields like originalName, scope, attachment state
   static async updateMediaMetadata(id: string, input: UpdateMediaMetadataInput, actorUserId?: string) {
-    const existing = await prisma.media.findUnique({ where: { id } });
+    const existing = await prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError(404, 'MEDIA_NOT_FOUND', `Media record "${id}" was not found`);
     }
 
-    const updated = await prisma.media.update({
+    const updated = await prisma.mediaAsset.update({
       where: { id },
       data: {
         originalName: input.originalName !== undefined ? input.originalName : existing.originalName,
-        scope: input.scope !== undefined ? input.scope : existing.scope,
-        isAttached: input.isAttached !== undefined ? input.isAttached : existing.isAttached,
-        attachedToId: input.attachedToId !== undefined ? input.attachedToId : existing.attachedToId,
+        entityType: input.scope !== undefined ? input.scope : existing.entityType,
+        entityId: input.attachedToId !== undefined ? input.attachedToId : existing.entityId,
         status: input.status !== undefined ? input.status : existing.status,
       },
     });
@@ -399,15 +426,13 @@ export class AdminMediaService {
         status: 'SUCCESS',
         oldData: {
           originalName: existing.originalName,
-          scope: existing.scope,
-          isAttached: existing.isAttached,
-          attachedToId: existing.attachedToId,
+          scope: existing.entityType,
+          attachedToId: existing.entityId,
         },
         newData: {
           originalName: updated.originalName,
-          scope: updated.scope,
-          isAttached: updated.isAttached,
-          attachedToId: updated.attachedToId,
+          scope: updated.entityType,
+          attachedToId: updated.entityId,
         },
       });
     }
@@ -418,7 +443,7 @@ export class AdminMediaService {
   // Replaces the physical image file with a newly uploaded file
   // Purges old files from disk/S3 immediately so disk space is not unnecessarily used
   static async replaceMediaFile(id: string, part: any, baseUrl?: string, actorUserId?: string) {
-    const existing = await prisma.media.findUnique({ where: { id } });
+    const existing = await prisma.mediaAsset.findUnique({ where: { id } });
     if (!existing) {
       throw new AppError(404, 'MEDIA_NOT_FOUND', `Media record "${id}" was not found`);
     }
@@ -467,24 +492,24 @@ export class AdminMediaService {
     // 3. Build paths for new variants based on entity scope
     let resource: MediaResource = 'ads';
     let mediaType = 'images';
-    let resourceId = existing.attachedToId || 'drafts';
+    let resourceId = existing.entityId || 'drafts';
 
-    if (existing.scope === 'CATEGORY_BANNER') {
+    if (existing.entityType === 'CATEGORY') {
       resource = 'categories';
       mediaType = 'icon';
-      resourceId = existing.attachedToId || id;
-    } else if (existing.scope === 'USER_AVATAR') {
+      resourceId = existing.entityId || id;
+    } else if (existing.entityType === 'USER') {
       resource = 'users';
       mediaType = 'avatar';
-      resourceId = existing.attachedToId || existing.userId;
-    } else if (existing.scope === 'BANNER') {
+      resourceId = existing.entityId || existing.ownerId;
+    } else if (existing.entityType === 'BANNER') {
       resource = 'system';
       mediaType = 'banner';
-      resourceId = existing.attachedToId || id;
-    } else if (existing.scope === 'CHAT_ATTACHMENT') {
+      resourceId = existing.entityId || id;
+    } else if (existing.entityType === 'CHAT') {
       resource = 'chats';
       mediaType = 'attachments';
-      resourceId = existing.attachedToId || 'drafts';
+      resourceId = existing.entityId || 'drafts';
     }
 
     const largePath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'large', format: 'webp' });
@@ -492,31 +517,28 @@ export class AdminMediaService {
     const thumbPath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'thumbnail', format: 'webp' });
     const cardPath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'card', format: 'webp' });
 
+    const relativeVariants = {
+      thumbnail: thumbPath,
+      card: cardPath,
+      medium: mediumPath,
+      large: largePath,
+    };
+    const relativeDir = buildMediaDirectory({ resource, resourceId, mediaType, mediaId: id });
+    const newDiskPath = relativeDir;
+
     const host = baseUrl || process.env.MEDIA_CDN_URL || 'http://localhost:5000';
     const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
-    const newVariants = {
-      thumbnail: defaultStorage.buildPublicUrl(thumbPath, cleanHost),
-      card: defaultStorage.buildPublicUrl(cardPath, cleanHost),
-      medium: defaultStorage.buildPublicUrl(mediumPath, cleanHost),
-      large: defaultStorage.buildPublicUrl(largePath, cleanHost),
-    };
-    const relativeDir = buildMediaDirectory({ resource, resourceId, mediaType, mediaId: id });
-    const newDiskPath =
-      (env.STORAGE_DRIVER || 's3') === 's3'
-        ? `s3://${env.S3_BUCKET || 'olx-media'}/${relativeDir}`
-        : relativeDir;
-
-    // 4. Update database record with new metadata and status PROCESSING
-    const updated = await prisma.media.update({
+    // 4. Update database record with clean relative paths and status PROCESSING
+    const updated = await prisma.mediaAsset.update({
       where: { id },
       data: {
         originalName: path.basename(part.filename || existing.originalName),
         mimeType: validated.mimeType,
-        fileSize: size,
+        sizeBytes: BigInt(size),
         status: 'PROCESSING',
-        diskPath: newDiskPath,
-        variants: newVariants,
+        storageKey: relativeVariants.large || `images/${id}/original.webp`,
+        variants: relativeVariants,
         width: dimensions?.width || null,
         height: dimensions?.height || null,
       },
@@ -526,7 +548,7 @@ export class AdminMediaService {
     await queueMediaProcessingJob({
       mediaId: id,
       tempPath,
-      userId: existing.userId,
+      userId: existing.ownerId,
       originalName: path.basename(part.filename || existing.originalName),
       mimeType: validated.mimeType,
       fileSize: size,
@@ -544,7 +566,7 @@ export class AdminMediaService {
         entityId: id,
         status: 'SUCCESS',
         oldData: {
-          fileSize: existing.fileSize,
+          fileSize: Number(existing.sizeBytes),
           originalName: existing.originalName,
         },
         newData: {
@@ -554,20 +576,22 @@ export class AdminMediaService {
       });
     }
 
+    const publicVariants = toPublicMediaVariants(relativeVariants, cleanHost);
+
     return {
       id: updated.id,
       status: 'PROCESSING',
       originalName: updated.originalName,
-      fileSize: updated.fileSize,
-      fileSizeFormatted: formatBytes(updated.fileSize),
-      variants: newVariants,
+      fileSize: Number(updated.sizeBytes),
+      fileSizeFormatted: formatBytes(Number(updated.sizeBytes)),
+      variants: publicVariants,
       message: 'Old files purged and new image uploaded for background optimization',
     };
   }
 
   // Deletes media record and removes all physical files & variants from disk / S3
   static async deleteMedia(id: string, actorUserId?: string) {
-    const media = await prisma.media.findUnique({
+    const media = await prisma.mediaAsset.findUnique({
       where: { id },
     });
 
@@ -580,11 +604,11 @@ export class AdminMediaService {
 
     // 2. Unlink any AdImage relationships
     await prisma.adImage.deleteMany({
-      where: { mediaId: id },
+      where: { mediaAssetId: id },
     }).catch(() => {});
 
     // 3. Delete from database
-    await prisma.media.delete({
+    await prisma.mediaAsset.delete({
       where: { id },
     });
 
@@ -597,10 +621,9 @@ export class AdminMediaService {
         status: 'SUCCESS',
         oldData: {
           originalName: media.originalName,
-          fileSize: media.fileSize,
-          diskPath: media.diskPath,
-          scope: media.scope,
-          isAttached: media.isAttached,
+          fileSize: Number(media.sizeBytes),
+          storageKey: media.storageKey,
+          entityType: media.entityType,
         },
       });
     }
@@ -608,15 +631,18 @@ export class AdminMediaService {
     return {
       success: true,
       message: `Media "${media.originalName}" and physical files deleted successfully`,
-      freedBytes: media.fileSize,
-      freedFormatted: formatBytes(media.fileSize),
+      freedBytes: Number(media.sizeBytes),
+      freedFormatted: formatBytes(Number(media.sizeBytes)),
     };
   }
 
   // Purges unattached orphaned media from DB and physical storage (S3 & Disk)
   static async cleanupOrphanedMedia(gracePeriodHours = 0, actorUserId?: string) {
     const where: any = {
-      isAttached: false,
+      categories: { none: {} },
+      adImages: { none: {} },
+      banners: { none: {} },
+      messages: { none: {} },
     };
 
     if (gracePeriodHours > 0) {
@@ -624,62 +650,25 @@ export class AdminMediaService {
       where.createdAt = { lt: cutoffDate };
     }
 
-    const orphans = await prisma.media.findMany({
+    const orphans = await prisma.mediaAsset.findMany({
       where,
-      include: {
-        categories: { select: { id: true } },
-        adImages: { select: { id: true } },
-      },
       take: 500,
     });
 
     let freedBytes = 0;
     let deletedCount = 0;
-    let healedCount = 0;
 
     for (const orphan of orphans) {
-      // Consistency self-heal: if media is actually referenced by a category or ad, restore attachment
-      if (orphan.categories.length > 0 || orphan.adImages.length > 0) {
-        await prisma.media.update({
-          where: { id: orphan.id },
-          data: {
-            isAttached: true,
-            attachedToId: orphan.categories[0]?.id || orphan.adImages[0]?.id,
-            scope: orphan.categories.length > 0 ? 'CATEGORY_BANNER' : 'LISTING_IMAGE',
-          },
-        });
-        healedCount++;
-        continue;
-      }
-
-      // Consistency self-heal: if media is referenced in a chat message attachment
-      const messageWithAttachment = await prisma.message.findFirst({
-        where: { attachmentUrl: { contains: orphan.id } },
-        select: { id: true },
-      });
-      if (messageWithAttachment) {
-        await prisma.media.update({
-          where: { id: orphan.id },
-          data: {
-            isAttached: true,
-            attachedToId: messageWithAttachment.id,
-            scope: 'CHAT_ATTACHMENT',
-          },
-        });
-        healedCount++;
-        continue;
-      }
-
-      // Thoroughly remove all physical files from S3/MinIO and local disk
+      // Thoroughly remove all physical files from storage
       await deletePhysicalMedia(orphan);
-      freedBytes += orphan.fileSize;
+      freedBytes += Number(orphan.sizeBytes);
 
       // Delete from database
-      await prisma.media.delete({ where: { id: orphan.id } }).catch(() => {});
+      await prisma.mediaAsset.delete({ where: { id: orphan.id } }).catch(() => {});
       deletedCount++;
     }
 
-    if (actorUserId && (deletedCount > 0 || healedCount > 0)) {
+    if (actorUserId && deletedCount > 0) {
       await writeAuditLog({
         userId: actorUserId,
         action: 'ADMIN_ACTION_CLEANUP_ORPHANED_MEDIA',
@@ -688,7 +677,6 @@ export class AdminMediaService {
         status: 'SUCCESS',
         newData: {
           deletedCount,
-          healedCount,
           freedBytes,
           freedFormatted: formatBytes(freedBytes),
           gracePeriodHours,
@@ -699,12 +687,10 @@ export class AdminMediaService {
     return {
       success: true,
       deletedCount,
-      healedCount,
+      healedCount: 0,
       freedBytes,
       freedFormatted: formatBytes(freedBytes),
-      message: `Cleaned up ${deletedCount} orphaned files and reclaimed ${formatBytes(freedBytes)} of storage${
-        healedCount > 0 ? ` (${healedCount} attached records restored)` : ''
-      }`,
+      message: `Cleaned up ${deletedCount} orphaned files and reclaimed ${formatBytes(freedBytes)} of storage`,
     };
   }
 }

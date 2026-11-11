@@ -9,7 +9,6 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1161.0",
     "@olx/database": "workspace:*",
     "@olx/shared": "workspace:*",
     "bullmq": "^6.5.4",

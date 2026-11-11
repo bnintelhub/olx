@@ -1,6 +1,6 @@
 # BharatMarket (OLX Marketplace) — Production VPS Deployment Strategy
 
-> Comprehensive operations manual for deploying BharatMarket on Linux VPS servers (Ubuntu 22.04 / 24.04 LTS). Covers infrastructure hardening, MinIO private isolation, Nginx reverse proxy with SSL, domain configurations, and both **Single-VPS (Monorepo)** and **Multi-Server (Distributed)** deployment options.
+> Comprehensive operations manual for deploying BharatMarket on Linux VPS servers (Ubuntu 22.04 / 24.04 LTS). Covers infrastructure hardening, local persistent volume media storage, Nginx reverse proxy with SSL, domain configurations, and both **Single-VPS (Monorepo)** and **Multi-Server (Distributed)** deployment options.
 
 ---
 
@@ -9,11 +9,10 @@
 - [1. Architecture Topologies](#1-architecture-topologies)
   - [Option A: Single-VPS All-in-One Deployment](#option-a-single-vps-all-in-one-deployment)
   - [Option B: Separate Multi-Server Distributed Deployment](#option-b-separate-multi-server-distributed-deployment)
-- [2. MinIO Security & Private S3 Isolation](#2-minio-security--private-s3-isolation)
-  - [Why Port 9000 & 9001 Must Never Be Exposed Publicly](#why-port-9000--9001-must-never-be-exposed-publicly)
-  - [Internal Docker Binding & UFW Firewall Rules](#internal-docker-binding--ufw-firewall-rules)
-  - [Secure Public Media Routing via Nginx](#secure-public-media-routing-via-nginx)
-  - [Accessing MinIO Console Securely via SSH Tunnel](#accessing-minio-console-securely-via-ssh-tunnel)
+- [2. Local Media Storage & Persistent Volume Architecture](#2-local-media-storage--persistent-volume-architecture)
+  - [High-Performance Direct Disk Serving via Nginx](#high-performance-direct-disk-serving-via-nginx)
+  - [Shared Docker Volume (`media_data`) Mounting](#shared-docker-volume-media_data-mounting)
+  - [UFW Firewall & Port Security](#ufw-firewall--port-security)
 - [3. Domain Architecture & DNS Mapping](#3-domain-architecture--dns-mapping)
 - [4. Single-VPS Monorepo Deployment Guide](#4-single-vps-monorepo-deployment-guide)
   - [Step 1: VPS Initial Hardening](#step-1-vps-initial-hardening)
@@ -51,18 +50,16 @@ flowchart TD
         NGINX -->|yourdomain.com| ClientApp["Client Frontend (React/Vite :5173 / Static)"]
         NGINX -->|admin.yourdomain.com| AdminPortal["Admin Portal (React/Vite :5174 / Static)"]
         NGINX -->|api.yourdomain.com| FastifyAPI["Fastify API Server (:5000)"]
-        NGINX -->|media.yourdomain.com| MinIOPublic["MinIO Media Delivery (:9000 Internal)"]
+        NGINX -->|/media/| LocalMedia["Direct Disk Serving (/data/olx-media)"]
 
         subgraph PrivateDockerNet["Isolated Docker Network (bharatmarket_net) - No Public Ports"]
             FastifyAPI -->|Read/Write| Postgres[(PostgreSQL 16 DB)]
             FastifyAPI -->|Cache & PubSub| Redis[(Redis 7)]
             FastifyAPI -->|Push Jobs| BullMQ[BullMQ Queues]
             BullMQ --> Workers["Background Workers (Sharp Engine)"]
-            Workers -->|Store WebP Variants| MinIO[(MinIO S3 Storage)]
-            FastifyAPI -->|S3 Client SDK| MinIO
+            Workers -->|Store WebP Variants| LocalVolume[("Persistent Volume: media_data (/data/olx-media)")]
+            FastifyAPI -->|Instant Stage Write| LocalVolume
         end
-
-        AdminUser([Admin / DevOps]) -.->|SSH Tunnel :9001| MinIOConsole["MinIO Web Console (Private)"]
     end
 ```
 
@@ -89,12 +86,12 @@ flowchart LR
         WorkerGroup[Worker Cluster] --> BullMQQueue[BullMQ Worker Processes]
     end
 
-    subgraph NodeData["Server 3: Database & S3 Node (4 vCPU, 16GB)"]
+    subgraph NodeData["Server 3: Database & Storage Node (4 vCPU, 16GB)"]
         PostgresDB[(PostgreSQL Primary)]
         RedisCluster[(Redis 7 In-Memory)]
-        MinIOCluster[(MinIO S3 Storage Cluster)]
-        Cloudflare -->|media.yourdomain.com| MediaNginx[Nginx S3 Proxy / Cache]
-        MediaNginx --> MinIOCluster
+        SharedStorage[(Shared NVMe / NFS Volume)]
+        Cloudflare -->|media.yourdomain.com| MediaNginx[Nginx Direct Static Engine]
+        MediaNginx --> SharedStorage
     end
 
     API1 --> PostgresDB
@@ -102,7 +99,7 @@ flowchart LR
     API1 --> RedisCluster
     API2 --> RedisCluster
     WorkerGroup --> RedisCluster
-    WorkerGroup --> MinIOCluster
+    WorkerGroup --> SharedStorage
 ```
 
 ---

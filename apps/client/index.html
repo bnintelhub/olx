@@ -18,11 +18,14 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('[PWA] Service Worker registered:', reg.scope))
-            .catch((err) => console.warn('[PWA] Service Worker registration failed:', err));
-        });
+        // In local development, avoid registering the caching service worker to prevent Vite HMR & proxy issues
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then((reg) => console.log('[PWA] Service Worker registered:', reg.scope))
+              .catch((err) => console.warn('[PWA] Service Worker registration failed:', err));
+          });
+        }
       }
     </script>
   </body>

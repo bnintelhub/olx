@@ -28,7 +28,22 @@ import {
   List,
   Sparkles,
   SlidersHorizontal,
+  Server,
+  BarChart3,
+  PieChart as PieIcon,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  PieChart,
+  Pie,
+  Cell,
+} from 'recharts';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -159,12 +174,12 @@ export function MediaPage() {
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Media & Storage Observability</h2>
-            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20">
-              Live S3 / MinIO
+            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-medium">
+              Local Persistent Disk (/data/olx-media)
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Monitor real-time storage metrics, inspect uploaded assets, and enforce zero-leak physical disk space reclamation.
+            Monitor real-time storage metrics, inspect uploaded assets, and observe physical disk space allocation.
           </p>
         </div>
 
@@ -202,7 +217,7 @@ export function MediaPage() {
               {isOverviewLoading ? '...' : overview?.totalFilesFormatted || '0'}
             </div>
             <div className="text-[11px] text-muted-foreground mt-0.5">
-              {overview?.storageInfrastructure?.syncStatusText || 'S3 & CDN synchronized'}
+              {overview?.storageInfrastructure?.syncStatusText || 'Local Persistent Volume Active'}
             </div>
           </div>
           <div className="h-10 w-10 rounded-lg bg-blue-500/10 text-blue-600 flex items-center justify-center">
@@ -226,21 +241,19 @@ export function MediaPage() {
           </div>
         </Card>
 
-        {/* Card 3: S3 Sync Tier */}
+        {/* Card 3: Storage Engine & Volume */}
         <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
-            <div className="text-xs font-medium text-muted-foreground">S3 Storage Tier</div>
+            <div className="text-xs font-medium text-muted-foreground">Storage Engine</div>
             <div className="text-2xl font-bold text-emerald-600 mt-1">
-              {isOverviewLoading ? '...' : `${overview?.storageInfrastructure.synchronizedPercentage || 100}%`}
+              Local Disk
             </div>
             <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-              {overview?.storageInfrastructure.driver === 'S3'
-                ? `Bucket: ${overview?.storageInfrastructure.bucket}`
-                : 'Local Disk mode'}
+              Volume: media_data (/data)
             </div>
           </div>
           <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
-            <ShieldCheck className="h-5 w-5" />
+            <Server className="h-5 w-5" />
           </div>
         </Card>
 
@@ -261,15 +274,169 @@ export function MediaPage() {
         </Card>
       </div>
 
+      {/* Disk Storage Observability Graphs */}
+      <div className="grid gap-4 lg:grid-cols-12">
+        {/* Storage by Scope Bar Chart */}
+        <Card className="lg:col-span-7 p-5 shadow-xs">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-primary" />
+                <span>Disk Storage Allocation by Category</span>
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Physical disk footprint across marketplace media types
+              </p>
+            </div>
+            <Badge variant="secondary" className="text-[11px] font-mono">
+              Total: {overview?.storageConsumed.formatted || '0 Bytes'}
+            </Badge>
+          </div>
+
+          <div className="h-[230px] w-full">
+            {overview?.diskBreakdown && overview.diskBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={overview.diskBreakdown} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" opacity={0.15} vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(val) => {
+                      if (val === 0) return '0';
+                      if (val >= 1024 * 1024) return `${(val / (1024 * 1024)).toFixed(0)}MB`;
+                      if (val >= 1024) return `${(val / 1024).toFixed(0)}KB`;
+                      return `${val}B`;
+                    }}
+                  />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      return (
+                        <div className="bg-popover border border-border p-2.5 rounded-lg shadow-lg text-xs">
+                          <div className="font-semibold text-foreground flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                            <span>{d.name}</span>
+                          </div>
+                          <div className="mt-1 text-muted-foreground">
+                            Size: <span className="font-medium text-foreground">{d.formatted}</span>
+                          </div>
+                          <div className="text-muted-foreground">
+                            Files: <span className="font-medium text-foreground">{d.count}</span>
+                          </div>
+                          <div className="text-muted-foreground">
+                            Disk Share: <span className="font-medium text-foreground">{d.percentage}%</span>
+                          </div>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="bytes" radius={[4, 4, 0, 0]}>
+                    {overview.diskBreakdown.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                No storage allocation data recorded
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Disk Composition & Tier Efficiency */}
+        <Card className="lg:col-span-5 p-5 shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                <PieIcon className="h-4 w-4 text-purple-600" />
+                <span>Storage Share & Efficiency</span>
+              </h3>
+              <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20">
+                WebP ~65% Saved
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 items-center">
+              <div className="h-[155px] relative">
+                {overview?.diskBreakdown && overview.diskBreakdown.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={overview.diskBreakdown}
+                        dataKey="bytes"
+                        nameKey="name"
+                        innerRadius={40}
+                        outerRadius={65}
+                        paddingAngle={3}
+                      >
+                        {overview.diskBreakdown.map((entry, index) => (
+                          <Cell key={`pie-cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: any, _name: any, entry: any) => [
+                          entry?.payload?.formatted || `${value} bytes`,
+                          entry?.payload?.name,
+                        ]}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-full flex items-center justify-center text-xs text-muted-foreground">
+                    No data
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-1.5 text-xs">
+                {overview?.diskBreakdown && overview.diskBreakdown.length > 0 ? (
+                  overview.diskBreakdown.map((item) => (
+                    <div key={item.scope} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
+                        <span className="text-muted-foreground truncate">{item.name}</span>
+                      </div>
+                      <span className="font-mono font-medium text-[11px] text-foreground shrink-0">
+                        {item.formatted}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-xs text-muted-foreground">Awaiting uploads</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t grid grid-cols-2 gap-2 text-[11px] bg-muted/40 p-2.5 rounded-lg">
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Volume Mount:</span>
+              <span className="font-mono font-semibold text-foreground">/data/olx-media</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground block text-[10px]">Sharp Optimization:</span>
+              <span className="font-semibold text-emerald-600">4 WebP Variants / Image</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
       {/* Filter Tabs, Search Bar, and Controls */}
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b pb-3">
         {/* Scope Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
             { id: 'ALL', label: 'All Scopes' },
-            { id: 'LISTING_IMAGE', label: 'Listing Ads' },
-            { id: 'USER_AVATAR', label: 'Avatars' },
-            { id: 'CATEGORY_BANNER', label: 'Categories' },
+            { id: 'LISTING', label: 'Listing Ads' },
+            { id: 'USER', label: 'Avatars' },
+            { id: 'CATEGORY', label: 'Categories' },
+            { id: 'BANNER', label: 'Banners' },
+            { id: 'CHAT', label: 'Chats' },
             { id: 'UNATTACHED', label: 'Unattached' },
           ].map((cat) => (
             <button
@@ -825,7 +992,7 @@ export function MediaPage() {
                     <Sparkles className="h-3.5 w-3.5 text-primary" />
                     <span>WebP Optimization Tiers</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">Direct CDN / S3 Links</span>
+                  <span className="text-[10px] text-muted-foreground">Direct Media Links</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {Object.entries(detailData.variants || {}).map(([key, url]) => (
@@ -973,7 +1140,7 @@ export function MediaPage() {
         <DialogHeader>
           <DialogTitle>Edit Media & Replace Asset</DialogTitle>
           <DialogDescription className="text-xs">
-            Update metadata or upload a new image. When replacing, old files are purged immediately from disk/S3.
+            Update metadata or upload a new image. When replacing, old files are purged immediately from local disk storage.
           </DialogDescription>
         </DialogHeader>
 
@@ -995,10 +1162,12 @@ export function MediaPage() {
                 onChange={(e) => setEditScope(e.target.value as MediaEntityScope)}
                 className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               >
-                <option value="LISTING_IMAGE">Listing Ad Image (LISTING_IMAGE)</option>
-                <option value="USER_AVATAR">User Avatar (USER_AVATAR)</option>
-                <option value="CATEGORY_BANNER">Category Icon (CATEGORY_BANNER)</option>
+                <option value="LISTING">Listing Ad Image (LISTING)</option>
+                <option value="USER">User Avatar (USER)</option>
+                <option value="CATEGORY">Category Icon / Banner (CATEGORY)</option>
                 <option value="BANNER">Platform Banner (BANNER)</option>
+                <option value="CHAT">Chat Attachment (CHAT)</option>
+                <option value="SYSTEM">System Asset (SYSTEM)</option>
                 <option value="UNATTACHED">Unattached / Draft (UNATTACHED)</option>
               </select>
             </div>
@@ -1022,7 +1191,7 @@ export function MediaPage() {
                 <div className="flex items-center gap-1.5 text-amber-600 bg-amber-500/10 p-2 rounded text-[11px]">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                   <span>
-                    Warning: Old physical variants on disk & S3 will be permanently deleted upon saving.
+                    Warning: Old physical variants on disk will be permanently deleted upon saving.
                   </span>
                 </div>
               )}
@@ -1053,7 +1222,7 @@ export function MediaPage() {
             <span>Confirm Permanent Storage Deletion</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            This action deletes the database record AND purges all 4 WebP variants from disk & S3 to reclaim space.
+            This action deletes the database record AND purges all 4 WebP variants from disk to reclaim space.
           </DialogDescription>
         </DialogHeader>
 
@@ -1094,7 +1263,7 @@ export function MediaPage() {
             <span>Clean Up Orphaned Media</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Purge unattached and abandoned media files from database and storage (disk & S3).
+            Purge unattached and abandoned media files from database and local disk volume.
           </DialogDescription>
         </DialogHeader>
 

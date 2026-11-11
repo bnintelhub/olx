@@ -1,3 +1,8 @@
+// Polyfill BigInt serialization for Fastify / JSON.stringify
+(BigInt.prototype as any).toJSON = function () {
+  return Number(this);
+};
+
 import { Server as SocketIOServer } from 'socket.io';
 import { buildApp } from './app';
 import { env } from './config/env';

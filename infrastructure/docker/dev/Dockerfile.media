@@ -1,0 +1,18 @@
+FROM node:22-alpine
+RUN apk add --no-cache openssl libc6-compat
+RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
+WORKDIR /app
+
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* turbo.json .npmrc ./
+COPY packages/database ./packages/database
+COPY packages/shared ./packages/shared
+COPY apps/media-service ./apps/media-service
+
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter @olx/media-service...
+RUN pnpm --filter @olx/database db:generate
+RUN pnpm --filter @olx/database build
+RUN pnpm --filter @olx/shared build
+
+CMD ["pnpm", "--filter", "@olx/media-service", "dev"]
+

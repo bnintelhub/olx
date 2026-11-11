@@ -74,8 +74,7 @@ export class NotificationsController {
 }
 
 export async function notificationRoutes(fastify: FastifyInstance) {
-  // Public configuration for Service Workers (strictly from env, never hardcoded)
-  fastify.get('/notifications/firebase-client-config', async (_req, reply) => {
+  const sendFirebaseConfig = async (_req: FastifyRequest, reply: FastifyReply) => {
     return reply.status(200).send({
       apiKey: env.FIREBASE_API_KEY || null,
       authDomain: env.FIREBASE_AUTH_DOMAIN || null,
@@ -85,12 +84,28 @@ export async function notificationRoutes(fastify: FastifyInstance) {
       appId: env.FIREBASE_APP_ID || null,
       measurementId: env.FIREBASE_MEASUREMENT_ID || null,
     });
-  });
+  };
+
+  // Public configuration for Service Workers (resolves /api/v1/notifications/firebase-client-config)
+  fastify.get('/firebase-client-config', sendFirebaseConfig);
+  // Alias in case client requests double-prefixed path
+  fastify.get('/notifications/firebase-client-config', sendFirebaseConfig);
 
   const auth = { preHandler: [fastify.authenticate] };
+  // Supports both /api/v1/notifications and legacy /api/v1/notifications/notifications
+  fastify.get('/', auth, NotificationsController.list);
+  fastify.get('/list', auth, NotificationsController.list);
   fastify.get('/notifications', auth, NotificationsController.list);
+
+  fastify.patch('/read-all', auth, NotificationsController.markRead);
   fastify.patch('/notifications/read-all', auth, NotificationsController.markRead);
+
+  fastify.post('/push-token', auth, NotificationsController.registerToken);
   fastify.post('/notifications/push-token', auth, NotificationsController.registerToken);
+
+  fastify.delete('/push-token', auth, NotificationsController.unregisterToken);
   fastify.delete('/notifications/push-token', auth, NotificationsController.unregisterToken);
+
+  fastify.post('/test-push', auth, NotificationsController.sendTestPush);
   fastify.post('/notifications/test-push', auth, NotificationsController.sendTestPush);
 }

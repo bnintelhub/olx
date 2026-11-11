@@ -1,66 +1,35 @@
 import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { useNavigate } from 'react-router-dom';
+import type { Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
-import { executeSilentRefresh } from '@/lib/api-client';
 import { useChatUnreadStore } from '../stores/useChatUnreadStore';
 import { playNewMessageSound } from '../utils/chatSound';
+import { getChatSocket } from '../services/chatSocket.service';
 
 export function useChatNotificationListener(): void {
-  const { user, token } = useAuthStore();
-  const { fetchUnreadCount, incrementUnread, reset } = useChatUnreadStore();
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
+    let isCancelled = false;
+
     if (!user) {
-      reset();
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-        socketRef.current = null;
-      }
+      useChatUnreadStore.getState().reset();
       return;
     }
 
     // Fetch initial badge count on login
-    void fetchUnreadCount();
-
-    const activeToken =
-      token ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('olx_access_token') || localStorage.getItem('token')
-        : null);
-
-    const socket = io('/', {
-      path: '/socket.io',
-      transports: ['websocket', 'polling'],
-      auth: { token: activeToken || '' },
-      withCredentials: true,
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      randomizationFactor: 0.5,
-      timeout: 10000,
-    });
-
-    socketRef.current = socket;
-
-    socket.on('connect_error', async (err) => {
-      if (err.message.includes('AUTHENTICATION_REQUIRED')) {
-        await executeSilentRefresh();
-        const freshToken = localStorage.getItem('olx_access_token');
-        if (freshToken && socketRef.current) socketRef.current.auth = { token: freshToken };
-      }
-    });
-
-    // Refresh unread count on reconnecting to a server replica
-    socket.on('connect', () => {
-      void fetchUnreadCount();
-    });
+    void useChatUnreadStore.getState().fetchUnreadCount();
 
     const clientBurstMap = new Map<string, { count: number; time: number }>();
 
-    socket.on('message.new', (msg: any) => {
+    const handleConnect = () => {
+      void useChatUnreadStore.getState().fetchUnreadCount();
+    };
+
+    const handleMessageNew = (msg: any) => {
       // Rule: Never notify for self-sent messages
       if (!msg || msg.senderId === user.id) return;
 
@@ -78,7 +47,7 @@ export function useChatNotificationListener(): void {
       }
 
       playNewMessageSound();
-      incrementUnread(1);
+      useChatUnreadStore.getState().incrementUnread(1);
 
       const senderName = msg.sender?.profile?.name || 'New Message';
       const text = msg.content || (msg.attachmentUrl ? '📷 Photo' : 'Sent an attachment');
@@ -106,7 +75,7 @@ export function useChatNotificationListener(): void {
           const notif = new Notification(senderName, options);
           notif.onclick = () => {
             window.focus();
-            window.location.href = clickUrl;
+            navigate(clickUrl);
           };
         } catch (e) {
           console.warn('[Notification] Native push display error:', e);
@@ -120,24 +89,44 @@ export function useChatNotificationListener(): void {
         action: {
           label: 'Reply',
           onClick: () => {
-            window.location.href = clickUrl;
+            navigate(clickUrl);
           },
         },
       });
-    });
+    };
 
-    socket.on('conversation.updated', () => {
-      void fetchUnreadCount();
-    });
+    const handleConvUpdated = () => {
+      void useChatUnreadStore.getState().fetchUnreadCount();
+    };
 
-    socket.on('message.read', () => {
-      void fetchUnreadCount();
+    const handleMessageRead = () => {
+      void useChatUnreadStore.getState().fetchUnreadCount();
+    };
+
+    void getChatSocket(user.id).then((sock) => {
+      if (isCancelled || !sock) return;
+      socketRef.current = sock;
+
+      sock.on('connect', handleConnect);
+      sock.on('message.new', handleMessageNew);
+      sock.on('conversation.updated', handleConvUpdated);
+      sock.on('message.read', handleMessageRead);
+
+      if (sock.connected) {
+        handleConnect();
+      }
     });
 
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
+      isCancelled = true;
+      const sock = socketRef.current;
+      if (sock) {
+        sock.off('connect', handleConnect);
+        sock.off('message.new', handleMessageNew);
+        sock.off('conversation.updated', handleConvUpdated);
+        sock.off('message.read', handleMessageRead);
+        socketRef.current = null;
+      }
     };
-  }, [user?.id, token, fetchUnreadCount, incrementUnread, reset]);
+  }, [user?.id, navigate]);
 }
-

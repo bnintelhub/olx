@@ -7,6 +7,37 @@ import { CreateListingInput, UpdateListingInput } from './listings.schema';
 import { processListingImagesJob } from '../../jobs/image-processing.job';
 import { SETTING_DEFAULTS } from '../../config/constants';
 import { RevenueService } from '../revenue/revenue.service';
+import { toPublicMediaUrl, normalizeMediaKey } from '../../shared/utils/media-url.util';
+
+export function formatAdImages(images: any[]): any[] {
+  if (!images || !Array.isArray(images)) return [];
+  return images.map((img) => {
+    const asset = img.mediaAsset;
+    const variants = (asset?.variants as any) || {};
+    const storageKey = asset?.storageKey || '';
+    const original = variants.original || (storageKey ? `${storageKey}/original.webp` : '');
+    const large = variants.large || (storageKey ? `${storageKey}/large.webp` : '');
+    const medium = variants.medium || (storageKey ? `${storageKey}/medium.webp` : '');
+    const thumb = variants.thumb || variants.thumbnail || (storageKey ? `${storageKey}/thumb.webp` : '');
+    const card = variants.card || (storageKey ? `${storageKey}/card.webp` : '');
+
+    const formattedAsset = asset
+      ? {
+          ...asset,
+          sizeBytes: asset.sizeBytes != null ? Number(asset.sizeBytes) : 0,
+        }
+      : undefined;
+
+    return {
+      ...img,
+      mediaAsset: formattedAsset,
+      mediaId: img.mediaAssetId || img.mediaId || null,
+      originalUrl: toPublicMediaUrl(img.originalUrl || large || original),
+      displayUrl: toPublicMediaUrl(img.displayUrl || card || medium || large || original),
+      thumbnailUrl: toPublicMediaUrl(img.thumbnailUrl || thumb || card || medium || large || original),
+    };
+  });
+}
 
 export class ListingsService {
   private static slugify(text: string): string {
@@ -69,15 +100,15 @@ export class ListingsService {
 
     // Verify media IDs ownership and status if mediaId is supplied
     const mediaIds = (data.images || [])
-      .map((i) => i.mediaId)
+      .map((i) => (i as any).mediaAssetId || i.mediaId)
       .filter(Boolean) as string[];
 
     let userMediaList: any[] = [];
     if (mediaIds.length > 0) {
-      userMediaList = await prisma.media.findMany({
+      userMediaList = await prisma.mediaAsset.findMany({
         where: {
           id: { in: mediaIds },
-          userId,
+          ownerId: userId,
         },
       });
 
@@ -89,7 +120,8 @@ export class ListingsService {
         );
       }
 
-      const failedMedia = userMediaList.filter((m) => m.status === 'FAILED');
+      const failedMedia = userMediaList.filter((m) => m
+      .status === 'FAILED');
       if (failedMedia.length > 0) {
         throw new AppError(
           400,
@@ -122,15 +154,10 @@ export class ListingsService {
 
       if (data.images && data.images.length > 0) {
         const imageRows = data.images.map((img, idx) => {
-          const media = img.mediaId ? userMediaList.find((m) => m.id === img.mediaId) : null;
-          const variants = (media?.variants as any) || {};
-          const fallback = img.url || media?.diskPath || '';
+          const assetId = (img as any).mediaAssetId || img.mediaId;
           return {
             adId: createdAd.id,
-            mediaId: img.mediaId || null,
-            originalUrl: variants.large || variants.card || fallback,
-            displayUrl: variants.card || variants.large || fallback,
-            thumbnailUrl: variants.thumbnail || variants.card || fallback,
+            mediaAssetId: assetId,
             sortOrder: img.sortOrder !== undefined ? img.sortOrder : idx,
             isCover: img.isCover !== undefined ? img.isCover : idx === 0,
           };
@@ -140,12 +167,11 @@ export class ListingsService {
 
         // Mark referenced media as attached in atomic transaction
         if (mediaIds.length > 0) {
-          await tx.media.updateMany({
+          await tx.mediaAsset.updateMany({
             where: { id: { in: mediaIds } },
             data: {
-              isAttached: true,
-              attachedToId: createdAd.id,
-              scope: 'LISTING_IMAGE',
+              entityType: 'LISTING',
+              entityId: createdAd.id,
             },
           });
         }
@@ -175,14 +201,19 @@ export class ListingsService {
       void processListingImagesJob(ad.id, legacyUrls);
     }
 
-    return prisma.ad.findUnique({
+    const createdWithImages = await prisma.ad.findUnique({
       where: { id: ad.id },
       include: {
         category: { select: { id: true, name: true, slug: true } },
         location: { select: { id: true, name: true, slug: true } },
-        images: { orderBy: { sortOrder: 'asc' } },
+        images: { include: { mediaAsset: true }, orderBy: { sortOrder: 'asc' } },
       },
     });
+    if (!createdWithImages) return ad;
+    return {
+      ...createdWithImages,
+      images: formatAdImages(createdWithImages.images),
+    };
   }
 
   static async getById(id: string) {
@@ -212,7 +243,7 @@ export class ListingsService {
             parent: { select: { id: true, name: true, slug: true, latitude: true, longitude: true } },
           },
         },
-        images: { orderBy: { sortOrder: 'asc' } },
+        images: { include: { mediaAsset: true }, orderBy: { sortOrder: 'asc' } },
         attributeValues: {
           include: {
             attribute: {
@@ -264,8 +295,10 @@ export class ListingsService {
     });
 
     const attributes = (ad.attributesCache as Record<string, any>) || {};
+    const formattedImages = formatAdImages(ad.images);
     const result = {
       ...ad,
+      images: formattedImages,
       attributes,
       attributesCache: attributes,
       seller: { ...ad.user, maskedPhone, adsCount: sellerAdsCount, phoneNumber: undefined },
@@ -334,7 +367,7 @@ export class ListingsService {
       include: {
         category: { select: { name: true, slug: true } },
         location: { select: { name: true } },
-        images: { orderBy: { isCover: 'desc' }, take: 3 },
+        images: { include: { mediaAsset: true }, orderBy: { isCover: 'desc' }, take: 3 },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -351,7 +384,12 @@ export class ListingsService {
       counts[c.status] = c._count._all;
     });
 
-    return { ads, counts, total: ads.length };
+    const formattedAds = ads.map((ad) => ({
+      ...ad,
+      images: formatAdImages(ad.images),
+    }));
+
+    return { ads: formattedAds, counts, total: ads.length };
   }
 
   // Replaces or reorders the images of an existing listing
@@ -369,10 +407,10 @@ export class ListingsService {
     if (ad.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'You do not own this listing');
 
     const mediaIds = images.map((i) => i.mediaId);
-    const userMediaList = await prisma.media.findMany({
+    const userMediaList = await prisma.mediaAsset.findMany({
       where: {
         id: { in: mediaIds },
-        userId,
+        ownerId: userId,
       },
     });
 
@@ -395,57 +433,37 @@ export class ListingsService {
 
     // Execute updates in a single transaction
     await prisma.$transaction(async (tx) => {
-      // Find old attached media to detach if no longer referenced
-      const previousMediaIds = ad.images
-        .map((img) => img.mediaId)
-        .filter(Boolean) as string[];
-
-      const toDetach = previousMediaIds.filter((id) => !mediaIds.includes(id));
-      if (toDetach.length > 0) {
-        await tx.media.updateMany({
-          where: { id: { in: toDetach } },
-          data: {
-            isAttached: false,
-            attachedToId: null,
-            scope: 'UNATTACHED',
-          },
-        });
-      }
-
-      // Mark newly attached media
-      await tx.media.updateMany({
-        where: { id: { in: mediaIds } },
-        data: {
-          isAttached: true,
-          attachedToId: listingId,
-          scope: 'LISTING_IMAGE',
-        },
-      });
-
       // Clear existing ad images and insert new ones
       await tx.adImage.deleteMany({ where: { adId: listingId } });
 
       const newRows = images.map((img, idx) => {
         const media = userMediaList.find((m) => m.id === img.mediaId)!;
-        const variants = (media.variants as any) || {};
         return {
           adId: listingId,
-          mediaId: media.id,
-          originalUrl: variants.large || variants.card || media.diskPath || '',
-          displayUrl: variants.card || variants.large || media.diskPath || '',
-          thumbnailUrl: variants.thumbnail || variants.card || media.diskPath || '',
+          mediaAssetId: media.id,
           sortOrder: img.sortOrder !== undefined ? img.sortOrder : idx,
           isCover: img.isCover !== undefined ? img.isCover : idx === 0,
         };
       });
 
       await tx.adImage.createMany({ data: newRows });
+
+      // Link media asset entities
+      await tx.mediaAsset.updateMany({
+        where: { id: { in: mediaIds } },
+        data: {
+          entityType: 'LISTING',
+          entityId: listingId,
+        },
+      });
     });
 
-    return prisma.adImage.findMany({
+    const adImages = await prisma.adImage.findMany({
       where: { adId: listingId },
+      include: { mediaAsset: true },
       orderBy: { sortOrder: 'asc' },
     });
+    return formatAdImages(adImages);
   }
 
   // Removes a single image from a listing
@@ -458,7 +476,7 @@ export class ListingsService {
     if (!ad) throw new AppError(404, 'LISTING_NOT_FOUND', 'Listing not found');
     if (ad.userId !== userId) throw new AppError(403, 'FORBIDDEN', 'You do not own this listing');
 
-    const imageToRemove = ad.images.find((img) => img.mediaId === mediaId || img.id === mediaId);
+    const imageToRemove = ad.images.find((img) => img.mediaAssetId === mediaId || img.id === mediaId);
     if (!imageToRemove) {
       throw new AppError(404, 'IMAGE_NOT_FOUND', 'Image is not associated with this listing');
     }
@@ -470,18 +488,6 @@ export class ListingsService {
     await prisma.$transaction(async (tx) => {
       // Delete image association
       await tx.adImage.delete({ where: { id: imageToRemove.id } });
-
-      // Detach media record
-      if (imageToRemove.mediaId) {
-        await tx.media.update({
-          where: { id: imageToRemove.mediaId },
-          data: {
-            isAttached: false,
-            attachedToId: null,
-            scope: 'UNATTACHED',
-          },
-        });
-      }
 
       // If removed image was cover, assign cover to the next image
       if (imageToRemove.isCover) {

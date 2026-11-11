@@ -2,6 +2,39 @@ import { prisma } from '../../config/prisma';
 import { AdStatus, Prisma } from '@prisma/client';
 import { SearchParams } from './search.schema';
 import { getCache, setCache } from '../../config/redis';
+import { toPublicMediaUrl } from '../../shared/utils/media-url.util';
+
+function formatSearchAdImages(ads: any[]): any[] {
+  return ads.map((ad) => ({
+    ...ad,
+    images: (ad.images || []).map((img: any) => {
+      const asset = img.mediaAsset;
+      const variants = (asset?.variants as any) || {};
+      const storageKey = asset?.storageKey || '';
+      const original = variants.original || (storageKey ? `${storageKey}/original.webp` : '');
+      const large = variants.large || (storageKey ? `${storageKey}/large.webp` : '');
+      const medium = variants.medium || (storageKey ? `${storageKey}/medium.webp` : '');
+      const thumb = variants.thumb || variants.thumbnail || (storageKey ? `${storageKey}/thumb.webp` : '');
+      const card = variants.card || (storageKey ? `${storageKey}/card.webp` : '');
+
+      const formattedAsset = asset
+        ? {
+            ...asset,
+            sizeBytes: asset.sizeBytes != null ? Number(asset.sizeBytes) : 0,
+          }
+        : undefined;
+
+      return {
+        ...img,
+        mediaAsset: formattedAsset,
+        mediaId: img.mediaAssetId || img.mediaId || null,
+        originalUrl: toPublicMediaUrl(img.originalUrl || large || original),
+        displayUrl: toPublicMediaUrl(img.displayUrl || card || medium || large || original),
+        thumbnailUrl: toPublicMediaUrl(img.thumbnailUrl || thumb || card || medium || large || original),
+      };
+    }),
+  }));
+}
 
 export class SearchService {
   static async search(params: SearchParams) {
@@ -192,7 +225,7 @@ export class SearchService {
         include: {
           category: { select: { id: true, name: true, slug: true, parentId: true } },
           location: { select: { id: true, name: true, slug: true, type: true } },
-          images: { orderBy: { sortOrder: 'asc' }, take: 4 },
+          images: { include: { mediaAsset: true }, orderBy: { sortOrder: 'asc' }, take: 4 },
           user: {
             select: {
               id: true,
@@ -214,8 +247,10 @@ export class SearchService {
 
     const facets = await this.computeFacets(where);
 
+    const formattedAds = formatSearchAdImages(ads);
+
     const result = {
-      ads,
+      ads: formattedAds,
       pagination: {
         total,
         page,
@@ -383,7 +418,7 @@ export class SearchService {
 
     if (!currentAd) return [];
 
-    return prisma.ad.findMany({
+    const related = await prisma.ad.findMany({
       where: {
         id: { not: adId },
         categoryId: currentAd.categoryId,
@@ -395,8 +430,10 @@ export class SearchService {
       include: {
         category: { select: { id: true, name: true, slug: true } },
         location: { select: { id: true, name: true, slug: true } },
-        images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+        images: { include: { mediaAsset: true }, orderBy: { sortOrder: 'asc' }, take: 1 },
       },
     });
+
+    return formatSearchAdImages(related);
   }
 }

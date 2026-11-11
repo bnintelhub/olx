@@ -5,6 +5,17 @@ import { dispatchNotificationJob } from '../../jobs/notification.job';
 import { ChatAbuseService } from './chat.abuse.service';
 import { ChatPresenceService } from './chat.presence.service';
 import { ChatConversationSummary, ChatMessageItem, SendMessagePayload } from './chat.types';
+import { toPublicMediaUrl } from '../../shared/utils/media-url.util';
+
+function getAdCoverUrl(adImg?: any): string | null {
+  if (!adImg) return null;
+  const asset = adImg.mediaAsset;
+  if (!asset) return null;
+  const variants = (asset.variants as any) || {};
+  const storageKey = asset.storageKey;
+  const thumb = variants.thumb || variants.thumbnail || variants.card || (storageKey ? `${storageKey}/thumb.webp` : null);
+  return thumb ? toPublicMediaUrl(thumb) : null;
+}
 
 export class ChatService {
   // Start or fetch existing marketplace conversation tied strictly to a listing
@@ -28,7 +39,7 @@ export class ChatService {
         where: { adId, sellerId: buyerId },
         orderBy: { lastMessageAt: 'desc' },
         include: {
-          ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' } } } },
+          ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' }, include: { mediaAsset: true } } } },
           buyer: { select: { id: true, profile: true } },
           seller: { select: { id: true, profile: true } },
         },
@@ -40,7 +51,7 @@ export class ChatService {
           adId: existing.adId,
           ad: {
             id: existing.ad.id, title: existing.ad.title, price: Number(existing.ad.price),
-            status: existing.ad.status, slug: existing.ad.slug, imageUrl: existing.ad.images[0]?.thumbnailUrl || existing.ad.images[0]?.displayUrl || null,
+            status: existing.ad.status, slug: existing.ad.slug, imageUrl: getAdCoverUrl(existing.ad.images[0]),
           },
           otherParty: {
             id: existing.buyer.id, name: existing.buyer.profile?.name || 'Buyer',
@@ -65,7 +76,7 @@ export class ChatService {
     if (isBlocked) throw new AppError(403, 'USER_BLOCKED', 'Communication is restricted with this user');
 
     const convInclude = {
-      ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' as const } } } },
+      ad: { select: { id: true, title: true, price: true, slug: true, status: true, images: { take: 1, orderBy: { sortOrder: 'asc' as const }, include: { mediaAsset: true } } } },
       buyer: { select: { id: true, profile: true } },
       seller: { select: { id: true, profile: true } },
     };
@@ -137,7 +148,7 @@ export class ChatService {
       adId: conversation.adId,
       ad: {
         id: conversation.ad.id, title: conversation.ad.title, price: Number(conversation.ad.price),
-        status: conversation.ad.status, slug: conversation.ad.slug, imageUrl: conversation.ad.images[0]?.thumbnailUrl || conversation.ad.images[0]?.displayUrl || null,
+        status: conversation.ad.status, slug: conversation.ad.slug, imageUrl: getAdCoverUrl(conversation.ad.images[0]),
       },
       otherParty: {
         id: otherParty.id, name: otherParty.profile?.name || (isBuyer ? 'Seller' : 'Buyer'),
@@ -178,7 +189,7 @@ export class ChatService {
             price: true,
             status: true,
             slug: true,
-            images: { take: 1, orderBy: { sortOrder: 'asc' } },
+            images: { take: 1, orderBy: { sortOrder: 'asc' }, include: { mediaAsset: true } },
           },
         },
         buyer: { select: { id: true, profile: { select: { name: true, avatarUrl: true } } } },
@@ -201,7 +212,7 @@ export class ChatService {
         id: conv.id, adId: conv.adId,
         ad: {
           id: conv.ad.id, title: conv.ad.title, price: Number(conv.ad.price), status: conv.ad.status,
-          slug: conv.ad.slug, imageUrl: conv.ad.images[0]?.thumbnailUrl || conv.ad.images[0]?.displayUrl || null,
+          slug: conv.ad.slug, imageUrl: getAdCoverUrl(conv.ad.images[0]),
         },
         otherParty: {
           id: otherParty.id, name: otherParty.profile?.name || (isBuyer ? 'Seller' : 'Buyer'),
@@ -221,7 +232,7 @@ export class ChatService {
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
-        ad: { select: { id: true, title: true, price: true, status: true, slug: true, images: { take: 1 } } },
+        ad: { select: { id: true, title: true, price: true, status: true, slug: true, images: { take: 1, include: { mediaAsset: true } } } },
         buyer: { select: { id: true, profile: true } }, seller: { select: { id: true, profile: true } },
       },
     });
@@ -251,7 +262,7 @@ export class ChatService {
     const formatted: ChatMessageItem[] = pagedMessages.reverse().map((m) => ({
       id: m.id, conversationId: m.conversationId, senderId: m.senderId, receiverId: m.receiverId,
       type: m.type, content: m.deletedAt ? 'This message was deleted' : m.content,
-      attachmentUrl: m.deletedAt ? null : m.attachmentUrl, replyToMessageId: m.replyToMessageId,
+      attachmentUrl: m.deletedAt ? null : (m.attachmentUrl ? toPublicMediaUrl(m.attachmentUrl) : null), replyToMessageId: m.replyToMessageId,
       status: m.status, isDeleted: Boolean(m.deletedAt), createdAt: m.createdAt, sender: m.sender,
     }));
 
@@ -265,7 +276,7 @@ export class ChatService {
         id: conversation.id,
         ad: {
           id: conversation.ad.id, title: conversation.ad.title, price: Number(conversation.ad.price),
-          status: conversation.ad.status, imageUrl: conversation.ad.images[0]?.thumbnailUrl || conversation.ad.images[0]?.displayUrl || null,
+          status: conversation.ad.status, imageUrl: getAdCoverUrl(conversation.ad.images[0]),
         },
         otherParty: {
           id: otherParty.id, name: otherParty.profile?.name || (isBuyer ? 'Seller' : 'Buyer'),
@@ -301,6 +312,7 @@ export class ChatService {
         return {
           message: {
             ...existing,
+            attachmentUrl: existing.attachmentUrl ? toPublicMediaUrl(existing.attachmentUrl) : null,
             isDeleted: Boolean(existing.deletedAt),
           },
         };
@@ -376,10 +388,10 @@ export class ChatService {
       if (attachmentUrl) {
         const mediaMatch = attachmentUrl.match(/med_[a-zA-Z0-9_]+/);
         if (mediaMatch) {
-          await tx.media.updateMany({
+          await tx.mediaAsset.updateMany({
             where: { id: mediaMatch[0] },
-            data: { isAttached: true, attachedToId: created.id, scope: 'CHAT_ATTACHMENT' },
-          });
+            data: { entityType: 'CHAT', entityId: created.id },
+          }).catch(() => {});
         }
       }
 
@@ -411,6 +423,7 @@ export class ChatService {
     return {
       message: {
         ...message,
+        attachmentUrl: message.attachmentUrl ? toPublicMediaUrl(message.attachmentUrl) : null,
         isDeleted: false,
       },
       safetyNotice,

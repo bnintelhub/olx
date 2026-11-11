@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '../../../config/prisma';
 import { AppError } from '../../../shared/errors/app-error';
 import { Prisma } from '@prisma/client';
+import { toPublicMediaVariants, toPublicMediaUrl } from '../../../shared/utils/media-url.util';
 
 // Maximum allowed nesting depth (0 = Root, 1 = Subcategory, 2 = Brand/Leaf, 3 = Model)
 export const MAX_CATEGORY_DEPTH = 4;
@@ -25,41 +26,37 @@ export function generateMediaId(): string {
 
 // Maps database media relation to a unified clean image object
 export function formatCategoryImage(category: any) {
-  if (category.imageMedia) {
-    const variants = (category.imageMedia.variants as any) || {};
+  const asset = category.imageMediaAsset || category.imageMedia;
+  if (asset) {
+    const publicVariants = toPublicMediaVariants(asset.variants);
     return {
-      mediaId: category.imageMedia.id,
-      url: variants.large || variants.card || category.imageMedia.diskPath || null,
-      thumbnailUrl: variants.thumbnail || variants.card || null,
-      displayUrl: variants.card || variants.large || null,
-      variants,
+      mediaId: asset.id,
+      url: publicVariants.large || publicVariants.card || null,
+      thumbnailUrl: publicVariants.thumbnail || publicVariants.card || null,
+      displayUrl: publicVariants.card || publicVariants.large || null,
+      variants: publicVariants,
     };
   }
   if (category.iconUrl) {
-    const isHttp =
-      category.iconUrl.startsWith('http://') ||
-      category.iconUrl.startsWith('https://') ||
-      category.iconUrl.startsWith('/');
-    if (isHttp) {
-      return {
-        mediaId: null,
-        url: category.iconUrl,
-        thumbnailUrl: category.iconUrl,
-        displayUrl: category.iconUrl,
-        variants: {},
-      };
-    }
+    const publicIcon = toPublicMediaUrl(category.iconUrl);
+    return {
+      mediaId: null,
+      url: publicIcon,
+      thumbnailUrl: publicIcon,
+      displayUrl: publicIcon,
+      variants: {},
+    };
   }
   return null;
 }
 
 // Validates media entity existence, readiness, and image type
 export async function validateMediaImage(mediaId: string) {
-  const media = await prisma.media.findUnique({ where: { id: mediaId } });
+  const media = await prisma.mediaAsset.findUnique({ where: { id: mediaId } });
   if (!media) {
     throw new AppError(404, 'MEDIA_NOT_FOUND', `Image media "${mediaId}" does not exist`);
   }
-  if (media.type !== 'IMAGE') {
+  if (!media.mimeType.startsWith('image/')) {
     throw new AppError(400, 'INVALID_MEDIA_TYPE', 'Category image must be an IMAGE media resource');
   }
   if (media.status !== 'READY') {

@@ -23,10 +23,14 @@ export interface IStorageAdapter {
   deleteMediaDirectory(dirPath: string): Promise<void>;
   deleteFile(filePath: string): Promise<void>;
   buildPublicUrl(subPath: string, baseUrl?: string): string;
+  getObjectStream?(key: string): Promise<NodeJS.ReadableStream | null>;
 }
 
-// Resolves shared monorepo root uploads/ directory so server and background workers use the exact same storage
+// Resolves shared storage directory (prioritizing MEDIA_ROOT so uploads match Fastify & Nginx static routes)
 export function resolveUploadDir(): string {
+  if (process.env.MEDIA_ROOT) {
+    return path.resolve(process.env.MEDIA_ROOT);
+  }
   if (process.env.UPLOAD_DIR) {
     return path.resolve(process.env.UPLOAD_DIR);
   }

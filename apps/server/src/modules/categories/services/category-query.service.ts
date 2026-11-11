@@ -21,12 +21,12 @@ export class CategoryQueryService {
     const categories = await prisma.category.findMany({
       where,
       include: {
-        imageMedia: { select: { id: true, variants: true, diskPath: true } },
+        imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         children: {
           where: includeInactive ? undefined : { isActive: true },
           orderBy: { sortOrder: 'asc' },
           include: {
-            imageMedia: { select: { id: true, variants: true, diskPath: true } },
+            imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
           },
         },
         attributes: {
@@ -61,7 +61,7 @@ export class CategoryQueryService {
     const allCategories = await prisma.category.findMany({
       where: includeInactive ? undefined : { isActive: true },
       include: {
-        imageMedia: { select: { id: true, variants: true, diskPath: true } },
+        imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         attributes: { orderBy: { displayOrder: 'asc' } },
         _count: { select: { ads: { where: { deletedAt: null } } } },
       },
@@ -80,7 +80,7 @@ export class CategoryQueryService {
         sortOrder: cat.sortOrder,
         level: cat.level,
         isActive: cat.isActive,
-        imageMediaId: cat.imageMediaId,
+        imageMediaId: cat.imageMediaAssetId,
         image: formatCategoryImage(cat),
         adsCount: cat._count.ads,
         attributes: cat.attributes,
@@ -122,18 +122,18 @@ export class CategoryQueryService {
     const category = await prisma.category.findFirst({
       where,
       include: {
-        imageMedia: { select: { id: true, variants: true, diskPath: true } },
+        imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         parent: {
           include: {
             parent: true,
-            imageMedia: { select: { id: true, variants: true, diskPath: true } },
+            imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
           },
         },
         children: {
           where: options?.includeInactive ? undefined : { isActive: true },
           orderBy: { sortOrder: 'asc' },
           include: {
-            imageMedia: { select: { id: true, variants: true, diskPath: true } },
+            imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
           },
         },
         attributes: {

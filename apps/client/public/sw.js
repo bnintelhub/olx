@@ -37,14 +37,32 @@ self.addEventListener('activate', (event) => {
 });
 
 // Fetch strategy:
-// - Static assets (scripts, styles, images): Cache-first with network fallback
-// - API calls (/api/v1): Network-first with cached response fallback
+// - Development: bypass caching entirely so Vite dev server, HMR, and proxies work seamlessly
+// - Navigation requests (SPA): network-first with /index.html app shell fallback
+// - Static assets (production): cache-first with network fallback
+// - API calls (/api/v1): network-first with cached response fallback
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
+  // In local development or Vite dev server, completely bypass service worker fetch caching
+  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+    return;
+  }
+
   // Skip non-GET requests and WebSocket connections
   if (request.method !== 'GET' || url.pathname.startsWith('/socket.io/')) {
+    return;
+  }
+
+  // SPA navigation requests (e.g. clicking /chat?conversationId=...): Always serve app shell
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request).catch(async () => {
+        const cachedShell = await caches.match('/index.html');
+        return cachedShell || (await caches.match('/')) || new Response('Offline', { status: 503 });
+      })
+    );
     return;
   }
 
@@ -163,19 +181,22 @@ try {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const clickAction = event.notification.data?.click_action || '/chat';
+  const targetUrl = new URL(clickAction, self.location.origin).href;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // 1. If any tab on our origin is open, focus it and navigate
       for (const client of windowClients) {
-        if (client.url.includes('/chat') && 'focus' in client) {
+        if (client.url.startsWith(self.location.origin) && 'focus' in client) {
           if ('navigate' in client) {
-            client.navigate(clickAction);
+            client.navigate(targetUrl);
           }
           return client.focus();
         }
       }
+      // 2. Otherwise open a new window
       if (clients.openWindow) {
-        return clients.openWindow(clickAction);
+        return clients.openWindow(targetUrl);
       }
     })
   );

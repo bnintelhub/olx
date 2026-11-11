@@ -50,6 +50,18 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
   return (
     <section className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-4 pb-2">
       <div className="relative overflow-hidden rounded-3xl bg-[#002F34] text-white border border-[#003e45] shadow-xl">
+        {/* Banner Background Image with slight blur and readable overlay */}
+        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+          <img
+            src="/indian-banner.webp"
+            alt="Indian Marketplace Banner"
+            className="w-full h-full object-cover object-center scale-105 filter blur-[3px]"
+          />
+          {/* Subtle gradient overlay to keep text ultra crisp while preserving banner colors */}
+          <div className="absolute inset-0 bg-gradient-to-r from-[#002F34]/95 via-[#002F34]/85 to-[#002F34]/70" />
+          <div className="absolute inset-0 bg-[#002F34]/30 mix-blend-multiply" />
+        </div>
+
         {/* Soft Ambient Radial Lights */}
         <div className="absolute top-0 right-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute bottom-0 left-10 w-80 h-80 bg-teal-600/10 rounded-full blur-3xl pointer-events-none" />
@@ -143,10 +155,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
             <div className="lg:col-span-5 flex justify-center">
               <div
                 onClick={() => navigate(`/ad/${spotlightAd.id}`)}
-                className="w-full max-w-sm bg-white rounded-2xl p-3.5 shadow-2xl text-slate-900 border border-slate-200/90 cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:shadow-3xl hover:border-slate-300 group"
+                className="w-full max-w-md cursor-pointer transition-all duration-300 hover:scale-[1.02] group"
               >
-                {/* Real Product Visual from Database */}
-                <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center">
+                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden border border-white/20 shadow-2xl bg-black/40 backdrop-blur-xs">
                   {adImage && !imageError ? (
                     <img
                       src={adImage}
@@ -156,48 +167,44 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
                       loading="eager"
                     />
                   ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center bg-slate-100 text-slate-400 gap-1.5 p-4 text-center">
-                      <Tag size={28} className="text-slate-300" />
-                      <span className="text-xs font-medium text-slate-500">Verified Marketplace Item</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center text-white/60 gap-1.5 p-4 text-center">
+                      <Tag size={28} className="text-white/40" />
+                      <span className="text-xs font-medium text-white/80">Verified Marketplace Item</span>
                     </div>
                   )}
 
                   {/* Badges */}
-                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                    <span className="rounded-full bg-slate-900/85 backdrop-blur-md px-2.5 py-0.5 text-[11px] font-semibold text-white flex items-center gap-1 shadow-xs border border-white/10">
+                  <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                    <span className="rounded-full bg-black/60 backdrop-blur-md px-2.5 py-1 text-[11px] font-semibold text-white flex items-center gap-1.5 border border-white/15">
                       <CheckCircle2 size={12} className="text-emerald-400" />
                       Verified
                     </span>
                   </div>
 
-                  <span className="absolute bottom-2.5 right-2.5 rounded-full bg-black/75 backdrop-blur-md px-2.5 py-0.5 text-[10px] font-medium text-slate-200 border border-white/10">
-                    Featured Spotlight
-                  </span>
-                </div>
-
-                {/* Real Ad Details */}
-                <div className="p-2 pt-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-2xl font-black text-slate-900 tracking-tight tabular-nums">
-                      {formatCurrency(spotlightAd.price)}
-                    </span>
-                    {spotlightAd.isNegotiable && (
-                      <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-full">
-                        Negotiable
+                  {/* Overlaid Info Bar at Bottom of Image */}
+                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pt-10 text-white">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-2xl font-black text-white tracking-tight tabular-nums drop-shadow-sm">
+                        {formatCurrency(spotlightAd.price)}
                       </span>
-                    )}
-                  </div>
-
-                  <p className="mt-1.5 text-sm font-semibold text-slate-800 line-clamp-1 group-hover:text-[#002F34] transition-colors">
-                    {spotlightAd.title}
-                  </p>
-
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                    <div className="flex items-center gap-1 truncate font-medium">
-                      <MapPin size={13} className="text-slate-400 shrink-0" />
-                      <span className="truncate">{spotlightAd.location?.name || 'India'}</span>
+                      {spotlightAd.isNegotiable && (
+                        <span className="text-[11px] font-bold text-emerald-300 bg-emerald-500/20 border border-emerald-400/30 px-2 py-0.5 rounded-full backdrop-blur-sm">
+                          Negotiable
+                        </span>
+                      )}
                     </div>
-                    <span className="text-slate-400 shrink-0">{formatRelativeTime(spotlightAd.createdAt)}</span>
+
+                    <p className="mt-1 text-sm font-medium text-slate-100 line-clamp-1 group-hover:text-emerald-300 transition-colors drop-shadow-sm">
+                      {spotlightAd.title}
+                    </p>
+
+                    <div className="mt-2 flex items-center justify-between text-xs text-slate-300">
+                      <div className="flex items-center gap-1 truncate font-medium">
+                        <MapPin size={13} className="text-emerald-400 shrink-0" />
+                        <span className="truncate">{spotlightAd.location?.name || 'India'}</span>
+                      </div>
+                      <span className="text-slate-400 shrink-0 text-[11px]">{formatRelativeTime(spotlightAd.createdAt)}</span>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { Writable } from 'stream';
 import {
   S3Client,
   PutObjectCommand,
+  GetObjectCommand,
   DeleteObjectCommand,
   ListObjectsV2Command,
   HeadBucketCommand,
@@ -30,7 +31,8 @@ export class S3StorageAdapter implements IStorageAdapter {
     const secretAccessKey = process.env.S3_SECRET_KEY || 'SuperSecurePassword123';
     const forcePathStyle = process.env.S3_FORCE_PATH_STYLE !== 'false';
 
-    this.publicUrl = (process.env.S3_PUBLIC_URL || `${endpoint}/${this.bucket}`).replace(/\/+$/, '');
+    const defaultPublicUrl = process.env.MEDIA_CDN_URL || 'http://localhost:5000/uploads';
+    this.publicUrl = (process.env.S3_PUBLIC_URL || defaultPublicUrl).replace(/\/+$/, '');
 
     this.client = new S3Client({
       endpoint,
@@ -232,6 +234,20 @@ export class S3StorageAdapter implements IStorageAdapter {
   async deleteFile(filePath: string): Promise<void> {
     if (fs.existsSync(filePath)) {
       await fs.promises.unlink(filePath).catch(() => {});
+    }
+  }
+
+  async getObjectStream(key: string): Promise<NodeJS.ReadableStream | null> {
+    try {
+      const res = await this.client.send(
+        new GetObjectCommand({
+          Bucket: this.bucket,
+          Key: key.replace(/^[/\\]+/, ''),
+        })
+      );
+      return (res.Body as any) || null;
+    } catch {
+      return null;
     }
   }
 

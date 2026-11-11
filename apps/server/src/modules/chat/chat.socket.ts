@@ -9,6 +9,7 @@ import { ChatPresenceService } from './chat.presence.service';
 import { SendMessagePayload } from './chat.types';
 import { fcmService } from '../../integrations/push/fcm.service';
 import { fcmDecisionService } from '../../integrations/push/fcm.decision.service';
+import { toPublicMediaUrl } from '../../shared/utils/media-url.util';
 
 interface SocketUser {
   id: string;
@@ -53,26 +54,32 @@ export function broadcastChatMessage(conversationId: string, message: any, sende
 
   const payload = {
     ...message,
+    attachmentUrl: message.attachmentUrl ? toPublicMediaUrl(message.attachmentUrl) : null,
     createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
     updatedAt: message.updatedAt instanceof Date ? message.updatedAt.toISOString() : message.updatedAt,
   };
 
   console.log(`[Chat Broadcast] Emitting message.new for conv_${conversationId} to receiver user_${receiverId}`);
 
-  // Broadcast to active conversation room
-  chatIO.to(`conv_${conversationId}`).emit('message.new', payload);
+  // Broadcast ONE deduplicated message.new across conversation room and user rooms
+  let msgBroadcast: any = chatIO.to(`conv_${conversationId}`);
+  if (receiverId) msgBroadcast = msgBroadcast.to(`user_${receiverId}`);
+  if (senderId) msgBroadcast = msgBroadcast.to(`user_${senderId}`);
+  msgBroadcast.emit('message.new', payload);
 
-  // Broadcast to receiver's personal user room
+  // Broadcast conversation.updated to both recipient and sender so their inbox lists update and re-sort
+  let convBroadcast: any = chatIO;
+  if (receiverId) convBroadcast = convBroadcast.to(`user_${receiverId}`);
+  if (senderId) convBroadcast = convBroadcast.to(`user_${senderId}`);
+  convBroadcast.emit('conversation.updated', {
+    conversationId,
+    lastMessageText: payload.content ? payload.content.slice(0, 80) : (payload.attachmentUrl ? 'Photo' : 'New message'),
+    lastMessageAt: payload.createdAt,
+    senderId,
+  });
+
+  // Evaluate OLX Action-Required Notification Decision Engine
   if (receiverId) {
-    chatIO.to(`user_${receiverId}`).emit('message.new', payload);
-    chatIO.to(`user_${receiverId}`).emit('conversation.updated', {
-      conversationId,
-      lastMessageText: payload.content ? payload.content.slice(0, 80) : 'Photo',
-      lastMessageAt: payload.createdAt,
-      senderId,
-    });
-
-    // Evaluate OLX Action-Required Notification Decision Engine
     void (async () => {
       try {
         const decision = await fcmDecisionService.evaluatePush({
@@ -110,9 +117,6 @@ export function broadcastChatMessage(conversationId: string, message: any, sende
       }
     })();
   }
-
-  // Broadcast to sender's other devices
-  chatIO.to(`user_${senderId}`).emit('message.new', payload);
 }
 
 export function setupChatSocket(io: SocketIOServer) {

@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2048 682" width="2048" height="682">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#063E3B"/>
+      <stop offset="1" stop-color="#005B50"/>
+    </linearGradient>
+    <linearGradient id="lime" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#B7E532"/>
+      <stop offset="1" stop-color="#65C93A"/>
+    </linearGradient>
+    <linearGradient id="hill1" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#07584F"/>
+      <stop offset="1" stop-color="#128B6E"/>
+    </linearGradient>
+    <linearGradient id="hill2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#063F3D"/>
+      <stop offset="1" stop-color="#0D705F"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <pattern id="dots" width="18" height="18" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1.2" fill="#72D8B7" opacity=".16"/>
+    </pattern>
+  </defs>
+
+  <!-- Background -->
+  <g id="background">
+    <rect width="2048" height="682" fill="url(#bg)"/>
+    <rect width="2048" height="682" fill="url(#dots)"/>
+  </g>
+
+  <!-- Decorative top-right ribbon -->
+  <g id="top-ribbon">
+    <path d="M1260 0 C1530 30 1760 0 2048 0 L2048 110 C1790 78 1570 95 1320 55 Z"
+          fill="url(#lime)" opacity=".95"/>
+    <path d="M1210 20 C1510 90 1730 35 2048 85" fill="none"
+          stroke="#20B982" stroke-width="34" opacity=".55"/>
+  </g>
+
+  <!-- Decorative bottom waves -->
+  <g id="waves">
+    <path d="M0 470 C280 560 470 410 760 490 C1050 570 1250 440 1500 500 C1720 550 1900 500 2048 420 L2048 682 L0 682Z"
+          fill="url(#hill1)"/>
+    <path d="M0 560 C260 470 470 610 760 535 C1040 460 1260 590 1510 520 C1740 455 1900 520 2048 470 L2048 682 L0 682Z"
+          fill="url(#hill2)" opacity=".9"/>
+    <path d="M0 625 C280 540 480 655 760 585 C1030 515 1260 640 1510 570 C1770 500 1910 585 2048 520"
+          fill="none" stroke="#6DDC52" stroke-width="4" opacity=".8"/>
+    <path d="M0 505 C280 420 470 555 760 475 C1050 395 1240 535 1510 455 C1760 380 1900 470 2048 420"
+          fill="none" stroke="#45C987" stroke-width="3" opacity=".6"/>
+  </g>
+
+  <!-- Skyline glow -->
+  <g id="skyline-glow" opacity=".45" filter="url(#glow)">
+    <path d="M500 510 L500 490 L540 490 L540 465 L565 465 L565 500
+             L595 500 L595 440 L615 440 L615 500
+             L650 500 L650 455 L680 455 L680 490
+             L720 490 L720 430 L735 430 L735 500
+             L770 500 L770 455 L805 455 L805 490
+             L835 490 L835 385 L875 385 L875 350 L915 350 L915 385 L955 385
+             L955 490 L985 490 L985 430 L1010 430 L1010 500
+             L1050 500 L1050 450 L1080 450 L1080 500
+             L1110 500 L1110 420 L1140 420 L1140 500
+             L1180 500 L1180 455 L1205 455 L1205 500
+             L1240 500 L1240 395 L1265 395 L1265 500
+             L1300 500 L1300 440 L1325 440 L1325 500
+             L1360 500 L1360 410 L1390 410 L1390 500
+             L1420 500 L1420 465 L1450 465 L1450 500
+             L1480 500 L1480 430 L1505 430 L1505 500
+             L1540 500 L1540 455 L1570 455 L1570 500"
+          fill="none" stroke="#9CFF72" stroke-width="7"/>
+  </g>
+
+  <!-- India-inspired skyline -->
+  <g id="skyline" fill="none" stroke="#A9F66F" stroke-width="3">
+    <!-- Left dome / monument -->
+    <path d="M610 505 V458 H625 V438 Q645 418 665 438 V458 H680 V505"/>
+    <path d="M628 438 Q645 412 662 438"/>
+    <path d="M645 412 V398"/>
+    <!-- Central domed monument -->
+    <path d="M710 505 V475 H725 V455 Q755 420 785 455 V475 H800 V505"/>
+    <path d="M725 455 Q755 405 785 455"/>
+    <path d="M755 405 V382 M748 390 L755 375 L762 390"/>
+    <path d="M740 475 V505 M770 475 V505"/>
+    <!-- India Gate -->
+    <path d="M835 505 V390 H865 V370 H900 V390 H930 V505"/>
+    <path d="M850 390 H915 V420 H850 Z"/>
+    <path d="M855 505 V445 Q882 420 910 445 V505"/>
+    <path d="M850 370 Q882 350 915 370"/>
+    <!-- Qutub-like tower -->
+    <path d="M1218 505 L1230 360 L1242 505 Z"/>
+    <path d="M1222 410 H1238 M1224 440 H1236 M1226 470 H1234"/>
+    <path d="M1230 360 V340 M1226 350 H1234"/>
+    <!-- City -->
+    <path d="M520 505 V475 H545 V450 H565 V505 M575 505 V465 H600 V505
+             M965 505 V470 H990 V505 M1015 505 V455 H1040 V505
+             M1060 505 V475 H1085 V505 M1095 505 V445 H1120 V505
+             M1140 505 V470 H1165 V505 M1270 505 V470 H1295 V505
+             M1320 505 V455 H1345 V505 M1365 505 V480 H1390 V505
+             M1410 505 V465 H1435 V505 M1460 505 V475 H1490 V505
+             M1510 505 V455 H1540 V505"/>
+  </g>
+
+  <!-- Ground glow -->
+  <g id="ground-glow" filter="url(#glow)" opacity=".8">
+    <ellipse cx="1025" cy="520" rx="470" ry="34" fill="#9CFF3F" opacity=".18"/>
+    <path d="M450 525 Q1020 450 1600 525" fill="none" stroke="#B7F34C" stroke-width="5"/>
+  </g>
+</svg>

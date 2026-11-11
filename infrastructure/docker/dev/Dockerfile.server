@@ -8,8 +8,10 @@ COPY packages/database ./packages/database
 COPY packages/shared ./packages/shared
 COPY apps/server ./apps/server
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter @olx/server...
 RUN pnpm --filter @olx/database db:generate
+RUN pnpm --filter @olx/database build
 RUN pnpm --filter @olx/shared build
 
 EXPOSE 5000

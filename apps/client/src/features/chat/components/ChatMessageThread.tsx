@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ConversationItem } from './ChatConversationList';
 import { apiClient } from '@/lib/api-client';
+import { formatAttachmentUrl } from '../utils/chatMedia';
 
 export interface MessageItem {
   id: string;
@@ -24,6 +25,8 @@ export interface MessageItem {
   type?: string;
   content: string;
   attachmentUrl?: string | null;
+  localPreviewUrl?: string;
+  clientMessageId?: string;
   status: 'SENT' | 'DELIVERED' | 'READ';
   createdAt: string;
   isDeleted?: boolean;
@@ -35,7 +38,7 @@ interface ChatMessageThreadProps {
   messages: MessageItem[];
   inputText: string;
   onInputChange: (val: string) => void;
-  onSendMessage: (text?: string, attachmentUrl?: string) => void;
+  onSendMessage: (text?: string, attachmentUrl?: string, localPreviewUrl?: string) => void;
   onDeleteMessage?: (messageId: string) => void;
   onBlockUser?: (userId: string) => void;
   onReportChat?: (reason: string, details?: string) => void;
@@ -146,6 +149,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
     const textToSend = inputText.trim();
     if (selectedImage) {
       setUploadingImage(true);
+      const localPreview = imagePreviewUrl;
       try {
         const formData = new FormData();
         formData.append('file', selectedImage);
@@ -156,7 +160,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
           res.data?.data?.[0]?.variants?.large ||
           res.data?.url ||
           res.data?.data?.url;
-        onSendMessage(textToSend, uploadedUrl);
+        onSendMessage(textToSend, uploadedUrl, localPreview || undefined);
         setSelectedImage(null);
         setImagePreviewUrl(null);
         onInputChange('');
@@ -293,13 +297,24 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
                 )}
 
                 {/* Image attachment */}
-                {msg.attachmentUrl && !msg.isDeleted && (
+                {(msg.attachmentUrl || (msg as any).localPreviewUrl) && !msg.isDeleted && (
                   <div className="mb-2 rounded-lg overflow-hidden border border-black/10 bg-black/5 inline-block max-w-full">
                     <img
-                      src={msg.attachmentUrl}
+                      src={formatAttachmentUrl((msg as any).localPreviewUrl || msg.attachmentUrl)}
                       alt="Attachment"
                       className="max-h-80 max-w-full w-auto h-auto object-contain rounded-lg cursor-pointer hover:opacity-95 block"
-                      onClick={() => window.open(msg.attachmentUrl!, '_blank')}
+                      onClick={() => window.open(formatAttachmentUrl((msg as any).localPreviewUrl || msg.attachmentUrl!), '_blank')}
+                      onError={(e) => {
+                        const target = e.currentTarget;
+                        const attempts = Number(target.dataset.retry || 0);
+                        if (attempts < 3) {
+                          target.dataset.retry = String(attempts + 1);
+                          setTimeout(() => {
+                            const originalSrc = target.src.split('?')[0];
+                            target.src = `${originalSrc}?retry=${attempts + 1}_${Date.now()}`;
+                          }, 1000);
+                        }
+                      }}
                       loading="lazy"
                     />
                   </div>

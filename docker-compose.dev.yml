@@ -42,23 +42,39 @@ services:
       - bharatmarket_net
 
   # ========================================================
-  # MinIO S3-Compatible Object Storage
+  # Media Microservice (Uploads & Filesystem Management)
   # ========================================================
-  minio:
-    image: cgr.dev/chainguard/minio:latest
-    container_name: bharatmarket_minio
+  media-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/dev/Dockerfile.media
+    container_name: bharatmarket_media_service
     restart: unless-stopped
-    ports:
-      - "${MINIO_PORT:-9000}:9000"
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin_olx}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-SuperSecurePassword123}
-    command: server /data --console-address ":9001"
+      NODE_ENV: development
+      PORT: 5005
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_ROOT: "/data/olx-media"
+      MEDIA_PUBLIC_BASE_URL: "http://localhost/media"
+      MAX_FILE_SIZE_BYTES: 15728640
+    ports:
+      - "5005:5005"
     volumes:
-      - minio_data:/data
+      - ./apps/media-service/src:/app/apps/media-service/src
+      - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/dist:/app/packages/shared/dist
+      - ./packages/database/prisma:/app/packages/database/prisma
+      - media_data:/data/olx-media
     networks:
-      - bharatmarket_net
+      bharatmarket_net:
+        aliases:
+          - media-service
 
   # ========================================================
   # Backend API Server (Fastify + Auto-Reload with tsx watch)
@@ -74,7 +90,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
+      media-service:
         condition: service_started
     environment:
       NODE_ENV: development
@@ -86,18 +102,18 @@ services:
       SMS_PROVIDER: ${SMS_PROVIDER:-MOCK}
       MOCK_OTP_CODE: ${MOCK_OTP_CODE:-123456}
       CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
-      S3_ENDPOINT: "http://minio:9000"
-      S3_PUBLIC_URL: "http://localhost:9000/olx-media"
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-admin_olx}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-SuperSecurePassword123}
-      S3_BUCKET: "olx-media"
+      MEDIA_ROOT: "/data/olx-media"
+      MEDIA_SERVICE_URL: "http://media-service:5005"
+      MEDIA_PUBLIC_BASE_URL: "http://localhost/media"
     ports:
       - "5000:5000"
     volumes:
       - ./apps/server/src:/app/apps/server/src
       - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/database/prisma:/app/packages/database/prisma
       - backend_uploads:/app/uploads
+      - media_data:/data/olx-media
     networks:
       bharatmarket_net:
         aliases:
@@ -117,23 +133,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_started
     environment:
       NODE_ENV: development
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
-      UPLOAD_DIR: "/app/uploads"
-      S3_ENDPOINT: "http://minio:9000"
-      S3_PUBLIC_URL: "http://localhost:9000/olx-media"
-      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-admin_olx}
-      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-SuperSecurePassword123}
-      S3_BUCKET: "olx-media"
+      MEDIA_ROOT: "/data/olx-media"
     volumes:
       - ./apps/workers/src:/app/apps/workers/src
       - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/database/prisma:/app/packages/database/prisma
       - backend_uploads:/app/uploads
+      - media_data:/data/olx-media
     networks:
       - bharatmarket_net
 
@@ -141,6 +152,7 @@ services:
   # Frontend Web Client (Vite Dev Server + Instant HMR)
   # ========================================================
   client:
+    profiles: ["docker-frontend"]
     build:
       context: .
       dockerfile: ./infrastructure/docker/dev/Dockerfile.client
@@ -165,6 +177,7 @@ services:
   # Admin Operations Client (Vite Dev Server + Instant HMR)
   # ========================================================
   admin:
+    profiles: ["docker-frontend"]
     build:
       context: .
       dockerfile: ./infrastructure/docker/dev/Dockerfile.admin
@@ -194,14 +207,16 @@ services:
       dockerfile: ./infrastructure/docker/dev/Dockerfile.nginx
     container_name: bharatmarket_nginx
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - server
-      - client
-      - admin
+      - media-service
     ports:
       - "80:80"
     volumes:
       - ./infrastructure/nginx/api.dev.conf:/etc/nginx/conf.d/api.conf:ro
+      - media_data:/data/olx-media:ro
     networks:
       - bharatmarket_net
 
@@ -210,7 +225,7 @@ volumes:
     driver: local
   redis_data:
     driver: local
-  minio_data:
+  media_data:
     driver: local
   backend_uploads:
     driver: local

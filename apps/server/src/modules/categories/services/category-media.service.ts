@@ -113,19 +113,18 @@ export class CategoryMediaService {
 
     const category = await prisma.$transaction(async (tx) => {
       if (mediaData) {
-        await tx.media.create({
+        await tx.mediaAsset.create({
           data: {
             id: mediaData.mediaId,
-            userId,
-            type: 'IMAGE',
-            status: 'PROCESSING',
-            scope: 'CATEGORY_BANNER',
+            ownerId: userId,
+            entityType: 'CATEGORY',
             originalName: path.basename(filePart.filename || 'category-icon.jpg'),
             mimeType: mediaData.validated.mimeType,
-            fileSize: filePart.size,
-            diskPath: mediaData.diskPath,
+            extension: path.extname(filePart.filename || '').replace('.', '') || 'jpg',
+            sizeBytes: BigInt(filePart.size),
+            status: 'PROCESSING',
+            storageKey: mediaData.variants.large || `images/${mediaData.mediaId}/original.webp`,
             variants: mediaData.variants,
-            isAttached: true,
           },
         });
       }
@@ -138,22 +137,22 @@ export class CategoryMediaService {
           parentId,
           sortOrder,
           level: calculatedLevel,
-          imageMediaId: mediaData?.mediaId || null,
+          imageMediaAssetId: mediaData?.mediaId || null,
           isActive: parsed.isActive ?? true,
         },
       });
 
       if (mediaData) {
-        await tx.media.update({
+        await tx.mediaAsset.update({
           where: { id: mediaData.mediaId },
-          data: { attachedToId: createdCategory.id },
-        });
+          data: { entityType: 'CATEGORY', entityId: createdCategory.id },
+        }).catch(() => {});
       }
 
       return tx.category.findUniqueOrThrow({
         where: { id: createdCategory.id },
         include: {
-          imageMedia: { select: { id: true, variants: true, diskPath: true } },
+          imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         },
       });
     });
@@ -184,7 +183,7 @@ export class CategoryMediaService {
   static async updateWithFile(id: string, fields: any, filePart: any, userId: string, baseUrl?: string) {
     const existing = await prisma.category.findUnique({
       where: { id },
-      include: { imageMedia: true },
+      include: { imageMediaAsset: true },
     });
     if (!existing) {
       throw new AppError(404, 'CATEGORY_NOT_FOUND', 'Category not found');
@@ -290,26 +289,24 @@ export class CategoryMediaService {
 
     const removeImage = fields.removeImage === 'true' || fields.removeImage === true;
 
-    if ((newMediaData || removeImage) && existing.imageMedia) {
-      await deletePhysicalMedia(existing.imageMedia);
+    if ((newMediaData || removeImage) && existing.imageMediaAsset) {
+      await deletePhysicalMedia(existing.imageMediaAsset);
     }
 
     const updated = await prisma.$transaction(async (tx) => {
       if (newMediaData) {
-        await tx.media.create({
+        await tx.mediaAsset.create({
           data: {
             id: newMediaData.mediaId,
-            userId,
-            type: 'IMAGE',
-            status: 'PROCESSING',
-            scope: 'CATEGORY_BANNER',
+            ownerId: userId,
+            entityType: 'CATEGORY',
             originalName: path.basename(filePart.filename || 'category-icon.jpg'),
             mimeType: newMediaData.validated.mimeType,
-            fileSize: filePart.size,
-            diskPath: newMediaData.diskPath,
+            extension: path.extname(filePart.filename || '').replace('.', '') || 'jpg',
+            sizeBytes: BigInt(filePart.size),
+            status: 'PROCESSING',
+            storageKey: newMediaData.variants.large || `images/${newMediaData.mediaId}/original.webp`,
             variants: newMediaData.variants,
-            isAttached: true,
-            attachedToId: id,
           },
         });
       }
@@ -323,16 +320,16 @@ export class CategoryMediaService {
           parentId,
           level: newLevel,
           sortOrder: parsed.sortOrder !== undefined ? parsed.sortOrder : existing.sortOrder,
-          imageMediaId: newMediaData ? newMediaData.mediaId : (removeImage ? null : existing.imageMediaId),
+          imageMediaAssetId: newMediaData ? newMediaData.mediaId : (removeImage ? null : existing.imageMediaAssetId),
           isActive: parsed.isActive !== undefined ? parsed.isActive : existing.isActive,
         },
         include: {
-          imageMedia: { select: { id: true, variants: true, diskPath: true } },
+          imageMediaAsset: { select: { id: true, variants: true, storageKey: true } },
         },
       });
 
-      if ((newMediaData || removeImage) && existing.imageMediaId) {
-        await tx.media.delete({ where: { id: existing.imageMediaId } }).catch(() => {});
+      if ((newMediaData || removeImage) && existing.imageMediaAssetId) {
+        await tx.mediaAsset.delete({ where: { id: existing.imageMediaAssetId } }).catch(() => {});
       }
 
       if (parentId !== existing.parentId) {

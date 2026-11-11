@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { User } from '@/types';
 import { authService } from '../service/auth.service';
 import { executeSilentRefresh } from '@/lib/api-client';
+import { disconnectChatSocket } from '@/features/chat/services/chatSocket.service';
 
 interface AuthState {
   user: User | null;
@@ -103,6 +104,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: async () => {
+        disconnectChatSocket();
         try {
           await authService.logout();
         } catch {

@@ -2,10 +2,16 @@ import { apiClient } from '../../../lib/api-client';
 
 export type MediaStatus = 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED';
 export type MediaEntityScope =
+  | 'ALL'
+  | 'LISTING'
+  | 'USER'
+  | 'CATEGORY'
+  | 'BANNER'
+  | 'CHAT'
+  | 'SYSTEM'
   | 'LISTING_IMAGE'
   | 'USER_AVATAR'
   | 'CATEGORY_BANNER'
-  | 'BANNER'
   | 'REVIEW_IMAGE'
   | 'SUPPORT_ATTACHMENT'
   | 'UNATTACHED';
@@ -21,14 +27,25 @@ export interface MediaOverviewResponse {
   };
   storageInfrastructure: {
     driver: string;
-    isS3Synchronized: boolean;
-    synchronizedFilesCount: number;
-    synchronizedPercentage: number;
+    isLocalDisk?: boolean;
+    storageRoot?: string;
+    volumeName?: string;
+    mountPath?: string;
     syncStatusText: string;
-    bucket: string;
-    endpoint: string;
-    publicUrl: string;
+    isHealthy?: boolean;
+    publicUrl?: string;
+    bucket?: string;
+    endpoint?: string;
   };
+  diskBreakdown?: Array<{
+    scope: string;
+    name: string;
+    count: number;
+    bytes: number;
+    formatted: string;
+    color: string;
+    percentage: number;
+  }>;
   optimizationTier: {
     tier: string;
     variantsPerImage: number;

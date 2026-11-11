@@ -2,6 +2,11 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { buildMediaPath, buildMediaDirectory, MediaResource } from '@olx/shared';
+import {
+  toPublicMediaVariants,
+  toPublicMediaUrl,
+  normalizeMediaVariants,
+} from '../../shared/utils/media-url.util';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
 import { defaultStorage } from '../../integrations/storage/storage.adapter';
@@ -89,29 +94,30 @@ export class MediaService {
     const host = baseUrl || process.env.MEDIA_CDN_URL || 'http://localhost:5000';
     const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
-    const variants = {
-      thumbnail: defaultStorage.buildPublicUrl(thumbnailPath, cleanHost),
-      card: defaultStorage.buildPublicUrl(cardPath, cleanHost),
-      medium: defaultStorage.buildPublicUrl(mediumPath, cleanHost),
-      large: defaultStorage.buildPublicUrl(largePath, cleanHost),
+    const relativeVariants = {
+      thumbnail: thumbnailPath,
+      card: cardPath,
+      medium: mediumPath,
+      large: largePath,
     };
     const diskPath = buildMediaDirectory({ resource, resourceId, mediaType, mediaId });
 
-    const initialScope = resource === 'chats' ? 'CHAT_ATTACHMENT' : 'UNATTACHED';
+    const entityType = resource === 'chats' ? 'CHAT' : resource === 'categories' ? 'CATEGORY' : resource === 'users' ? 'USER' : 'LISTING';
 
-    // Create database record with initial PROCESSING status
-    await prisma.media.create({
+    // Create database record with clean relative paths (NEVER store hardcoded protocol/host URLs in DB)
+    await prisma.mediaAsset.create({
       data: {
         id: mediaId,
-        userId,
-        type: 'IMAGE',
-        status: 'PROCESSING',
-        scope: initialScope,
+        ownerId: userId,
+        entityType: entityType as any,
+        entityId: resourceId || null,
+        storageKey: relativeVariants.large || `images/${mediaId}/original.webp`,
         originalName: path.basename(part.filename || 'image.jpg'),
         mimeType: validated.mimeType,
-        fileSize: size,
-        diskPath,
-        variants,
+        extension: path.extname(part.filename || '').replace('.', '') || 'jpg',
+        sizeBytes: BigInt(size),
+        status: 'PROCESSING',
+        variants: relativeVariants,
       },
     });
 
@@ -142,13 +148,15 @@ export class MediaService {
       mediaType,
     });
 
+    const publicVariants = toPublicMediaVariants(relativeVariants, cleanHost);
+
     return {
       mediaId,
       job,
       originalName: path.basename(part.filename || 'image.jpg'),
       mimeType: validated.mimeType,
       fileSize: size,
-      variants,
+      variants: publicVariants,
     };
   }
 
@@ -164,6 +172,7 @@ export class MediaService {
     }
   ) {
     const staged = await this.prepareAndQueueImage(userId, part, baseUrl, context);
+    const publicVariants = toPublicMediaVariants(staged.variants, baseUrl);
 
     return {
       mediaId: staged.mediaId,
@@ -174,16 +183,16 @@ export class MediaService {
       width: null,
       height: null,
       focalPoint: { x: 0.5, y: 0.5 },
-      variants: staged.variants,
-      url: staged.variants.large,
-      thumbnailUrl: staged.variants.thumbnail,
-      displayUrl: staged.variants.card,
+      variants: publicVariants,
+      url: publicVariants.large,
+      thumbnailUrl: publicVariants.thumbnail,
+      displayUrl: publicVariants.card,
     };
   }
 
   // Retrieves media metadata by ID
-  static async getMedia(mediaId: string) {
-    const media = await prisma.media.findUnique({
+  static async getMedia(mediaId: string, baseUrl?: string) {
+    const media = await prisma.mediaAsset.findUnique({
       where: { id: mediaId },
     });
 
@@ -191,25 +200,30 @@ export class MediaService {
       throw new AppError(404, 'MEDIA_NOT_FOUND', 'Media file not found');
     }
 
+    const publicVariants = toPublicMediaVariants(media.variants, baseUrl);
+
     return {
       mediaId: media.id,
-      userId: media.userId,
+      userId: media.ownerId,
       status: media.status.toLowerCase(),
       mimeType: media.mimeType,
-      fileSize: media.fileSize,
+      fileSize: Number(media.sizeBytes),
       width: media.width,
       height: media.height,
-      focalPoint: media.focalPoint,
-      variants: media.variants,
-      isAttached: media.isAttached,
-      attachedToId: media.attachedToId,
+      focalPoint: (media.metadata as any)?.focalPoint || { x: 0.5, y: 0.5 },
+      variants: publicVariants,
+      url: publicVariants.large,
+      thumbnailUrl: publicVariants.thumbnail,
+      displayUrl: publicVariants.card,
+      isAttached: Boolean(media.entityId),
+      attachedToId: media.entityId,
       createdAt: media.createdAt,
     };
   }
 
   // Deletes an unattached image and removes its variants from disk
   static async deleteUnattachedMedia(mediaId: string, userId: string, isSuperAdmin: boolean = false) {
-    const media = await prisma.media.findUnique({
+    const media = await prisma.mediaAsset.findUnique({
       where: { id: mediaId },
     });
 
@@ -217,23 +231,15 @@ export class MediaService {
       throw new AppError(404, 'MEDIA_NOT_FOUND', 'Media file not found');
     }
 
-    if (media.userId !== userId && !isSuperAdmin) {
+    if (media.ownerId !== userId && !isSuperAdmin) {
       throw new AppError(403, 'FORBIDDEN', 'You do not have permission to delete this media');
-    }
-
-    if (media.isAttached) {
-      throw new AppError(
-        400,
-        'MEDIA_ATTACHED',
-        'Cannot delete media currently attached to a listing. Remove it from the listing first.'
-      );
     }
 
     // Delete variants folder on disk
     await defaultStorage.deleteMediaFiles(mediaId);
 
     // Delete record from database
-    await prisma.media.delete({
+    await prisma.mediaAsset.delete({
       where: { id: mediaId },
     });
 
@@ -244,9 +250,8 @@ export class MediaService {
   static async cleanupOrphans(gracePeriodHours = 24) {
     const cutoffDate = new Date(Date.now() - gracePeriodHours * 3600 * 1000);
 
-    const orphans = await prisma.media.findMany({
+    const orphans = await prisma.mediaAsset.findMany({
       where: {
-        isAttached: false,
         categories: { none: {} },
         adImages: { none: {} },
         createdAt: { lt: cutoffDate },
@@ -255,26 +260,9 @@ export class MediaService {
     });
 
     for (const orphan of orphans) {
-      // Self-heal: protect chat message attachments from deletion
-      const messageWithAttachment = await prisma.message.findFirst({
-        where: { attachmentUrl: { contains: orphan.id } },
-        select: { id: true },
-      });
-      if (messageWithAttachment) {
-        await prisma.media.update({
-          where: { id: orphan.id },
-          data: {
-            isAttached: true,
-            attachedToId: messageWithAttachment.id,
-            scope: 'CHAT_ATTACHMENT',
-          },
-        }).catch(() => {});
-        continue;
-      }
-
       const { deletePhysicalMedia } = await import('../admin/admin.media.service');
       await deletePhysicalMedia(orphan);
-      await prisma.media.delete({ where: { id: orphan.id } }).catch(() => {});
+      await prisma.mediaAsset.delete({ where: { id: orphan.id } }).catch(() => {});
     }
 
     return orphans.length;

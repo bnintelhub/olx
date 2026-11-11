@@ -22,7 +22,7 @@ export class ListingsDeleteService {
       include: {
         images: {
           include: {
-            media: true,
+            mediaAsset: true,
           },
         },
       },
@@ -43,40 +43,13 @@ export class ListingsDeleteService {
 
     const uploadDir = resolveUploadDir();
 
-    // 3. Purge physical files and S3 directories for all associated images
+    // 3. Mark linked MediaAsset records as DELETED
     for (const adImg of ad.images) {
-      // Clean up linked Media table record and physical files
-      if (adImg.media) {
-        await deletePhysicalMedia(adImg.media).catch((err) => {
-          console.warn(`[ListingsDelete] Warning deleting media record ${adImg.media?.id}:`, err);
-        });
-        await prisma.media.delete({ where: { id: adImg.media.id } }).catch(() => {});
-      }
-
-      // Purge any URLs matching S3 bucket keys (e.g. ads/drafts/images/med_xxx or ads/{adId}/)
-      const urlsToClean = [adImg.originalUrl, adImg.displayUrl, adImg.thumbnailUrl].filter(Boolean);
-      for (const url of urlsToClean) {
-        if (typeof url === 'string') {
-          // Extract S3 key from URL: http://.../olx-media/ads/xxx
-          if (url.includes('/olx-media/')) {
-            const s3Key = url.split('/olx-media/')[1];
-            if (s3Key) {
-              const s3Dir = s3Key.includes('/') ? s3Key.substring(0, s3Key.lastIndexOf('/')) : s3Key;
-              await defaultStorage.deleteMediaDirectory(s3Dir).catch(() => {});
-            }
-          }
-
-          // If local file path, delete file
-          if (url.includes('/uploads/')) {
-            const relPath = url.split('/uploads/')[1];
-            if (relPath) {
-              const fullLocalPath = path.join(uploadDir, ...relPath.split('/'));
-              if (fs.existsSync(fullLocalPath)) {
-                await fs.promises.unlink(fullLocalPath).catch(() => {});
-              }
-            }
-          }
-        }
+      if (adImg.mediaAssetId) {
+        await prisma.mediaAsset.update({
+          where: { id: adImg.mediaAssetId },
+          data: { status: 'DELETED', deletedAt: new Date() },
+        }).catch(() => {});
       }
     }
 

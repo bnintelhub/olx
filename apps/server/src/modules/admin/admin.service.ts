@@ -6,6 +6,7 @@ import { AdStatus, Prisma, UserRole } from '@prisma/client';
 import { HashUtil } from '../../shared/utils/hash.util';
 import { delCache } from '../../config/redis';
 import { ListingsDeleteService } from '../listings/listings.delete.service';
+import { formatAdImages } from '../listings/listings.service';
 
 export class AdminService {
   // Aggregates high-level marketplace metrics tailored dynamically to the caller's role.
@@ -473,13 +474,21 @@ export class AdminService {
               profile: { select: { name: true, isIdentityVerified: true, avatarUrl: true } },
             },
           },
-          images: { orderBy: { sortOrder: 'asc' } },
+          images: {
+            include: { mediaAsset: true },
+            orderBy: { sortOrder: 'asc' },
+          },
         },
       }),
     ]);
 
+    const formattedAds = ads.map((ad) => ({
+      ...ad,
+      images: formatAdImages(ad.images),
+    }));
+
     return {
-      ads,
+      ads: formattedAds,
       pagination: {
         total,
         page: params.page,

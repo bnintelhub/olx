@@ -1,14 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
-import { io, Socket } from 'socket.io-client';
+import type { Socket } from 'socket.io-client';
 import { ArrowLeft, ShieldCheck, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { apiClient, executeSilentRefresh } from '@/lib/api-client';
+import { apiClient } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
 import { ChatAuthRequired } from '../components/ChatAuthRequired';
 import { playNewMessageSound } from '../utils/chatSound';
 import { useChatUnreadStore } from '../stores/useChatUnreadStore';
+import { getChatSocket } from '../services/chatSocket.service';
+
+function sortConversationsDesc(list: ConversationItem[]): ConversationItem[] {
+  return [...list].sort((a, b) => {
+    const timeA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const timeB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return timeB - timeA;
+  });
+}
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
@@ -17,7 +26,7 @@ export const ChatPage: React.FC = () => {
   const targetConvIdParam = searchParams.get('conversationId') || routeConvId || null;
   const targetAdId = searchParams.get('adId');
 
-  const { user, token, openAuthModal } = useAuth();
+  const { user, token, openAuthModal, isLoading: isAuthLoading } = useAuth();
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeConvId, setActiveConvId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageItem[]>([]);
@@ -44,146 +53,170 @@ export const ChatPage: React.FC = () => {
   };
   const getActiveToken = (): string | null => token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
 
-  // 1. Initialize persistent Socket.IO connection (Once per authenticated user session)
+  // 1. Subscribe to shared Socket.IO connection
   useEffect(() => {
     if (!user?.id) return;
-    if (socketRef.current?.connected) return;
 
     let socket: Socket | null = null;
     let isMounted = true;
 
-    const initSocket = async () => {
-      let activeToken = getActiveToken();
-      if (!activeToken) {
-        await executeSilentRefresh();
-        activeToken = getActiveToken();
+    const handleConnect = () => {
+      if (activeConvIdRef.current) {
+        socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
+        fetchConversationMessagesRef.current?.(activeConvIdRef.current);
       }
-      if (!isMounted) return;
+    };
 
-      const socketUrl = typeof window !== 'undefined' ? window.location.origin : '/';
-      socket = io(socketUrl, {
-        path: '/socket.io',
-        auth: { token: activeToken || '', accessToken: activeToken || '' },
-        query: { token: activeToken || '' },
-        transports: ['websocket', 'polling'], withCredentials: true, reconnection: true,
-        reconnectionAttempts: Infinity, reconnectionDelay: 1000, reconnectionDelayMax: 5000,
-        randomizationFactor: 0.5, timeout: 10000,
-      });
-      socketRef.current = socket;
+    const handleChatReady = () => {
+      if (activeConvIdRef.current) socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
+    };
 
-      socket.on('connect_error', async (err) => {
-        console.warn('[Chat Socket] Connect error:', err.message);
-        if (err.message.includes('AUTHENTICATION_REQUIRED')) {
-          await executeSilentRefresh();
-          const newToken = getActiveToken();
-          if (newToken && socketRef.current) socketRef.current.auth = { token: newToken, accessToken: newToken };
-        }
-      });
-      socket.on('disconnect', (reason) => { if (reason === 'io server disconnect') socket?.connect(); });
+    const handleMessageNew = (msg: MessageItem) => {
+      const currentActiveId = activeConvIdRef.current;
+      const isCurrentActive = msg.conversationId === currentActiveId;
+      const isFromMe = msg.senderId === user?.id;
 
-      socket.on('connect', () => {
-        if (activeConvIdRef.current) {
-          socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
-          fetchConversationMessagesRef.current?.(activeConvIdRef.current);
-        }
-      });
+      if (!isFromMe) {
+        playNewMessageSound();
+      }
 
-      socket.on('chat:ready', () => {
-        if (activeConvIdRef.current) socket?.emit('conversation.join', { conversationId: activeConvIdRef.current });
-      });
-
-      socket.on('message.new', (msg: MessageItem) => {
-        const currentActiveId = activeConvIdRef.current;
-        if (msg.senderId !== user?.id) {
-          playNewMessageSound();
-        }
-        if (msg.conversationId === currentActiveId) {
-          setMessages((prev) => {
-            const idx = prev.findIndex(
-              (m) =>
-                m.id === msg.id ||
-                ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
-                (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
-            );
-            if (idx !== -1) {
-              const next = [...prev];
-              next[idx] = msg;
-              return next;
-            }
-            return [...prev, msg];
-          });
-          setTimeout(() => scrollToBottom('smooth'), 50);
-          if (msg.senderId !== user?.id) {
-            socket?.emit('message.read', { conversationId: currentActiveId });
-            void apiClient.patch(`/chat/conversations/${currentActiveId}/read`).catch(() => {});
-            useChatUnreadStore.getState().fetchUnreadCount();
-          }
-        }
-
-        setConversations((prev) => {
-          const exists = prev.some((c) => c.id === msg.conversationId);
-          if (!exists) {
-            void fetchInbox(false);
-            return prev;
-          }
-          return prev.map((c) => (c.id === msg.conversationId ? {
-            ...c,
-            lastMessageText: msg.content || 'Photo',
-            lastMessageAt: typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString(),
-            unreadCount: msg.conversationId === currentActiveId ? 0 : c.unreadCount + 1,
-          } : c));
-        });
-      });
-
-      socket.on('conversation.updated', (data: { conversationId: string; lastMessageText: string; lastMessageAt: string }) => {
-        const currentActiveId = activeConvIdRef.current;
-        setConversations((prev) => prev.map((c) => c.id === data.conversationId ? { ...c, lastMessageText: data.lastMessageText, lastMessageAt: data.lastMessageAt, unreadCount: data.conversationId === currentActiveId ? 0 : c.unreadCount + 1 } : c));
-      });
-
-      socket.on('message.sent', (data: { messageId: string; clientMessageId?: string; status: string }) => {
-        if (data.clientMessageId) {
-          setMessages((prev) =>
-            prev.map((m) => {
-              if ((m as any).clientMessageId === data.clientMessageId) {
-                return { ...m, id: data.messageId, status: (data.status as any) || m.status || 'SENT' };
-              }
-              return m;
-            })
+      if (isCurrentActive) {
+        setMessages((prev) => {
+          const idx = prev.findIndex(
+            (m) =>
+              m.id === msg.id ||
+              ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
+              (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
           );
+          if (idx !== -1) {
+            const existing = prev[idx];
+            const next = [...prev];
+            next[idx] = {
+              ...msg,
+              attachmentUrl: (existing as any).localPreviewUrl || (existing.attachmentUrl?.startsWith('blob:') ? existing.attachmentUrl : msg.attachmentUrl),
+              localPreviewUrl: (existing as any).localPreviewUrl,
+            };
+            return next;
+          }
+          return [...prev, msg];
+        });
+        setTimeout(() => scrollToBottom('smooth'), 50);
+        if (!isFromMe) {
+          socket?.emit('message.read', { conversationId: currentActiveId });
+          void apiClient.patch(`/chat/conversations/${currentActiveId}/read`).catch(() => {});
+          useChatUnreadStore.getState().fetchUnreadCount();
         }
-      });
+      }
 
-      socket.on('message.read', (data: { conversationId: string; readerId: string }) => {
-        if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
-          setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
+      const msgTime = typeof msg.createdAt === 'string' ? msg.createdAt : new Date(msg.createdAt).toISOString();
+      const msgText = msg.content || (msg.attachmentUrl ? 'Photo' : 'New message');
+
+      setConversations((prev) => {
+        const exists = prev.some((c) => c.id === msg.conversationId);
+        if (!exists) {
+          void fetchInbox(false);
+          return prev;
         }
-      });
-
-      socket.on('message.delivered', (data: { messageId: string; conversationId: string }) => {
-        if (data.conversationId === activeConvIdRef.current) {
-          setMessages((prev) => prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m)));
-        }
-      });
-
-      socket.on('typing.start', (data: { conversationId: string; userId: string }) => {
-        if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(true);
-      });
-
-      socket.on('typing.stop', (data: { conversationId: string; userId: string }) => {
-        if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(false);
-      });
-
-      socket.on('presence.update', (data: { userId: string; isOnline: boolean }) => {
-        setConversations((prev) => prev.map((c) => (c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c)));
+        const updated = prev.map((c) => {
+          if (c.id !== msg.conversationId) return c;
+          return {
+            ...c,
+            lastMessageText: msgText,
+            lastMessageAt: msgTime,
+            // Only increment unread count if message is from the other person AND we're not actively inside this conversation
+            unreadCount: (isCurrentActive || isFromMe) ? 0 : c.unreadCount + 1,
+          };
+        });
+        return sortConversationsDesc(updated);
       });
     };
 
-    void initSocket();
+    const handleConvUpdated = (data: { conversationId: string; lastMessageText: string; lastMessageAt: string; senderId?: string }) => {
+      setConversations((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== data.conversationId) return c;
+          return {
+            ...c,
+            lastMessageText: data.lastMessageText,
+            lastMessageAt: data.lastMessageAt,
+          };
+        });
+        return sortConversationsDesc(updated);
+      });
+    };
+
+    const handleMessageSent = (data: { messageId: string; clientMessageId?: string; status: string }) => {
+      if (data.clientMessageId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if ((m as any).clientMessageId === data.clientMessageId) {
+              return { ...m, id: data.messageId, status: (data.status as any) || m.status || 'SENT' };
+            }
+            return m;
+          })
+        );
+      }
+    };
+
+    const handleMessageRead = (data: { conversationId: string; readerId: string }) => {
+      if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
+        setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
+      }
+    };
+
+    const handleMessageDelivered = (data: { messageId: string; conversationId: string }) => {
+      if (data.conversationId === activeConvIdRef.current) {
+        setMessages((prev) => prev.map((m) => (m.id === data.messageId && m.status === 'SENT' ? { ...m, status: 'DELIVERED' } : m)));
+      }
+    };
+
+    const handleTypingStart = (data: { conversationId: string; userId: string }) => {
+      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(true);
+    };
+
+    const handleTypingStop = (data: { conversationId: string; userId: string }) => {
+      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(false);
+    };
+
+    const handlePresenceUpdate = (data: { userId: string; isOnline: boolean }) => {
+      setConversations((prev) => prev.map((c) => (c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c)));
+    };
+
+    void getChatSocket(user.id).then((sock) => {
+      if (!isMounted || !sock) return;
+      socket = sock;
+      socketRef.current = sock;
+
+      sock.on('connect', handleConnect);
+      sock.on('chat:ready', handleChatReady);
+      sock.on('message.new', handleMessageNew);
+      sock.on('conversation.updated', handleConvUpdated);
+      sock.on('message.sent', handleMessageSent);
+      sock.on('message.read', handleMessageRead);
+      sock.on('message.delivered', handleMessageDelivered);
+      sock.on('typing.start', handleTypingStart);
+      sock.on('typing.stop', handleTypingStop);
+      sock.on('presence.update', handlePresenceUpdate);
+
+      if (sock.connected) {
+        handleConnect();
+      }
+    });
 
     return () => {
       isMounted = false;
-      socket?.disconnect();
-      socketRef.current = null;
+      if (socket) {
+        socket.off('connect', handleConnect);
+        socket.off('chat:ready', handleChatReady);
+        socket.off('message.new', handleMessageNew);
+        socket.off('conversation.updated', handleConvUpdated);
+        socket.off('message.sent', handleMessageSent);
+        socket.off('message.read', handleMessageRead);
+        socket.off('message.delivered', handleMessageDelivered);
+        socket.off('typing.start', handleTypingStart);
+        socket.off('typing.stop', handleTypingStop);
+        socket.off('presence.update', handlePresenceUpdate);
+      }
     };
   }, [user?.id]);
 
@@ -243,6 +276,7 @@ export const ChatPage: React.FC = () => {
       if (targetConvItem && !convList.some((c) => c.id === targetConvItem!.id)) {
         convList = [targetConvItem, ...convList];
       }
+      convList = sortConversationsDesc(convList);
 
       const initialActiveId = targetConvId || targetConvIdParam || (convList.length > 0 && !activeConvIdRef.current ? convList[0].id : activeConvIdRef.current);
       if (initialActiveId) {
@@ -300,7 +334,7 @@ export const ChatPage: React.FC = () => {
     }
   };
 
-  const handleSendMessage = async (customText?: string, attachmentUrl?: string) => {
+  const handleSendMessage = async (customText?: string, attachmentUrl?: string, localPreviewUrl?: string) => {
     const textToSend = (customText || inputText).trim();
     if ((!textToSend && !attachmentUrl) || !activeConvId || isSending) return;
 
@@ -327,17 +361,24 @@ export const ChatPage: React.FC = () => {
       conversationId: activeConvId,
       senderId: user!.id,
       content: textToSend,
-      attachmentUrl: attachmentUrl || null,
+      attachmentUrl: localPreviewUrl || attachmentUrl || null,
       status: 'SENT',
       createdAt: new Date().toISOString(),
       isDeleted: false,
     };
+    (optimisticMsg as any).localPreviewUrl = localPreviewUrl;
+    (optimisticMsg as any).clientMessageId = clientMessageId;
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom('smooth'), 50);
     setInputText('');
-    setConversations((prev) =>
-      prev.map((c) => (c.id === activeConvId ? { ...c, lastMessageText: textToSend || 'Photo', lastMessageAt: new Date().toISOString() } : c))
-    );
+    setConversations((prev) => {
+      const updated = prev.map((c) =>
+        c.id === activeConvId
+          ? { ...c, lastMessageText: textToSend || 'Photo', lastMessageAt: new Date().toISOString(), unreadCount: 0 }
+          : c
+      );
+      return sortConversationsDesc(updated);
+    });
 
     try {
       if (socketRef.current?.connected) {
@@ -346,7 +387,13 @@ export const ChatPage: React.FC = () => {
             setMessages((prev) =>
               prev.map((m) => {
                 if (m.id === tempId || (m as any).clientMessageId === clientMessageId) {
-                  return { ...res.data, status: res.data.status || 'SENT', isDeleted: false };
+                  return {
+                    ...res.data,
+                    attachmentUrl: (m as any).localPreviewUrl || (m.attachmentUrl?.startsWith('blob:') ? m.attachmentUrl : res.data.attachmentUrl),
+                    localPreviewUrl: (m as any).localPreviewUrl,
+                    status: res.data.status || 'SENT',
+                    isDeleted: false,
+                  };
                 }
                 return m;
               })
@@ -361,7 +408,12 @@ export const ChatPage: React.FC = () => {
         try {
           const res = await apiClient.post(`/chat/conversations/${activeConvId}/messages`, payload);
           if (res.data?.success && res.data.data) {
-            setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...res.data.data, isDeleted: false } : m)));
+            setMessages((prev) => prev.map((m) => (m.id === tempId ? {
+              ...res.data.data,
+              attachmentUrl: (m as any).localPreviewUrl || (m.attachmentUrl?.startsWith('blob:') ? m.attachmentUrl : res.data.data.attachmentUrl),
+              localPreviewUrl: (m as any).localPreviewUrl,
+              isDeleted: false
+            } : m)));
             if (res.data.safetyNotice) setChatAlert(res.data.safetyNotice);
           } else {
             setChatAlert(res.data?.message || 'Unable to send message');
@@ -414,6 +466,17 @@ export const ChatPage: React.FC = () => {
       if (res.data?.success) setChatAlert('Report submitted to moderation team. Thank you.');
     } catch (err) { console.error('Failed to submit report', err); }
   };
+
+  if (isAuthLoading) {
+    return (
+      <div className="w-full h-screen flex items-center justify-center bg-white">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-3 border-[#002f34] border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs font-semibold text-gray-500">Loading chat...</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) return <ChatAuthRequired onLogin={openAuthModal} />;
   const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;

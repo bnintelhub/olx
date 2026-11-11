@@ -23,6 +23,8 @@ import {
   ChevronRight,
   Loader2,
   RefreshCw,
+  UserCheck,
+  UserX,
 } from 'lucide-react';
 import { useDashboardStats, useAdminUsers } from './hook/useDashboardQuery';
 import { useUserAction } from './hook/useDashboardMutation';
@@ -65,99 +67,144 @@ export function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Title */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Admin Operations</h2>
-          <p className="text-xs text-muted-foreground">
-            Manage users, listings, categories, and marketplace operational integrity.
+    <div className="space-y-6 pb-12">
+      {/* Title & Controls */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/80 pb-5">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Admin Operations
+            </h1>
+            <Badge
+              variant="outline"
+              className="px-2.5 py-0.5 text-xs font-bold border-primary/30 text-primary bg-primary/5"
+            >
+              Operations Console
+            </Badge>
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground">
+            Manage marketplace users, inventory health, categories, and account privileges.
           </p>
         </div>
+
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="sm"
             onClick={handleRefreshAll}
             disabled={statsFetching || usersFetching}
-            className="h-8 gap-1.5 text-xs"
+            className="h-9 gap-2 text-xs font-semibold border-border hover:bg-muted"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${statsFetching || usersFetching ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${statsFetching || usersFetching ? 'animate-spin text-primary' : ''}`}
+            />
+            <span>Refresh Operations</span>
           </Button>
-          <Badge variant="outline" className="px-3 py-1 font-semibold text-xs border-primary/20 text-primary">
-            Admin Console
-          </Badge>
         </div>
       </div>
 
       {/* 4 Operations KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Total Users</span>
-            <Users className="h-4 w-4 text-blue-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+        {/* Total Users */}
+        <Card className="rounded-2xl border border-border bg-card hover:border-primary/40 transition-all shadow-xs">
+          <CardContent className="p-4 sm:p-5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Total Users
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                <Users className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black font-mono tracking-tight text-foreground">
               {(stats?.totalUsers ?? 0).toLocaleString('en-IN')}
             </div>
-            <p className="text-[11px] text-emerald-600 font-medium mt-1">Platform verified members</p>
+            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+              Platform registered members
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Verified Profiles</span>
-            <ShieldCheck className="h-4 w-4 text-emerald-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+        {/* Verified Profiles */}
+        <Card className="rounded-2xl border border-border bg-card hover:border-primary/40 transition-all shadow-xs">
+          <CardContent className="p-4 sm:p-5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Verified Profiles
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black font-mono tracking-tight text-foreground">
               {(stats?.verifiedUsers ?? 0).toLocaleString('en-IN')}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Accounts with active profiles</p>
+            <p className="text-[11px] text-muted-foreground font-medium">
+              Accounts with complete profiles
+            </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Marketplace Listings</span>
-            <ShoppingBag className="h-4 w-4 text-purple-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+        {/* Marketplace Listings */}
+        <Card className="rounded-2xl border border-border bg-card hover:border-primary/40 transition-all shadow-xs">
+          <CardContent className="p-4 sm:p-5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Marketplace Listings
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                <ShoppingBag className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black font-mono tracking-tight text-foreground">
               {(stats?.totalAds ?? stats?.activeAds ?? 0).toLocaleString('en-IN')}
             </div>
-            <p className="text-[11px] text-emerald-600 font-medium mt-1">
+            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
               {stats?.activeAds ?? 0} active · {stats?.pendingAds ?? 0} pending
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <span className="text-xs font-medium text-muted-foreground">Suspended Accounts</span>
-            <Activity className="h-4 w-4 text-rose-600" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-rose-600">
+        {/* Suspended Accounts */}
+        <Card className="rounded-2xl border border-border bg-card hover:border-primary/40 transition-all shadow-xs">
+          <CardContent className="p-4 sm:p-5 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Suspended Accounts
+              </span>
+              <div className="w-8 h-8 rounded-xl bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+                <Activity className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-black font-mono tracking-tight text-rose-600 dark:text-rose-400">
               {(stats?.suspendedUsers ?? 0).toLocaleString('en-IN')}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">Safety enforcement actions</p>
+            <p className="text-[11px] text-muted-foreground font-medium">
+              Policy violation enforcements
+            </p>
           </CardContent>
         </Card>
       </div>
 
       {/* Users Management Section */}
-      <Card className="border shadow-xs">
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sm:p-5 border-b">
+      <Card className="rounded-3xl border border-border bg-card shadow-xs overflow-hidden">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sm:p-6 border-b border-border">
           <div>
-            <CardTitle className="text-base font-bold">Users Management</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">Inspect accounts, manage privileges, and monitor KYC trust.</p>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-base font-extrabold text-foreground">
+                Users & Accounts Directory
+              </CardTitle>
+              <Badge variant="outline" className="text-xs font-mono">
+                {pagination.total.toLocaleString('en-IN')} Total
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Inspect user identities, filter by active or suspended standing, and manage account access.
+            </p>
           </div>
 
           {/* Search & Filter Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <input
@@ -168,11 +215,11 @@ export function AdminDashboard() {
                   setSearch(e.target.value);
                   setPage(1);
                 }}
-                className="h-8 rounded-lg border bg-muted/40 pl-8 pr-3 text-xs focus:bg-background outline-none w-48"
+                className="h-9 rounded-xl border border-border bg-muted/30 pl-8 pr-3 text-xs focus:bg-background focus:ring-1 focus:ring-primary outline-none w-48 sm:w-56 text-foreground placeholder:text-muted-foreground transition"
               />
             </div>
 
-            <div className="flex items-center rounded-lg border bg-muted/20 p-0.5 text-xs">
+            <div className="flex items-center rounded-xl border border-border bg-muted/40 p-1 text-xs">
               {(['ALL', 'ACTIVE', 'SUSPENDED'] as const).map((filter) => (
                 <button
                   key={filter}
@@ -180,8 +227,10 @@ export function AdminDashboard() {
                     setStatusFilter(filter);
                     setPage(1);
                   }}
-                  className={`px-2.5 py-1 rounded-md font-medium transition cursor-pointer ${
-                    statusFilter === filter ? 'bg-background shadow-xs text-foreground' : 'text-muted-foreground'
+                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer text-xs ${
+                    statusFilter === filter
+                      ? 'bg-background shadow-xs text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {filter}
@@ -194,7 +243,7 @@ export function AdminDashboard() {
         <CardContent className="p-0">
           <div className="overflow-x-auto no-scrollbar">
             <Table>
-              <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider text-muted-foreground font-bold">
+              <TableHeader className="bg-muted/40 uppercase text-[10px] tracking-wider text-muted-foreground font-bold border-b border-border">
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="px-5 py-3 min-w-[220px]">User & Identity</TableHead>
                   <TableHead className="px-5 py-3 min-w-[130px]">Role / Tier</TableHead>
@@ -208,7 +257,7 @@ export function AdminDashboard() {
               <TableBody>
                 {usersLoading ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12">
+                    <TableCell colSpan={7} className="text-center py-16">
                       <div className="flex flex-col items-center justify-center gap-2 text-muted-foreground text-xs">
                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
                         <span>Loading user accounts...</span>
@@ -217,7 +266,7 @@ export function AdminDashboard() {
                   </TableRow>
                 ) : users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground text-xs">
+                    <TableCell colSpan={7} className="text-center py-16 text-muted-foreground text-xs">
                       No user accounts found matching your filters.
                     </TableCell>
                   </TableRow>
@@ -232,7 +281,7 @@ export function AdminDashboard() {
                       .toUpperCase();
 
                     return (
-                      <TableRow key={u.id} className="transition-colors hover:bg-muted/30">
+                      <TableRow key={u.id} className="transition-colors hover:bg-muted/30 border-b border-border/50">
                         {/* User & Identity */}
                         <TableCell className="px-5 py-3">
                           <div className="flex items-center gap-3">
@@ -279,7 +328,7 @@ export function AdminDashboard() {
                         {/* Status */}
                         <TableCell className="px-5 py-3 text-center">
                           <span
-                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                            className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
                               u.status === 'ACTIVE'
                                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
                                 : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
@@ -306,9 +355,9 @@ export function AdminDashboard() {
                             variant={u.status === 'ACTIVE' ? 'outline' : 'default'}
                             disabled={userActionMutation.isPending}
                             onClick={() => handleToggleStatus(u.id, u.status)}
-                            className={`h-7 px-2.5 text-xs font-semibold ${
+                            className={`h-7 px-3 text-xs font-semibold ${
                               u.status === 'ACTIVE'
-                                ? 'text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
+                                ? 'text-rose-600 dark:text-rose-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
                                 : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                             }`}
                           >
@@ -323,7 +372,7 @@ export function AdminDashboard() {
             </Table>
           </div>
 
-          <div className="flex items-center justify-between px-5 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-border bg-muted/20 text-xs text-muted-foreground">
             <div>
               Showing <strong className="text-foreground">{users.length}</strong> of{' '}
               <strong className="text-foreground">{pagination.total.toLocaleString('en-IN')}</strong> accounts
@@ -334,11 +383,11 @@ export function AdminDashboard() {
                 size="sm"
                 disabled={page <= 1 || usersLoading}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="h-7 w-7 p-0"
+                className="h-8 w-8 p-0 rounded-lg border-border"
               >
-                <ChevronLeft className="h-3.5 w-3.5" />
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-              <span className="text-xs font-medium px-2 py-0.5 rounded border bg-background text-foreground font-mono">
+              <span className="text-xs font-medium px-2.5 py-1 rounded-lg border border-border bg-background text-foreground font-mono">
                 {page} / {pagination.pages || 1}
               </span>
               <Button
@@ -346,9 +395,9 @@ export function AdminDashboard() {
                 size="sm"
                 disabled={page >= pagination.pages || usersLoading}
                 onClick={() => setPage((p) => p + 1)}
-                className="h-7 w-7 p-0"
+                className="h-8 w-8 p-0 rounded-lg border-border"
               >
-                <ChevronRight className="h-3.5 w-3.5" />
+                <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
           </div>
