@@ -93,9 +93,11 @@ apiClient.interceptors.response.use(
       }
 
       // If refresh fails on protected routes, wipe cached session before redirecting to avoid infinite reload loops
+      const base = (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
+      const loginPath = base ? `${base}/login` : '/login';
       const isPublicPage =
-        window.location.pathname === '/login' ||
-        window.location.pathname.startsWith('/accept-invite');
+        window.location.pathname === loginPath ||
+        window.location.pathname.startsWith(`${base}/accept-invite`);
 
       if (!isPublicPage) {
         try {
@@ -103,7 +105,7 @@ apiClient.interceptors.response.use(
         } catch {
           // ignore
         }
-        window.location.href = '/login';
+        window.location.href = loginPath;
       }
     }
 

@@ -89,7 +89,7 @@ export function PaymentSummaryCards({ overview }: PaymentSummaryCardsProps) {
               <Layers className="w-4 h-4 text-primary" />
             </div>
             <div className="text-2xl font-black text-foreground">
-              {overview?.totalTransactions.toLocaleString('en-IN') ?? 0}
+              {(overview?.totalTransactions ?? 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
               <span className="text-emerald-600 font-bold">{overview?.successfulPayments ?? 0} Successful</span>

@@ -13,14 +13,15 @@ export function LoginPage() {
 
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isAuthChecking = useAuthStore((s) => s.isLoading);
+  const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
 
-  // If already authenticated by server session cookie, redirect directly to dashboard
+  // If already authenticated with a staff/admin role, redirect directly to dashboard
   useEffect(() => {
-    if (!isAuthChecking && isAuthenticated) {
+    if (!isAuthChecking && isAuthenticated && user && (user.role as string) !== 'USER') {
       navigate('/dashboard', { replace: true });
     }
-  }, [isAuthenticated, isAuthChecking, navigate]);
+  }, [isAuthenticated, isAuthChecking, user, navigate]);
 
   // TanStack Query mutation hooks for predictive auth lifecycle
   const loginMutation = useLoginMutation();

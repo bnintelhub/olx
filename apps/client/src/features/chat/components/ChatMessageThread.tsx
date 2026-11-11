@@ -153,7 +153,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       try {
         const formData = new FormData();
         formData.append('file', selectedImage);
-        const res = await apiClient.post('/media/images?resource=chats', formData);
+        const res = await apiClient.post('/uploads?resource=chats', formData);
         const uploadedUrl =
           res.data?.data?.[0]?.url ||
           res.data?.data?.[0]?.displayUrl ||

@@ -16,7 +16,7 @@ export async function mediaRoutes(fastify: FastifyInstance) {
   });
 
   // Upload single or multiple media files
-  fastify.post('/upload', async (request: FastifyRequest, reply: FastifyReply) => {
+  const uploadHandler = async (request: FastifyRequest, reply: FastifyReply) => {
     if (!request.isMultipart()) {
       return reply.status(400).send({
         code: 'MEDIA_INVALID_REQUEST',
@@ -29,8 +29,8 @@ export async function mediaRoutes(fastify: FastifyInstance) {
     const ownerId = user?.id || (request.headers['x-user-id'] as string) || 'system-user';
 
     const query = (request.query as any) || {};
-    const entityType = query.entityType || 'LISTING';
-    const entityId = query.entityId;
+    const entityType = query.entityType || (query.resource === 'chats' ? 'CHAT' : 'LISTING');
+    const entityId = query.entityId || query.resourceId;
 
     const parts = request.files();
     const uploadedAssets: any[] = [];
@@ -73,7 +73,10 @@ export async function mediaRoutes(fastify: FastifyInstance) {
       data: uploadedAssets,
       message: 'Media uploaded and queued for processing',
     });
-  });
+  };
+
+  fastify.post('/upload', uploadHandler);
+  fastify.post('/images', uploadHandler);
 
   // Get Asset details & status
   fastify.get('/:assetId', async (request: FastifyRequest, reply: FastifyReply) => {

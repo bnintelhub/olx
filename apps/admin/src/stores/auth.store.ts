@@ -121,6 +121,17 @@ export const useAuthStore = create<AuthState>()(
           // Authenticate against server using secure HTTP-only cookies
           const user = await authService.getMe();
           if (user) {
+            // A regular marketplace customer session must not authenticate the admin console
+            if ((user.role as string) === 'USER') {
+              set({
+                user: null,
+                role: 'ADMIN',
+                isAuthenticated: false,
+                isLoading: false,
+              });
+              return;
+            }
+
             schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
             set({
               user,

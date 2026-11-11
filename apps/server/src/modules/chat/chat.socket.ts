@@ -125,6 +125,12 @@ export function setupChatSocket(io: SocketIOServer) {
   // Global Handshake Authentication & Token Extraction with automatic refresh fallback
   io.use(async (socket: Socket, next) => {
     try {
+      const referer = socket.handshake.headers?.referer || '';
+      const isAdminContext =
+        referer.includes('/admin') ||
+        socket.handshake.auth?.context === 'admin' ||
+        socket.handshake.query?.context === 'admin';
+
       let rawToken =
         socket.handshake.auth?.token ||
         socket.handshake.auth?.accessToken ||
@@ -132,11 +138,24 @@ export function setupChatSocket(io: SocketIOServer) {
         (socket.handshake.query?.token as string);
       let token = typeof rawToken === 'string' ? rawToken.replace(/^Bearer\s+/i, '').trim() : '';
 
-      if (!token && socket.handshake.headers?.cookie) {
+      const candidateAccessTokens: string[] = [];
+      if (token) {
+        candidateAccessTokens.push(token);
+      }
+
+      if (socket.handshake.headers?.cookie) {
         const rawCookies = socket.handshake.headers.cookie;
-        const clientMatch = rawCookies.match(/(?:^|;\s*)access_token=([^;]+)/);
-        const adminMatch = rawCookies.match(/(?:^|;\s*)admin_access_token=([^;]+)/);
-        token = clientMatch?.[1] || adminMatch?.[1] || '';
+        const clientMatch = rawCookies.match(/(?:^|;\s*)access_token=([^;]+)/)?.[1];
+        const adminMatch = rawCookies.match(/(?:^|;\s*)admin_access_token=([^;]+)/)?.[1];
+
+        // In admin context, prioritize admin_access_token
+        if (isAdminContext) {
+          if (adminMatch) candidateAccessTokens.push(adminMatch);
+          if (clientMatch) candidateAccessTokens.push(clientMatch);
+        } else {
+          if (clientMatch) candidateAccessTokens.push(clientMatch);
+          if (adminMatch) candidateAccessTokens.push(adminMatch);
+        }
       }
 
       let userId: string | null = null;
@@ -144,51 +163,46 @@ export function setupChatSocket(io: SocketIOServer) {
       let userPhone: string | undefined;
       let userEmail: string | undefined;
 
-      // 1. Try verifying access token from handshake payload
-      if (token) {
+      // 1. Try verifying each candidate access token
+      for (const candidate of candidateAccessTokens) {
         try {
-          const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as any;
-          userId = decoded.userId || decoded.id || decoded.sub;
-          userRole = decoded.role || 'USER';
-          userPhone = decoded.phoneNumber;
-          userEmail = decoded.email;
-        } catch {
-          // Token expired, fallback to cookies below
-        }
-      }
-
-      // 2. If token invalid or missing, check access_token cookie
-      if (!userId && socket.handshake.headers?.cookie) {
-        const rawCookies = socket.handshake.headers.cookie;
-        const clientMatch = rawCookies.match(/(?:^|;\s*)access_token=([^;]+)/);
-        const adminMatch = rawCookies.match(/(?:^|;\s*)admin_access_token=([^;]+)/);
-        const cookieToken = clientMatch?.[1] || adminMatch?.[1];
-        if (cookieToken) {
-          try {
-            const decoded = jwt.verify(cookieToken, env.JWT_ACCESS_SECRET) as any;
+          const decoded = jwt.verify(candidate, env.JWT_ACCESS_SECRET) as any;
+          if (decoded?.userId || decoded?.id || decoded?.sub) {
             userId = decoded.userId || decoded.id || decoded.sub;
             userRole = decoded.role || 'USER';
             userPhone = decoded.phoneNumber;
             userEmail = decoded.email;
-          } catch {
-            // Cookie access token expired
+            break;
           }
+        } catch {
+          // Token expired or invalid, continue to next candidate
         }
       }
 
-      // 3. If access token is expired or missing, fallback to 30-day refresh_token cookie
+      // 2. If access tokens expired or missing, fallback to 30-day refresh token cookies
       if (!userId && socket.handshake.headers?.cookie) {
         const rawCookies = socket.handshake.headers.cookie;
-        const refreshMatch = rawCookies.match(/(?:^|;\s*)(?:admin_refresh_token|refresh_token)=([^;]+)/);
-        if (refreshMatch?.[1]) {
-          const refreshToken = refreshMatch[1];
-          const tokenHash = HashUtil.sha256(refreshToken);
-          const user = await AuthRepository.findUserByRefreshTokenHash(tokenHash);
-          if (user && user.status === 'ACTIVE') {
-            userId = user.id;
-            userRole = user.role;
-            userPhone = user.phoneNumber || undefined;
-            userEmail = user.email || undefined;
+        const clientRefresh = rawCookies.match(/(?:^|;\s*)refresh_token=([^;]+)/)?.[1];
+        const adminRefresh = rawCookies.match(/(?:^|;\s*)admin_refresh_token=([^;]+)/)?.[1];
+
+        const candidateRefreshTokens = isAdminContext
+          ? [adminRefresh, clientRefresh].filter(Boolean)
+          : [clientRefresh, adminRefresh].filter(Boolean);
+
+        for (const refToken of candidateRefreshTokens) {
+          if (!refToken) continue;
+          try {
+            const tokenHash = HashUtil.sha256(refToken);
+            const user = await AuthRepository.findUserByRefreshTokenHash(tokenHash);
+            if (user && user.status === 'ACTIVE') {
+              userId = user.id;
+              userRole = user.role;
+              userPhone = user.phoneNumber || undefined;
+              userEmail = user.email || undefined;
+              break;
+            }
+          } catch {
+            // Check next refresh token
           }
         }
       }

@@ -54,7 +54,14 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
     for (const tok of candidateTokens) {
       try {
         decoded = fastify.jwt.verify<{ userId: string; role: UserRole; phoneNumber?: string }>(tok);
-        if (decoded?.userId) break;
+        if (decoded?.userId) {
+          // If accessing admin context, reject customer tokens so standard client sessions never collide with admin portal
+          if ((appContext === 'admin' || isAdminRoute) && decoded.role === UserRole.USER) {
+            decoded = null;
+            continue;
+          }
+          break;
+        }
       } catch (err: any) {
         lastError = err;
       }

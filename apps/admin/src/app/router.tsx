@@ -1,5 +1,6 @@
 import React from 'react';
-import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { createBrowserRouter, Navigate, useRouteError } from 'react-router-dom';
+import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '../stores/auth.store';
 import { AdminRole } from '../types';
 import { DashboardLayout } from '../components/layout/DashboardLayout';
@@ -23,8 +24,31 @@ import { RolesPage } from '../features/roles-permissions/RolesPage';
 import { AuditLogsPage } from '../features/audit-logs/AuditLogsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 
+function RouteErrorBoundary() {
+  const error = useRouteError() as any;
+  return (
+    <div className="flex h-screen items-center justify-center bg-background text-foreground p-6">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 text-center shadow-xl space-y-4">
+        <AlertTriangle className="mx-auto h-8 w-8 text-rose-500" />
+        <h1 className="text-lg font-bold">Admin Portal Error</h1>
+        <p className="text-xs text-muted-foreground break-words">
+          {error?.message || 'An unexpected rendering error occurred. Please reload.'}
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground transition hover:opacity-90 cursor-pointer"
+        >
+          <RefreshCw className="h-4 w-4" />
+          Reload Portal
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuthStore();
+  const { isAuthenticated, isLoading, user } = useAuthStore();
 
   if (isLoading) {
     return (
@@ -37,7 +61,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  if (!isAuthenticated || !user || (user.role as string) === 'USER') {
     return <Navigate to="/login" replace />;
   }
 
@@ -84,6 +108,7 @@ export const router = createBrowserRouter([
         <DashboardLayout />
       </ProtectedRoute>
     ),
+    errorElement: <RouteErrorBoundary />,
     children: [
       {
         index: true,

@@ -37,13 +37,26 @@ class FcmService {
       }
 
       // Check configured path or default service account JSON in server root
-      const candidatePaths = [
-        path.resolve(process.cwd(), env.FIREBASE_SERVICE_ACCOUNT_PATH),
-        path.resolve(__dirname, '../../..', env.FIREBASE_SERVICE_ACCOUNT_PATH),
-        path.resolve(__dirname, '../../../gen-lang-client-0067863163-firebase-adminsdk-fbsvc-3a9115427b.json'),
-      ];
+      const candidatePaths: string[] = [];
 
-      const resolvedPath = candidatePaths.find((p) => fs.existsSync(p));
+      if (env.FIREBASE_SERVICE_ACCOUNT_PATH && env.FIREBASE_SERVICE_ACCOUNT_PATH.trim() !== '') {
+        candidatePaths.push(
+          path.resolve(process.cwd(), env.FIREBASE_SERVICE_ACCOUNT_PATH.trim()),
+          path.resolve(__dirname, '../../..', env.FIREBASE_SERVICE_ACCOUNT_PATH.trim())
+        );
+      }
+
+      candidatePaths.push(
+        path.resolve(__dirname, '../../../gen-lang-client-0067863163-firebase-adminsdk-fbsvc-3a9115427b.json')
+      );
+
+      const resolvedPath = candidatePaths.find((p) => {
+        try {
+          return fs.existsSync(p) && fs.statSync(p).isFile();
+        } catch {
+          return false;
+        }
+      });
 
       if (!resolvedPath) {
         console.warn('[FCM] Service account credentials not found. Push notifications disabled.');

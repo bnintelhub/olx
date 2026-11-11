@@ -45,8 +45,8 @@ export async function getFirebaseMessaging(): Promise<Messaging | null> {
  * Requests Notification permission and registers FCM token with backend
  */
 export async function requestAndRegisterPushToken(): Promise<string | null> {
-  if (typeof window === 'undefined' || !isFirebaseConfigured()) return null;
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+  if (typeof window === 'undefined') return null;
+  if (!('Notification' in window)) {
     return null;
   }
 
@@ -55,9 +55,14 @@ export async function requestAndRegisterPushToken(): Promise<string | null> {
     return null;
   }
 
+  if (!isFirebaseConfigured() || !('serviceWorker' in navigator)) {
+    console.log('[Push] Native browser notifications enabled (FCM not configured)');
+    return 'native-granted';
+  }
+
   const messaging = await getFirebaseMessaging();
   if (!messaging) {
-    return null;
+    return 'native-granted';
   }
 
   try {

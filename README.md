@@ -10,10 +10,13 @@
   - [Workspace Structure](#workspace-structure)
   - [Available Monorepo Commands](#available-monorepo-commands)
 - [System Architecture & Core Workflows](#system-architecture--core-workflows)
+  - [High-Level System Architecture](#high-level-system-architecture)
+  - [Nginx Unified Gateway & Reverse Proxy Flow](#nginx-unified-gateway--reverse-proxy-flow)
   - [1. Media Upload & Optimization Pipeline](#1-media-upload--optimization-pipeline)
-  - [2. User Registration & BullMQ OTP Queue](#2-user-registration--bullmq-otp-queue)
-  - [3. Password Recovery & Cooldown Flow](#3-password-recovery--cooldown-flow)
-  - [4. Role-Based Access Control (RBAC) & Capabilities](#4-role-based-access-control-rbac--capabilities)
+  - [2. Real-Time Chat & Push Notifications](#2-real-time-chat--push-notifications)
+  - [3. User Registration & BullMQ OTP Queue](#3-user-registration--bullmq-otp-queue)
+  - [4. Password Recovery & Cooldown Flow](#4-password-recovery--cooldown-flow)
+  - [5. Role-Based Access Control (RBAC) & Capabilities](#5-role-based-access-control-rbac--capabilities)
 - [Tech Stack](#tech-stack)
 - [Key Features](#key-features)
 - [Environment Variables & Deployment Guide](#environment-variables--deployment-guide)
@@ -83,6 +86,97 @@ All commands can be executed directly from the monorepo root:
 > - [Authentication & OTP Workflow](docs/AUTH_WORKFLOW.md)
 > - [RBAC & Account Capabilities Spec](docs/RBAC_WORKFLOW.md)
 
+### High-Level System Architecture
+
+A clean, end-to-end view of the platform components, data stores, and communication pathways:
+
+```mermaid
+flowchart TD
+    subgraph Clients["Clients & Interfaces"]
+        ClientWeb["Customer Web App<br/>(React 18 + Vite + Tailwind PWA)"]
+        AdminWeb["Admin Operations Portal<br/>(React 18 + Vite + TanStack)"]
+    end
+
+    subgraph Edge["Reverse Proxy & Gateway"]
+        NginxGateway["Nginx Gateway (:80 / :443)<br/>SSL Termination • Rate Limiting • Routing"]
+    end
+
+    subgraph Services["Application Services"]
+        ClientContainer["Client Container (:80)<br/>Static SPA Server"]
+        AdminContainer["Admin Container (:80)<br/>Static SPA Server"]
+        APIServer["Fastify API Server (:5000)<br/>REST Endpoints • Clustered Socket.IO"]
+        MediaService["Media Microservice (:5005)<br/>Uploads • MIME Validation"]
+        WorkerService["BullMQ Worker Service<br/>Sharp WebP Processing • Push Queue"]
+    end
+
+    subgraph StorageTier["Data & Cache Persistence"]
+        PostgresDB[("PostgreSQL 16 Database<br/>Prisma ORM • Relational Data")]
+        RedisStore[("Redis 7 Cache & Session<br/>BullMQ Queues • Socket.IO Adapter")]
+        MediaVolume[("Persistent Media Volume<br/>/data/olx-media")]
+    end
+
+    Clients -->|"HTTP(S) & WebSocket"| NginxGateway
+
+    NginxGateway -->|"Path: /"| ClientContainer
+    NginxGateway -->|"Path: /admin/"| AdminContainer
+    NginxGateway -->|"Path: /api/ & /socket.io"| APIServer
+    NginxGateway -->|"Path: /media/ (Cached Static)"| MediaVolume
+    NginxGateway -->|"Path: /api/v1/media/"| MediaService
+
+    APIServer -->|"Read & Write Queries"| PostgresDB
+    APIServer -->|"Cache, Rate Limits & Pub/Sub"| RedisStore
+    APIServer -->|"Enqueue Tasks"| RedisStore
+
+    MediaService -->|"Save Raw Uploads"| MediaVolume
+    MediaService -->|"Enqueue Image Jobs"| RedisStore
+    MediaService -->|"Media Metadata"| PostgresDB
+
+    WorkerService -->|"Consume Jobs"| RedisStore
+    WorkerService -->|"Generate WebP Variants"| MediaVolume
+    WorkerService -->|"Update Status"| PostgresDB
+```
+
+---
+
+### Nginx Unified Gateway & Reverse Proxy Flow
+
+How incoming HTTP and WebSocket requests are inspected, rewritten, and routed across container services:
+
+```mermaid
+flowchart LR
+    subgraph Incoming["Incoming Traffic"]
+        Request["Browser / Mobile Client Request<br/>(Port 80 / Port 443)"]
+    end
+
+    subgraph NginxProxy["Nginx Gateway Router"]
+        Match{"Route Prefix Match"}
+    end
+
+    subgraph Destinations["Target Services"]
+        ClientSPA["Client App (client:80)<br/>Path: /<br/>SPA Fallback (try_files /index.html)"]
+        AdminSPA["Admin Portal (admin:80)<br/>Path: /admin/*<br/>Rewrite: /admin/(.*) to /$1"]
+        FastifyAPI["Backend Server (server:5000)<br/>Path: /api/*<br/>REST Endpoints (/api/v1/*)"]
+        SocketIO["Fastify Realtime (server:5000)<br/>Path: /socket.io*<br/>Upgrade: WebSocket"]
+        MediaStatic["Disk Storage (/data/olx-media)<br/>Path: /media/*<br/>Direct Static Delivery (30d Cache)"]
+        MediaFallback["Media Service (media-service:5005)<br/>On-Demand Fallback for Missing Files"]
+        MediaUploadAPI["Media Service (media-service:5005)<br/>Path: /api/v1/media/*<br/>Multipart Upload Engine"]
+        HealthCheck["Backend Server (server:5000)<br/>Path: /health<br/>Liveness Probe (/api/v1/health)"]
+    end
+
+    Request --> Match
+
+    Match -->|"Path: /"| ClientSPA
+    Match -->|"Path: /admin or /admin/*"| AdminSPA
+    Match -->|"Path: /api/*"| FastifyAPI
+    Match -->|"Path: /socket.io*"| SocketIO
+    Match -->|"Path: /media/* (Exists on Disk)"| MediaStatic
+    MediaStatic -.->|"Cache Miss / Missing"| MediaFallback
+    Match -->|"Path: /api/v1/media/*"| MediaUploadAPI
+    Match -->|"Path: /health"| HealthCheck
+```
+
+---
+
 ### 1. Media Upload & Optimization Pipeline
 
 Image uploads are decoupled from ad creation to ensure instantaneous UI response times and resilient image compression:
@@ -134,7 +228,46 @@ sequenceDiagram
 
 ---
 
-### 2. User Registration & BullMQ OTP Queue
+### 2. Real-Time Chat & Push Notifications
+
+Peer-to-peer real-time chat with clustered Socket.IO, PostgreSQL persistence, and asynchronous Web Push fallback:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Buyer as Buyer (Browser / App)
+    participant Nginx as Nginx Gateway
+    participant SocketServer as Fastify Socket.IO (:5000)
+    participant Redis as Redis Adapter & Pub/Sub
+    participant DB as PostgreSQL (Prisma)
+    participant BullMQ as BullMQ Push Queue
+    participant Worker as Background Worker
+    actor Seller as Seller (Browser / Phone)
+
+    Note over Buyer, Seller: Instant Real-Time Messaging & Status Receipts
+    Buyer->>Nginx: Emit "send_message" via WebSocket (/socket.io)
+    Nginx->>SocketServer: Forward WebSocket Frame (Upgrade)
+    SocketServer->>DB: Persist Message (status: SENT)
+    SocketServer->>Redis: Publish to Redis Channel "chat:conversation:{id}"
+
+    alt Seller is Active & In-Room
+        Redis->>SocketServer: Distribute to recipient socket connection
+        SocketServer->>Nginx: Stream "new_message" frame
+        Nginx->>Seller: Deliver message + audio chime alert
+        Seller->>SocketServer: Emit "mark_delivered"
+        SocketServer->>DB: Update message (status: DELIVERED)
+        SocketServer-->>Buyer: Emit "message_delivered" receipt
+    else Seller Tab Inactive or Offline
+        SocketServer->>BullMQ: Enqueue "push-notification" job
+        BullMQ->>Worker: Consume push dispatch job
+        Worker->>DB: Look up Seller FCM tokens & notification settings
+        Worker->>Seller: Dispatch WhatsApp-style Web Push Notification
+    end
+```
+
+---
+
+### 3. User Registration & BullMQ OTP Queue
 
 ```mermaid
 sequenceDiagram
@@ -166,7 +299,7 @@ sequenceDiagram
 
 ---
 
-### 3. Password Recovery & Cooldown Flow
+### 4. Password Recovery & Cooldown Flow
 
 ```mermaid
 sequenceDiagram
@@ -197,7 +330,7 @@ sequenceDiagram
 
 ---
 
-### 4. Role-Based Access Control (RBAC) & Capabilities
+### 5. Role-Based Access Control (RBAC) & Capabilities
 
 ```mermaid
 flowchart TD

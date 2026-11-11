@@ -39,7 +39,9 @@ export function RealtimeVelocitySection() {
   useEffect(() => {
     const socket: Socket = io('/', {
       path: '/socket.io',
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      auth: { context: 'admin' },
+      query: { context: 'admin' },
       withCredentials: true,
     });
 
@@ -122,7 +124,7 @@ export function RealtimeVelocitySection() {
               </div>
             </div>
             <div className="text-2xl font-black font-mono tracking-tight text-foreground">
-              {velocity?.totalUsers.toLocaleString('en-IN') ?? 0}
+              {(velocity?.totalUsers ?? 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
               <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
@@ -143,7 +145,7 @@ export function RealtimeVelocitySection() {
               </div>
             </div>
             <div className="text-2xl font-black font-mono tracking-tight text-foreground">
-              {velocity?.totalAds.toLocaleString('en-IN') ?? 0}
+              {(velocity?.totalAds ?? 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
               <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
@@ -167,7 +169,7 @@ export function RealtimeVelocitySection() {
               </Badge>
             </div>
             <div className="text-2xl font-black font-mono tracking-tight text-foreground">
-              {velocity?.activeAds.toLocaleString('en-IN') ?? 0}
+              {(velocity?.activeAds ?? 0).toLocaleString('en-IN')}
             </div>
             <div className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
               {velocity?.pendingAds ?? 0} listings in review queue

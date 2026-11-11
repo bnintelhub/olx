@@ -65,27 +65,57 @@ export function usePushNotifications() {
   }, [user]);
 
   const enablePush = useCallback(async () => {
-    if (permission === 'unsupported') return false;
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      setPermission('unsupported');
+      toast.error('Your browser does not support push notifications.');
+      return false;
+    }
+
     setIsRegistering(true);
     try {
-      await requestAndRegisterPushToken();
-      const currentPerm =
-        typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'denied';
-      setPermission(currentPerm);
+      // 1. Direct browser notification permission request
+      const result = await Notification.requestPermission();
+      setPermission(result);
 
-      if (currentPerm === 'granted') {
+      if (result === 'granted') {
+        toast.success('WhatsApp-style chat notifications enabled!');
+
+        // Instant audio & desktop notification confirmation
         try {
-          new Notification('OLX Notifications Active', {
-            body: 'WhatsApp-style chat alerts enabled! You will be notified of new messages.',
+          playNewMessageSound();
+          new Notification('OLX ORBIT — Chat Alerts Active', {
+            body: 'WhatsApp-style instant notifications enabled! You will be notified of new messages.',
             icon: '/icon-192.svg',
+            badge: '/icon-192.svg',
           });
-        } catch {}
+        } catch (e) {
+          console.warn('[Push] Welcome notification skipped:', e);
+        }
+
+        // 2. Register FCM push token if available
+        try {
+          await requestAndRegisterPushToken();
+        } catch (fcmErr) {
+          console.warn('[FCM] Token registration skipped:', fcmErr);
+        }
+
+        return true;
       }
-      return currentPerm === 'granted';
+
+      if (result === 'denied') {
+        toast.error('Notifications are blocked in your browser. Please allow notifications in your site settings.');
+        return false;
+      }
+
+      return false;
+    } catch (err: any) {
+      console.error('[Push] Failed to request notification permission:', err);
+      toast.error('Failed to enable notifications.');
+      return false;
     } finally {
       setIsRegistering(false);
     }
-  }, [permission]);
+  }, []);
 
   const sendTestNotification = useCallback(async () => {
     try {

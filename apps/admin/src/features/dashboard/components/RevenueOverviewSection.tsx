@@ -86,7 +86,9 @@ export function RevenueOverviewSection() {
   useEffect(() => {
     const socket: Socket = io('/', {
       path: '/socket.io',
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      auth: { context: 'admin' },
+      query: { context: 'admin' },
       withCredentials: true,
     });
     socket.on('connect', () => {
