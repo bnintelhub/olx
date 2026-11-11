@@ -1,6 +1,6 @@
-# BharatMarket (OLX Marketplace) — Full-Stack Monorepo
+# BharatMarket (OLX Orbit) — Full-Stack Monorepo
 
-> Production-grade classifieds marketplace built with **Fastify**, **PostgreSQL**, **Redis**, **BullMQ**, **MinIO (S3)**, **Socket.IO**, and **React (Vite)** inside a high-performance **pnpm + Turborepo** monorepo.
+> Production-grade peer-to-peer classifieds marketplace built with **Fastify 5**, **PostgreSQL 16**, **Redis 7**, **BullMQ**, **Sharp WebP Media Service**, **Socket.IO (Redis Clustered)**, and **React 18 (Vite + Tailwind)** inside a high-performance **pnpm** monorepo.
 
 ---
 
@@ -10,41 +10,47 @@
   - [Workspace Structure](#workspace-structure)
   - [Available Monorepo Commands](#available-monorepo-commands)
 - [System Architecture & Core Workflows](#system-architecture--core-workflows)
-  - [1. Media Upload & Ad Creation Workflow](#1-media-upload--ad-creation-workflow)
+  - [1. Media Upload & Optimization Pipeline](#1-media-upload--optimization-pipeline)
   - [2. User Registration & BullMQ OTP Queue](#2-user-registration--bullmq-otp-queue)
   - [3. Password Recovery & Cooldown Flow](#3-password-recovery--cooldown-flow)
   - [4. Role-Based Access Control (RBAC) & Capabilities](#4-role-based-access-control-rbac--capabilities)
 - [Tech Stack](#tech-stack)
 - [Key Features](#key-features)
+- [Environment Variables & Deployment Guide](#environment-variables--deployment-guide)
+  - [Where to Place `.env` Files](#where-to-place-env-files)
+  - [Environment Variables Reference](#environment-variables-reference)
+  - [Production Deployment Security Checklist](#production-deployment-security-checklist)
 - [Getting Started](#getting-started)
   - [Prerequisites](#prerequisites)
-  - [Environment Setup](#environment-setup)
   - [Running with Docker Compose](#running-with-docker-compose)
-  - [Running in Local Development Mode](#running-in-local-development-mode)
+  - [Running in Native Local Development Mode](#running-in-native-local-development-mode)
 - [License](#license)
 
 ---
 
 ## Monorepo Architecture
 
-The repository is organized as a unified, high-performance **pnpm + Turborepo monorepo**:
+The repository is organized as a unified, high-performance **pnpm monorepo**:
 
 ### Workspace Structure
 
-```
+```text
 olx/
 ├── apps/
-│   ├── admin/               # React + Tailwind + TanStack Admin Operations Portal (@olx/admin)
-│   ├── client/              # React 18 + Vite + Tailwind Classifieds Marketplace Web App (@olx/client)
-│   ├── server/              # Fastify v4 + TypeScript REST API & Clustered Socket.IO (@olx/server)
-│   └── workers/             # BullMQ 5.x Background Job Workers (Sharp Media & OTP) (@olx/workers)
+│   ├── client/              # React 18 + Vite + Tailwind Customer PWA (@olx/client)
+│   ├── admin/               # React 18 + Tailwind Moderation & Ops Portal (@olx/admin)
+│   ├── server/              # Fastify 5 REST API & Clustered Socket.IO Server (@olx/server)
+│   ├── media-service/       # Dedicated Media Upload & Sharp Optimization Service (@olx/media-service)
+│   └── workers/             # BullMQ Background Job Workers (Image Processing & Push) (@olx/workers)
 ├── packages/
-│   ├── database/            # Prisma 5.22 ORM, PostgreSQL schema, migrations, seed (@olx/database)
-│   └── shared/              # Unified RBAC, capabilities, errors, audit & crypto utils (@olx/shared)
-├── infrastructure/          # Dockerfiles & deployment configurations
-├── docker-compose.yml       # PostgreSQL 16, Redis 7, MinIO, Server, Workers & Client
+│   ├── database/            # Prisma 5.22 ORM, PostgreSQL schema, migrations & seeders (@olx/database)
+│   └── shared/              # Shared types, storage adapters, validation schemas (@olx/shared)
+├── infrastructure/
+│   ├── docker/dev/          # Development container configurations (Dockerfiles)
+│   └── nginx/               # Nginx reverse proxy routing configurations
+├── docs/                    # In-depth architectural & deployment documentation
+├── docker-compose.dev.yml   # Development Docker Compose stack
 ├── pnpm-workspace.yaml      # Monorepo packages mapping
-├── turbo.json               # Turbo pipeline definitions & topological task caching
 └── package.json             # Root monorepo orchestration scripts
 ```
 
@@ -54,82 +60,77 @@ All commands can be executed directly from the monorepo root:
 
 | Command | Action |
 |:---|:---|
-| `pnpm dev` | Starts all applications (`admin`, `client`, `server`, `workers`) concurrently via Turbo |
-| `pnpm dev:client` | Starts the buyer/seller web application on port `5173` |
-| `pnpm dev:admin` | Starts the Admin Operations Portal on port `5174` |
-| `pnpm dev:server` | Starts the Fastify backend API in watch mode on port `5000` |
-| `pnpm dev:workers` | Starts BullMQ background workers in watch mode |
-| `pnpm build` | Compiles all packages and applications with topological ordering |
-| `pnpm test` | Runs the full test suite (unit, integration, and e2e tests via Vitest) |
+| `pnpm dev` | Starts all applications (`client`, `admin`, `server`, `media-service`, `workers`) concurrently |
+| `pnpm --filter @olx/client dev` | Starts the customer web application on port `5173` |
+| `pnpm --filter @olx/admin dev` | Starts the Admin Operations Portal on port `5174` |
+| `pnpm --filter @olx/server dev` | Starts the Fastify API backend in watch mode on port `5000` |
+| `pnpm --filter @olx/media-service dev` | Starts the Media Microservice on port `5005` |
+| `pnpm --filter @olx/workers dev` | Starts BullMQ background workers in watch mode |
+| `pnpm build` | Compiles all packages and applications in topological dependency order |
 | `pnpm db:generate` | Generates the Prisma Client in `@olx/database` |
 | `pnpm db:push` | Synchronizes Prisma schema changes directly to PostgreSQL |
-| `pnpm db:studio` | Launches Prisma Studio visual database inspector on port `5555` |
 | `pnpm db:seed` | Seeds database with categories, locations, sample ads, and credentials |
-| `pnpm docker:up` | Boots the entire application stack via Docker Compose |
-| `pnpm docker:down` | Gracefully stops all Docker containers |
-| `pnpm docker:build` | Builds production Docker images for server, workers, and clients |
+| `pnpm db:studio` | Launches Prisma Studio visual database inspector on port `5555` |
 
 ---
 
 ## System Architecture & Core Workflows
 
 > 🔗 **Detailed Workflow Documentation**:
-> - [Production VPS Deployment Strategy](docs/DEPLOYMENT_STRATEGY.md)
+> - [Production Deployment Strategy](docs/DEPLOYMENT_STRATEGY.md)
+> - [Universal Media & Storage Pipeline](docs/media.md)
 > - [Ad Creation & Moderation Flow](docs/AD_CREATION_AND_MODERATION_FLOW.md)
 > - [Authentication & OTP Workflow](docs/AUTH_WORKFLOW.md)
 > - [RBAC & Account Capabilities Spec](docs/RBAC_WORKFLOW.md)
-> - [Universal Media & Smart Crop Pipeline](docs/media.md)
 
-### 1. Media Upload & Ad Creation Workflow
+### 1. Media Upload & Optimization Pipeline
 
-Media upload and ad post creation are decoupled into two asynchronous phases to ensure instantaneous UI response times and atomic database persistence:
+Image uploads are decoupled from ad creation to ensure instantaneous UI response times and resilient image compression:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as User (Client / Browser)
-    participant Server as Fastify API Server
+    actor User as User (Client / Admin)
+    participant MediaSrv as Media Microservice (:5005)
     participant Redis as Redis (BullMQ Queue)
     participant Worker as Background Worker (Sharp)
-    participant S3 as MinIO / S3 Storage
+    participant Storage as Local Storage (/data/olx-media)
     participant DB as PostgreSQL (Prisma)
+    participant API as Fastify API (:5000)
 
-    %% PHASE 1: IMAGE UPLOAD
+    %% PHASE 1: ASYNC UPLOAD & OPTIMIZATION
     rect rgb(240, 248, 255)
-    Note over User, S3: Phase 1: Image Upload & Background Optimization
-    User->>Server: 1. POST /api/v1/media/images?resource=ads (multipart/form-data)
-    Server->>Server: Magic bytes, MIME type & size validate
-    Server->>DB: Media record create (status: PENDING, scope: UNATTACHED)
-    Server->>Redis: Job push to 'media-process' queue
-    Server-->>User: 201 Created (mediaId & temp preview)
+    Note over User, Storage: Phase 1: Image Upload & Background WebP Generation
+    User->>MediaSrv: 1. POST /media/images?resource=ads (multipart/form-data)
+    MediaSrv->>MediaSrv: Magic bytes check, MIME & size validation
+    MediaSrv->>DB: Create Media record (status: PENDING)
+    MediaSrv->>Storage: Save original upload
+    MediaSrv->>Redis: Enqueue job to 'media-process' queue
+    MediaSrv-->>User: 201 Created (mediaId & previewUrl)
 
     Redis->>Worker: Consume job (mediaId)
-    Worker->>Worker: Sharp engine: WebP variants (thumb, medium, card, large) + BlurHash
-    Worker->>S3: Upload WebP variants (ads/drafts/images/{id}/)
+    Worker->>Worker: Sharp processing: WebP variants (thumb, medium, card, large)
+    Worker->>Storage: Persist generated WebP files
     Worker->>DB: Update Media (status: READY, variants: {...})
     end
 
-    %% PHASE 2: POST CREATION
+    %% PHASE 2: ATOMIC AD PERSISTENCE
     rect rgb(245, 255, 245)
-    Note over User, DB: Phase 2: Ad Creation & Atomic Linking
-    User->>Server: 2. POST /api/v1/ads { title, price, categoryId, images: [{ mediaId }] }
-    Server->>Server: Fraud detection & Category dynamic attributes check
-    Server->>DB: Validate mediaId ownership & status (status === 'READY')
+    Note over User, API: Phase 2: Listing Creation & Atomic Attachment
+    User->>API: 2. POST /api/v1/ads { title, price, categoryId, images: [{ mediaId }] }
+    API->>API: Category schema validation & anti-fraud heuristics
     
     critical Prisma $transaction (Atomic)
-        Server->>DB: Insert into "ads" table (status: ACTIVE / PENDING_REVIEW)
-        Server->>DB: Insert into "ad_images" table (variants URLs, isCover, sortOrder)
-        Server->>DB: Update "media" table (isAttached: true, attachedToId: ad.id, scope: AD_IMAGE)
-        Server->>DB: Insert "ad_attribute_values"
+        API->>DB: Insert "ads" row (status: ACTIVE / PENDING_REVIEW)
+        API->>DB: Insert "ad_images" row (WebP variants URLs, sortOrder)
+        API->>DB: Update "media" row (isAttached: true, entityId: ad.id, scope: AD_IMAGE)
+        API->>DB: Insert dynamic "ad_attribute_values"
     end
 
-    Server->>Redis: Invalidate cache (feed, category counts)
-    Server-->>User: 201 Created { success: true, data: { adId, slug } }
+    API->>Redis: Invalidate cache (catalog feeds, category counts)
+    API-->>User: 201 Created { success: true, data: { adId, slug } }
     end
 ```
-
-- **Phase 1 (Image Upload & Optimization)**: The client streams multipart images to Fastify. The server validates image magic bytes and records an unattached `media` row before immediately enqueuing a job in BullMQ. Dedicated workers process the images with Sharp, generate WebP variants (`thumbnail`, `medium`, `card`, `large`) and BlurHash strings, and persist them to MinIO / S3.
-- **Phase 2 (Ad Post Creation)**: When the user submits the listing form, Fastify validates required category specifications and runs anti-fraud heuristics. In a single atomic Prisma transaction (`$transaction`), the `ad` record is inserted, image variants are linked into `ad_images`, and the referenced `media` records are marked as permanently attached (`isAttached = true`).
 
 ---
 
@@ -141,7 +142,7 @@ sequenceDiagram
     actor Client as Client (Web / Mobile)
     participant Fastify as Fastify API (/api/v1/auth)
     participant DB as PostgreSQL (Prisma ORM)
-    participant Redis as Redis 7.0
+    participant Redis as Redis 7
     participant BullMQ as BullMQ (otp-dispatch)
     participant Worker as BullMQ Background Worker
     participant SMS as SMS / Email Gateway
@@ -198,8 +199,6 @@ sequenceDiagram
 
 ### 4. Role-Based Access Control (RBAC) & Capabilities
 
-Access control decouples administrative staff permissions from customer marketplace capabilities:
-
 ```mermaid
 flowchart TD
     Req(["HTTP Request to Fastify API"]) --> Authenticate{"fastify.authenticate<br/>Valid JWT Token?"}
@@ -219,18 +218,18 @@ flowchart TD
     CheckCap -->|"No"| Deny403C["403 Forbidden<br/>FORBIDDEN_CAPABILITY"]
 ```
 
-#### Admin Panel Roles (Separation of Duties)
-- **`SUPER_ADMIN`**: Full wildcard (`*`) access across all modules, platform settings, and audit logs.
-- **`ADMIN`**: User moderation, category taxonomy, listing approvals, general management.
+#### Administrative Roles
+- **`SUPER_ADMIN`**: Full wildcard (`*`) access across all modules, settings, and audit logs.
+- **`ADMIN`**: User governance, category taxonomy, listing approvals, general management.
 - **`MODERATOR`**: Investigates user reports, ad moderation, review queues.
-- **`CUSTOMER_SUPPORT`**: Support tickets, dispute resolution, read-only customer records.
-- **`FINANCE_ADMIN`**: Payment transactions, invoices, monetization plans, revenue analytics.
+- **`CUSTOMER_SUPPORT`**: Support inquiries, dispute resolution, customer records.
+- **`FINANCE_ADMIN`**: Transaction monitoring, refunds, monetization plans, revenue reports.
 - **`CONTENT_MANAGER`**: Banners, promotional campaigns, category attributes.
 
 #### Marketplace Account Capabilities
 - **`can_buy`**: Browse listings, initiate real-time chats, negotiate offers, submit reviews.
 - **`can_sell`**: Create, edit, feature, and manage classified listings.
-- **`is_dealer`**: Bulk listing management, verified dealer badge, showroom page.
+- **`is_dealer`**: Bulk listing management, verified dealer badge, showroom pages.
 
 ---
 
@@ -238,27 +237,114 @@ flowchart TD
 
 | Layer | Technology |
 |:---|:---|
-| **Architecture** | pnpm Workspaces + Turborepo monorepo |
-| **API Server** | Fastify v4, TypeScript, Zod Schema Validation |
+| **Architecture** | pnpm Workspaces Monorepo |
+| **API Server** | Fastify 5, TypeScript, Swagger (OpenAPI 3.0), Zod Validation |
 | **Database & ORM** | PostgreSQL 16, Prisma 5.22 ORM |
 | **Caching & Queues** | Redis 7, BullMQ 5.x |
-| **Object Storage** | MinIO (Local S3-compatible) / AWS S3 |
-| **Image Processing** | Sharp (WebP variants, BlurHash, metadata extraction) |
+| **Media Service** | Fastify microservice, Sharp (WebP variants), Multer |
+| **Storage Engine** | Local persistent volumes mounted at `/data/olx-media` (or `/uploads`) |
 | **Real-Time Engine** | Socket.IO v4 clustered via `@socket.io/redis-adapter` |
-| **Frontend Web** | React 18, Vite, Tailwind CSS, Lucide Icons, GSAP animations |
-| **Admin Portal** | React 18, Tailwind CSS, TanStack Query & Table |
-| **Testing** | Vitest, Supertest, Fastify Inject |
+| **Frontend Web** | React 18, Vite, Tailwind CSS, Lucide Icons, Zustand, PWA |
+| **Admin Portal** | React 18, Tailwind CSS, TanStack Query, Lucide Icons |
+| **Reverse Proxy** | Nginx (static routing, proxy caching, rate limiting) |
 
 ---
 
 ## Key Features
 
-- **Decoupled Media Pipeline**: Non-blocking image uploads with automatic multi-resolution WebP optimization (`large`, `medium`, `card`, `thumbnail`) and blurhash generation.
-- **Atomic Deletion & S3 Cleanup**: Complete physical deletion of image variants and S3 directories upon listing deletion.
-- **Real-Time Clustered Chat**: Instant buyer-seller messaging with Redis pub/sub adapter support for multi-instance horizontal scaling.
-- **Dynamic Category Attributes**: Category-specific specifications (e.g. mileage/year for Cars, RAM/storage for Phones) with dynamic schema validation.
-- **Anti-Fraud & Moderation**: Automated scam detection heuristics flag suspicious listings for manual moderator inspection.
-- **Monetization & Credits**: Featured ads, urgent tags, and category listing limits with paid credits support.
+- **High-Performance Media Service**: Decoupled WebP generation with disk caching, automatic thumbnailing, and admin disk storage capacity graphs.
+- **Deduplicated Clustered Chat**: Multi-server Socket.IO clustering with automatic message deduplication, live presence indicators, and delivery/read receipts.
+- **Anti-Fraud Security System**: Real-time content heuristics check for UPI/QR code scams, suspicious keywords, and rapid messaging bursts.
+- **Dynamic Category Specifications**: Extensible attribute definitions per category (text, number, select, multi-select, boolean) rendered dynamically on frontend forms.
+- **FCM Web Push & Service Worker**: Background push notification dispatch for offline users and seamless PWA navigation.
+
+---
+
+## Environment Variables & Deployment Guide
+
+This section is dedicated to deployment engineers setting up the application on a VPS, cloud VM, or staging server.
+
+### Where to Place `.env` Files
+
+The platform uses environment files in two primary modes:
+
+#### 1. Containerized Deployment (Docker Compose) — *Recommended*
+When running via `docker compose`, the **single source of truth** is the root `.env` file at the repository root:
+```text
+olx/
+└── .env    <-- Copy from .env.example
+```
+Docker Compose reads this single file and automatically passes variables to all container services (`postgres`, `redis`, `server`, `media-service`, `workers`, `admin`, `client`, `nginx`).
+
+#### 2. Native / Bare-Metal Process Management (PM2, systemd, or local CLI)
+When running services directly on the host without Docker:
+* **Root**: `olx/.env` (Global fallback)
+* **Backend API**: `olx/apps/server/.env`
+* **Media Service**: `olx/apps/media-service/.env`
+* **Background Workers**: `olx/apps/workers/.env`
+* **Database (Prisma CLI)**: `olx/packages/database/.env`
+* **Customer Client**: `olx/apps/client/.env`
+* **Admin Portal**: `olx/apps/admin/.env`
+
+---
+
+### Environment Variables Reference
+
+Copy `.env.example` to `.env`:
+```bash
+cp .env.example .env
+```
+
+| Variable | Target Service | Required? | Description & Production Guidance |
+|:---|:---|:---:|:---|
+| `NODE_ENV` | All Services | **Yes** | Set to `production` on deployment servers. Controls error masking and logging verbosity. |
+| `DB_NAME` | Postgres, Server | **Yes** | Database name (e.g. `olx_marketplace`). |
+| `DB_USER` | Postgres, Server | **Yes** | PostgreSQL master username. |
+| `DB_PASSWORD` | Postgres, Server | **Yes** | Strong alphanumeric database password. |
+| `DB_PORT` | Postgres (Host) | No | Exposed host port for PostgreSQL (default: `5433` for dev, `5432` for production). |
+| `DATABASE_URL` | Server, Media, Workers, DB | **Yes** | Full PostgreSQL connection string: `postgresql://USER:PASS@HOST:PORT/DB?schema=public`. In Docker: `postgres:5432`. |
+| `REDIS_URL` | Server, Media, Workers | **Yes** | Redis connection URI: `redis://redis:6379` (in Docker) or `redis://localhost:6379`. |
+| `PORT` | Server | No | API server listening port (default: `5000`). |
+| `JWT_ACCESS_SECRET` | Server | **Yes** | High-entropy secret for signing access tokens. Generate with: `openssl rand -hex 32`. |
+| `JWT_REFRESH_SECRET` | Server | **Yes** | High-entropy secret for signing refresh tokens. Generate with: `openssl rand -hex 32`. |
+| `JWT_ACCESS_EXPIRES_IN` | Server | No | Access token lifespan (default: `15m`). |
+| `JWT_REFRESH_EXPIRES_IN` | Server | No | Refresh token lifespan (default: `30d`). |
+| `CLIENT_URL` | Server | **Yes** | Public customer web URL (e.g. `https://bharatmarket.in`). Used for CORS and cookie domain matching. |
+| `ADMIN_URL` | Server | No | Public admin portal URL (e.g. `https://admin.bharatmarket.in`). |
+| `SMS_PROVIDER` | Server, Workers | **Yes** | `MOCK` (development only), `MSG91`, or `TWILIO`. |
+| `MOCK_OTP_CODE` | Server | No | Default mock code (`123456`) when `SMS_PROVIDER=MOCK`. Never enable in production. |
+| `MEDIA_ROOT` | Media, Workers | **Yes** | Physical directory for media storage (e.g. `/data/olx-media` or `./uploads`). |
+| `MEDIA_PUBLIC_BASE_URL` | Server, Media | **Yes** | Public URL prefix for serving media assets (e.g. `https://bharatmarket.in/media`). |
+| `MEDIA_SERVICE_PORT` | Media Service | No | Media microservice port (default: `5005`). |
+| `MEDIA_SERVICE_URL` | Server | **Yes** | Internal service URI for server-to-media communication (in Docker: `http://media-service:5005`). |
+| `ENABLE_RATE_LIMIT` | Server | No | Set to `true` in production to enforce Redis sliding-window request throttling. |
+| `FIREBASE_SERVICE_ACCOUNT_PATH` | Server, Workers | Optional | Path to Firebase Admin SDK JSON key file for FCM web push notifications. |
+
+---
+
+### Production Deployment Security Checklist
+
+Before exposing the server to public traffic:
+
+1. **Rotate Secrets**:
+   ```bash
+   # Generate distinct cryptographic keys for JWT tokens
+   openssl rand -hex 32   # Use for JWT_ACCESS_SECRET
+   openssl rand -hex 32   # Use for JWT_REFRESH_SECRET
+   ```
+2. **Configure Real SMS Gateway**:
+   Set `SMS_PROVIDER=MSG91` or `SMS_PROVIDER=TWILIO` and configure your API authentication keys. Ensure `SMS_PROVIDER=MOCK` is disabled.
+3. **Enable Rate Limiting**:
+   Set `ENABLE_RATE_LIMIT=true` in `.env` to protect API endpoints and OTP generation against abuse and DDoS.
+4. **Persistent Media Volumes**:
+   Ensure the directory configured in `MEDIA_ROOT` (e.g., `/data/olx-media`) resides on a persistent, backed-up host volume with sufficient disk space.
+5. **Execute Database Migrations**:
+   Run schema migrations against the live database:
+   ```bash
+   pnpm --filter @olx/database exec prisma migrate deploy
+   ```
+6. **SSL & Reverse Proxy**:
+   Deploy Nginx with Let's Encrypt SSL/TLS certificates terminating at port 443, proxying to the internal Docker network.
 
 ---
 
@@ -266,70 +352,67 @@ flowchart TD
 
 ### Prerequisites
 
-- **Node.js**: `v20+` or `v22+`
-- **pnpm**: `v10+` (`corepack enable && corepack prepare pnpm@latest --activate`)
-- **Docker & Docker Compose**: For PostgreSQL, Redis, and MinIO storage
-
----
-
-### Environment Setup
-
-Create `.env` inside `apps/server`:
-
-```env
-NODE_ENV=development
-PORT=5000
-DATABASE_URL="postgresql://postgres:postgres@localhost:5433/olx_marketplace?schema=public"
-REDIS_URL="redis://localhost:6379"
-JWT_ACCESS_SECRET="bharatmarket_super_secure_jwt_access_secret_key_2026"
-JWT_REFRESH_SECRET="bharatmarket_super_secure_jwt_refresh_secret_key_2026"
-SMS_PROVIDER="MOCK"
-MOCK_OTP_CODE="123456"
-CLIENT_URL="http://localhost:5173"
-S3_ENDPOINT="http://localhost:9000"
-S3_PUBLIC_URL="http://localhost:9000/olx-media"
-S3_ACCESS_KEY="admin_olx"
-S3_SECRET_KEY="SuperSecurePassword123"
-S3_BUCKET="olx-media"
-```
+- **Node.js**: `v20 LTS` or higher
+- **pnpm**: `v9` or higher (`corepack enable pnpm`)
+- **Docker Desktop / Docker Engine**: `v24+` with Docker Compose
 
 ---
 
 ### Running with Docker Compose
 
-To boot all infrastructure services (PostgreSQL, Redis, MinIO, API server, Workers, and Client):
+To boot all infrastructure services (PostgreSQL, Redis, Media Microservice, Fastify API Server, BullMQ Workers, and Nginx proxy):
 
-```bash
-docker compose up -d
-```
+1. **Initialize configuration:**
+   ```bash
+   cp .env.example .env
+   ```
 
-Service endpoints:
-- **Client App**: `http://localhost:5173`
-- **Admin Portal**: `http://localhost:5174`
-- **API Server**: `http://localhost:5000` (Swagger docs: `/docs`, Health: `/api/v1/health`)
-- **MinIO Console**: `http://localhost:9001` (User: `admin_olx`, Password: `SuperSecurePassword123`)
+2. **Start containerized stack:**
+   ```bash
+   docker compose -f docker-compose.dev.yml up -d
+   ```
+
+3. **Verify running containers:**
+   ```bash
+   docker compose -f docker-compose.dev.yml ps
+   ```
+
+4. **Service Endpoints**:
+   - **Customer Web Application**: [http://localhost:5173](http://localhost:5173)
+   - **Admin Operations Portal**: [http://localhost:5174](http://localhost:5174)
+   - **Backend REST API**: [http://localhost:5000](http://localhost:5000)
+   - **Interactive Swagger Docs**: [http://localhost:5000/docs](http://localhost:5000/docs)
+   - **Media Service**: [http://localhost:5005](http://localhost:5005)
+   - **Nginx Unified Gateway**: [http://localhost](http://localhost)
+
+5. **Stopping containers:**
+   ```bash
+   docker compose -f docker-compose.dev.yml down
+   ```
 
 ---
 
-### Running in Local Development Mode
+### Running in Native Local Development Mode
 
-1. **Install dependencies:**
+If you prefer to run services natively using local Node.js processes:
+
+1. **Install workspace dependencies:**
    ```bash
    pnpm install
    ```
 
-2. **Start databases & storage:**
+2. **Start database & cache containers:**
    ```bash
-   pnpm docker:db
+   docker compose -f docker-compose.dev.yml up -d postgres redis
    ```
 
-3. **Initialize database schema & seed data:**
+3. **Initialize database schema & initial seed data:**
    ```bash
    pnpm db:push
    pnpm db:seed
    ```
 
-4. **Launch all services in development mode:**
+4. **Launch all applications concurrently:**
    ```bash
    pnpm dev
    ```
