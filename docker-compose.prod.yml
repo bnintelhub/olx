@@ -108,6 +108,8 @@ services:
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost/media}
       ENABLE_RATE_LIMIT: "true"
       FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-}
+    ports:
+      - "5000:5000"
     volumes:
       - media_data:/data/olx-media
     networks:

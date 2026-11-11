@@ -96,8 +96,9 @@ export const useAuthStore = create<AuthState>()(
             // ignore
           }
 
-          if (window.location.pathname !== '/login') {
-            window.location.href = '/login';
+          const loginPath = (import.meta.env.BASE_URL || '/').replace(/\/$/, '') + '/login';
+          if (window.location.pathname !== loginPath) {
+            window.location.href = loginPath;
           }
         }
       },

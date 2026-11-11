@@ -2,14 +2,13 @@ import fs from 'fs';
 import path from 'path';
 import { pipeline } from 'stream/promises';
 import { StorageProvider, SaveInput, StoredFile } from './storage.types';
+import { resolveMediaRoot } from './resolve-media-root';
 
 export class LocalStorageProvider implements StorageProvider {
   private readonly rootDir: string;
 
   constructor(customRoot?: string) {
-    this.rootDir = path.resolve(
-      customRoot || process.env.MEDIA_ROOT || path.join(process.cwd(), 'data/olx-media')
-    );
+    this.rootDir = resolveMediaRoot(customRoot);
     this.ensureBaseDirectories();
   }
 

@@ -1,5 +1,6 @@
 export * from './storage.types';
 export * from './local-storage-provider';
+export * from './resolve-media-root';
 
 import { StorageProvider } from './storage.types';
 import { LocalStorageProvider } from './local-storage-provider';

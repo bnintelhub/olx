@@ -14,6 +14,8 @@ uploads/*
 !uploads/.gitkeep
 apps/server/uploads/*
 !apps/server/uploads/.gitkeep
+data/*
+!data/.gitkeep
 
 # Environment and Secret files
 .env

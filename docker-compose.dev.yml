@@ -61,7 +61,7 @@ services:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
       MEDIA_ROOT: "/data/olx-media"
-      MEDIA_PUBLIC_BASE_URL: "http://localhost/media"
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:5000/media}
       MAX_FILE_SIZE_BYTES: 15728640
     ports:
       - "5005:5005"
@@ -70,7 +70,7 @@ services:
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/database/prisma:/app/packages/database/prisma
-      - media_data:/data/olx-media
+      - ./data/olx-media:/data/olx-media
     networks:
       bharatmarket_net:
         aliases:
@@ -104,7 +104,7 @@ services:
       CLIENT_URL: ${CLIENT_URL:-http://localhost:5173}
       MEDIA_ROOT: "/data/olx-media"
       MEDIA_SERVICE_URL: "http://media-service:5005"
-      MEDIA_PUBLIC_BASE_URL: "http://localhost/media"
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:5000/media}
     ports:
       - "5000:5000"
     volumes:
@@ -113,7 +113,7 @@ services:
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/database/prisma:/app/packages/database/prisma
       - backend_uploads:/app/uploads
-      - media_data:/data/olx-media
+      - ./data/olx-media:/data/olx-media
     networks:
       bharatmarket_net:
         aliases:
@@ -144,7 +144,7 @@ services:
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/database/prisma:/app/packages/database/prisma
       - backend_uploads:/app/uploads
-      - media_data:/data/olx-media
+      - ./data/olx-media:/data/olx-media
     networks:
       - bharatmarket_net
 
@@ -152,7 +152,6 @@ services:
   # Frontend Web Client (Vite Dev Server + Instant HMR)
   # ========================================================
   client:
-    profiles: ["docker-frontend"]
     build:
       context: .
       dockerfile: ./infrastructure/docker/dev/Dockerfile.client
@@ -169,15 +168,19 @@ services:
       - ./apps/client/public:/app/apps/client/public
       - ./apps/client/index.html:/app/apps/client/index.html
       - ./apps/client/vite.config.ts:/app/apps/client/vite.config.ts
+      - ./apps/client/tailwind.config.js:/app/apps/client/tailwind.config.js
+      - ./apps/client/postcss.config.js:/app/apps/client/postcss.config.js
       - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/dist:/app/packages/shared/dist
     networks:
-      - bharatmarket_net
+      bharatmarket_net:
+        aliases:
+          - client
 
   # ========================================================
   # Admin Operations Client (Vite Dev Server + Instant HMR)
   # ========================================================
   admin:
-    profiles: ["docker-frontend"]
     build:
       context: .
       dockerfile: ./infrastructure/docker/dev/Dockerfile.admin
@@ -194,9 +197,14 @@ services:
       - ./apps/admin/public:/app/apps/admin/public
       - ./apps/admin/index.html:/app/apps/admin/index.html
       - ./apps/admin/vite.config.ts:/app/apps/admin/vite.config.ts
+      - ./apps/admin/tailwind.config.js:/app/apps/admin/tailwind.config.js
+      - ./apps/admin/postcss.config.js:/app/apps/admin/postcss.config.js
       - ./packages/shared/src:/app/packages/shared/src
+      - ./packages/shared/dist:/app/packages/shared/dist
     networks:
-      - bharatmarket_net
+      bharatmarket_net:
+        aliases:
+          - admin
 
   # ========================================================
   # Centralized Nginx Gateway with Full WebSocket / HMR Proxy
@@ -207,16 +215,16 @@ services:
       dockerfile: ./infrastructure/docker/dev/Dockerfile.nginx
     container_name: bharatmarket_nginx
     restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - server
       - media-service
+      - client
+      - admin
     ports:
       - "80:80"
     volumes:
       - ./infrastructure/nginx/api.dev.conf:/etc/nginx/conf.d/api.conf:ro
-      - media_data:/data/olx-media:ro
+      - ./data/olx-media:/data/olx-media:ro
     networks:
       - bharatmarket_net
 

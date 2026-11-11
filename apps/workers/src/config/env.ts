@@ -1,12 +1,13 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { resolveMediaRoot } from '@olx/shared';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   REDIS_URL: process.env.REDIS_URL || 'redis://127.0.0.1:6379',
-  MEDIA_ROOT: process.env.MEDIA_ROOT || path.join(process.cwd(), 'data/olx-media'),
+  MEDIA_ROOT: resolveMediaRoot(process.env.MEDIA_ROOT),
 };
 
 export function getRedisBullConnection() {

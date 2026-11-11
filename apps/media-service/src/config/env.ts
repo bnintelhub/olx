@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import { resolveMediaRoot } from '@olx/shared';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
@@ -7,9 +8,7 @@ export const env = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   PORT: Number(process.env.MEDIA_SERVICE_PORT || 5005),
   HOST: process.env.HOST || '0.0.0.0',
-  MEDIA_ROOT: path.resolve(
-    process.env.MEDIA_ROOT || path.join(process.cwd(), 'data/olx-media')
-  ),
+  MEDIA_ROOT: resolveMediaRoot(process.env.MEDIA_ROOT),
   MEDIA_PUBLIC_BASE_URL: (
     process.env.MEDIA_PUBLIC_BASE_URL ||
     process.env.MEDIA_CDN_URL ||

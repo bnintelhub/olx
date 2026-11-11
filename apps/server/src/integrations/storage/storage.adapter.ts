@@ -3,6 +3,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { pipeline } from 'stream/promises';
 import { Writable } from 'stream';
+import { resolveMediaRoot } from '@olx/shared';
 
 export interface StorageResult {
   tempPath: string;
@@ -27,20 +28,7 @@ export interface IStorageAdapter {
 
 // Resolves shared storage directory (prioritizing MEDIA_ROOT so uploads match Fastify & Nginx static routes)
 export function resolveUploadDir(): string {
-  if (process.env.MEDIA_ROOT) {
-    return path.resolve(process.env.MEDIA_ROOT);
-  }
-  if (process.env.UPLOAD_DIR) {
-    return path.resolve(process.env.UPLOAD_DIR);
-  }
-  let current = process.cwd();
-  while (current !== path.dirname(current)) {
-    if (fs.existsSync(path.join(current, 'pnpm-workspace.yaml'))) {
-      return path.join(current, 'uploads');
-    }
-    current = path.dirname(current);
-  }
-  return path.resolve(process.cwd(), 'uploads');
+  return resolveMediaRoot(process.env.MEDIA_ROOT || process.env.UPLOAD_DIR);
 }
 
 export class DiskStorageAdapter implements IStorageAdapter {

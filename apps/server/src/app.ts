@@ -19,6 +19,7 @@ import { authPlugin } from './plugins/auth.plugin';
 import { env } from './config/env';
 import { checkDatabaseConnection } from './config/prisma';
 import { isRedisHealthy } from './config/redis';
+import { resolveUploadDir } from './integrations/storage/storage.adapter';
 
 // Modular Route Imports
 import { authRoutes } from './modules/auth/auth.routes';
@@ -113,7 +114,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Support direct /media/ URLs from persistent local filesystem root (MEDIA_ROOT)
-  const mediaRoot = path.resolve(process.env.MEDIA_ROOT || path.join(process.cwd(), 'data/olx-media'));
+  const mediaRoot = resolveUploadDir();
   if (!fs.existsSync(mediaRoot)) {
     try { fs.mkdirSync(mediaRoot, { recursive: true }); } catch {}
   }
