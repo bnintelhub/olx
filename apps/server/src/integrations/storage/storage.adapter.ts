@@ -3,7 +3,6 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { pipeline } from 'stream/promises';
 import { Writable } from 'stream';
-import { S3StorageAdapter } from './s3.adapter';
 
 export interface StorageResult {
   tempPath: string;
@@ -212,11 +211,7 @@ let storageInstance: IStorageAdapter | null = null;
 
 export function getStorageAdapter(): IStorageAdapter {
   if (!storageInstance) {
-    if (process.env.STORAGE_DRIVER === 's3') {
-      storageInstance = new S3StorageAdapter();
-    } else {
-      storageInstance = new DiskStorageAdapter();
-    }
+    storageInstance = new DiskStorageAdapter();
   }
   return storageInstance;
 }

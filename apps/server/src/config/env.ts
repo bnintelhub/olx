@@ -23,15 +23,10 @@ const envSchema = z
     ADMIN_PASSWORD_HASH: z.string().optional(),
     ADMIN_LOGIN_WINDOW_MS: z.string().transform(Number).default('900000'),
     ADMIN_LOGIN_MAX_ATTEMPTS: z.string().transform(Number).default('10'),
-    // Storage configuration
-    STORAGE_DRIVER: z.enum(['disk', 's3']).default('disk'),
-    S3_ENDPOINT: z.string().optional(),
-    S3_REGION: z.string().default('us-east-1'),
-    S3_BUCKET: z.string().default('olx-media'),
-    S3_ACCESS_KEY: z.string().optional(),
-    S3_SECRET_KEY: z.string().optional(),
-    S3_FORCE_PATH_STYLE: z.string().transform((v) => v === 'true').default('true'),
-    S3_PUBLIC_URL: z.string().optional(),
+    // Media & Storage Configuration
+    MEDIA_ROOT: z.string().default('/data/olx-media'),
+    MEDIA_PUBLIC_BASE_URL: z.string().default('http://localhost:5000/media'),
+    MEDIA_SERVICE_URL: z.string().default('http://localhost:5005'),
     // PayU Hosted Checkout configuration
     PAYU_MERCHANT_KEY: z.string().default(process.env.PAYUKEY || process.env.PAYU_MERCHANT_KEY || 'payu_merchant_key_placeholder'),
     PAYU_MERCHANT_SALT: z.string().default(process.env.PAYUSALT || process.env.PAYU_MERCHANT_SALT || 'payu_merchant_salt_placeholder'),
