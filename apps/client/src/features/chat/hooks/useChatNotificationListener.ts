@@ -9,6 +9,8 @@ import { getChatSocket } from '../services/chatSocket.service';
 
 export function useChatNotificationListener(): void {
   const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const { user } = useAuthStore();
   const socketRef = useRef<Socket | null>(null);
 
@@ -75,7 +77,7 @@ export function useChatNotificationListener(): void {
           const notif = new Notification(senderName, options);
           notif.onclick = () => {
             window.focus();
-            navigate(clickUrl);
+            navigateRef.current(clickUrl);
           };
         } catch (e) {
           console.warn('[Notification] Native push display error:', e);
@@ -89,7 +91,7 @@ export function useChatNotificationListener(): void {
         action: {
           label: 'Reply',
           onClick: () => {
-            navigate(clickUrl);
+            navigateRef.current(clickUrl);
           },
         },
       });
@@ -128,5 +130,5 @@ export function useChatNotificationListener(): void {
         socketRef.current = null;
       }
     };
-  }, [user?.id, navigate]);
+  }, [user?.id]);
 }

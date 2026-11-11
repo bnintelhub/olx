@@ -16,3 +16,4 @@ RUN pnpm --filter @olx/media-service build
 
 EXPOSE 5005
 CMD ["pnpm", "--filter", "@olx/media-service", "start"]
+

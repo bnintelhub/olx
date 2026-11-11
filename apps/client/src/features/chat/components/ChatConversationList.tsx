@@ -82,7 +82,7 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
                     alt=""
                     className="w-12 h-12 rounded object-cover border border-gray-200"
                   />
-                  {conv.otherParty.isOnline && (
+                  {conv.otherParty?.isOnline && (
                     <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Online" />
                   )}
                 </div>
@@ -91,7 +91,7 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
                   <div className="flex items-baseline justify-between gap-1">
                     <div className="flex items-center gap-1.5 truncate">
                       <h4 className="text-xs font-bold text-gray-900 truncate">
-                        {conv.otherParty.name}
+                        {conv.otherParty?.name || 'User'}
                       </h4>
                       {conv.isBlocked && (
                         <span className="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded font-semibold">Blocked</span>

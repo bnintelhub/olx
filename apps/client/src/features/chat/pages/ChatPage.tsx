@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
+import { ChatErrorBoundary } from '../components/ChatErrorBoundary';
 import { ChatAuthRequired } from '../components/ChatAuthRequired';
 import { playNewMessageSound } from '../utils/chatSound';
 import { useChatUnreadStore } from '../stores/useChatUnreadStore';
@@ -39,6 +40,7 @@ export const ChatPage: React.FC = () => {
   const [mobileShowThread, setMobileShowThread] = useState(false);
   const [activeConvDetails, setActiveConvDetails] = useState<ConversationItem | null>(null);
   const [isSending, setIsSending] = useState(false);
+  const isSendingRef = useRef(false);
   const lastSentRef = useRef<{ text: string; time: number }>({ text: '', time: 0 });
   const socketRef = useRef<Socket | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
@@ -97,6 +99,10 @@ export const ChatPage: React.FC = () => {
               localPreviewUrl: (existing as any).localPreviewUrl,
             };
             return next;
+          }
+          // Prevent duplicate message if already in state
+          if (prev.some((m) => m.id === msg.id)) {
+            return prev;
           }
           return [...prev, msg];
         });
@@ -284,7 +290,8 @@ export const ChatPage: React.FC = () => {
       }
       setConversations(convList);
 
-      const selectedId = targetConvId || (targetConvIdParam && convList.some((c) => c.id === targetConvIdParam) ? targetConvIdParam : (!activeConvIdRef.current && convList.length > 0 ? convList[0].id : null));
+      // Prioritize explicit target conversation from param, route, or ad click
+      const selectedId = targetConvId || targetConvIdParam || (!activeConvIdRef.current && convList.length > 0 ? convList[0].id : null);
       if (selectedId) {
         setActiveConvId(selectedId);
         markConversationAsRead(selectedId);
@@ -295,7 +302,7 @@ export const ChatPage: React.FC = () => {
     } finally {
       if (isInitial) setLoading(false);
     }
-  }, [user, targetAdId, markConversationAsRead]);
+  }, [user, targetAdId, targetConvIdParam, markConversationAsRead]);
 
   useEffect(() => {
     void fetchInbox(true);
@@ -309,7 +316,16 @@ export const ChatPage: React.FC = () => {
       if (res.data?.success && res.data.data?.messages) {
         setMessages(res.data.data.messages);
         setNextCursor(res.data.data.nextCursor || null);
-        if (res.data.data.conversation) setActiveConvDetails(res.data.data.conversation);
+        if (res.data.data.conversation) {
+          const fetchedConv = res.data.data.conversation;
+          setActiveConvDetails(fetchedConv);
+          setConversations((prev) => {
+            if (!prev.some((c) => c.id === convId)) {
+              return sortConversationsDesc([fetchedConv, ...prev]);
+            }
+            return prev;
+          });
+        }
         setTimeout(() => scrollToBottom('auto'), 50);
         markConversationAsRead(convId);
       }
@@ -336,7 +352,7 @@ export const ChatPage: React.FC = () => {
 
   const handleSendMessage = async (customText?: string, attachmentUrl?: string, localPreviewUrl?: string) => {
     const textToSend = (customText || inputText).trim();
-    if ((!textToSend && !attachmentUrl) || !activeConvId || isSending) return;
+    if ((!textToSend && !attachmentUrl) || !activeConvId || isSendingRef.current || isSending) return;
 
     // Deduplicate rapid identical submissions within 2 seconds
     const now = Date.now();
@@ -344,6 +360,7 @@ export const ChatPage: React.FC = () => {
       return;
     }
     lastSentRef.current = { text: textToSend, time: now };
+    isSendingRef.current = true;
     setIsSending(true);
 
     const clientMessageId = crypto.randomUUID();
@@ -427,7 +444,10 @@ export const ChatPage: React.FC = () => {
     } catch (err) {
       console.error('Failed to send message', err);
     } finally {
-      setTimeout(() => setIsSending(false), 400);
+      setTimeout(() => {
+        isSendingRef.current = false;
+        setIsSending(false);
+      }, 350);
     }
   };
 
@@ -545,16 +565,18 @@ export const ChatPage: React.FC = () => {
             </div>
           )}
 
-          <ChatMessageThread
-            conversation={activeConversation} currentUserId={user?.id}
-            messages={messages} inputText={inputText}
-            onInputChange={handleInputChange} onSendMessage={handleSendMessage}
-            onDeleteMessage={handleDeleteMessage} onBlockUser={handleBlockUser}
-            onReportChat={handleReportChat} isOtherTyping={isOtherTyping}
-            messagesEndRef={messagesEndRef} messagesContainerRef={messagesContainerRef}
-            hasMoreOlder={Boolean(nextCursor)} loadingOlder={loadingOlder}
-            onLoadOlder={handleLoadOlder} isSending={isSending}
-          />
+          <ChatErrorBoundary>
+            <ChatMessageThread
+              conversation={activeConversation} currentUserId={user?.id}
+              messages={messages} inputText={inputText}
+              onInputChange={handleInputChange} onSendMessage={handleSendMessage}
+              onDeleteMessage={handleDeleteMessage} onBlockUser={handleBlockUser}
+              onReportChat={handleReportChat} isOtherTyping={isOtherTyping}
+              messagesEndRef={messagesEndRef} messagesContainerRef={messagesContainerRef}
+              hasMoreOlder={Boolean(nextCursor)} loadingOlder={loadingOlder}
+              onLoadOlder={handleLoadOlder} isSending={isSending}
+            />
+          </ChatErrorBoundary>
         </div>
       </div>
     </div>

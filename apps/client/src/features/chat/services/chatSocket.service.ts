@@ -23,7 +23,11 @@ export async function getChatSocket(userId?: string | null): Promise<Socket | nu
     currentSocketUserId = userId;
   }
 
-  if (socketInstance?.connected) {
+  // If socket instance already exists, reuse it immediately (no redundant connect calls)
+  if (socketInstance) {
+    if (socketInstance.disconnected) {
+      socketInstance.connect();
+    }
     return socketInstance;
   }
 
@@ -48,7 +52,8 @@ export async function getChatSocket(userId?: string | null): Promise<Socket | nu
         path: '/socket.io',
         auth: { token: activeToken, accessToken: activeToken },
         query: { token: activeToken },
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'],
+        upgrade: true,
         withCredentials: true,
         reconnection: true,
         reconnectionAttempts: Infinity,
@@ -67,11 +72,6 @@ export async function getChatSocket(userId?: string | null): Promise<Socket | nu
           }
         }
       });
-    } else {
-      socketInstance.auth = { token: activeToken, accessToken: activeToken };
-      if (!socketInstance.connected) {
-        socketInstance.connect();
-      }
     }
 
     connectingPromise = null;

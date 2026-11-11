@@ -100,7 +100,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
     );
   }
 
-  const isBuyer = conversation.otherParty.role === 'Seller';
+  const isBuyer = conversation.otherParty?.role === 'Seller';
   const quickPrompts = isBuyer
     ? ['Hi, is this still available?', 'What is your final price?', 'Can I inspect it today?', 'Where in the city can we meet?']
     : ['Yes, it is available.', 'Price is firm.', 'Yes, you can inspect it today.', 'When would you like to pick it up?'];
@@ -193,20 +193,20 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
         <div className="flex items-center gap-3 truncate">
           <div className="relative flex-shrink-0">
             <img src={adThumb} alt="" className="w-11 h-11 rounded object-cover border border-gray-200" />
-            {conversation.otherParty.isOnline && (
+            {conversation.otherParty?.isOnline && (
               <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
             )}
           </div>
           <div className="truncate">
             <div className="flex items-center gap-1.5 truncate">
-              <h4 className="text-sm font-bold text-gray-900 truncate">{conversation.otherParty.name}</h4>
-              <span className="text-[10px] text-gray-400">({conversation.otherParty.role})</span>
-              {conversation.otherParty.isOnline && (
+              <h4 className="text-sm font-bold text-gray-900 truncate">{conversation.otherParty?.name || 'User'}</h4>
+              <span className="text-[10px] text-gray-400">({conversation.otherParty?.role || 'User'})</span>
+              {conversation.otherParty?.isOnline && (
                 <span className="text-[10px] text-emerald-600 font-semibold">• Online</span>
               )}
             </div>
             <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5 truncate">
-              <span className="font-semibold text-[#002f34] truncate">{conversation.ad?.title}</span>
+              <span className="font-semibold text-[#002f34] truncate">{conversation.ad?.title || 'Classified Ad'}</span>
               <span>•</span>
               <span className="font-bold text-emerald-800">
                 ₹{Number(conversation.ad?.price || 0).toLocaleString('en-IN')}
@@ -242,8 +242,8 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
                 type="button"
                 onClick={() => {
                   setShowMenu(false);
-                  if (confirm(`Block ${conversation.otherParty.name}? You will no longer receive messages from this user.`)) {
-                    onBlockUser?.(conversation.otherParty.id);
+                  if (confirm(`Block ${conversation.otherParty?.name || 'this user'}? You will no longer receive messages from this user.`)) {
+                    if (conversation.otherParty?.id) onBlockUser?.(conversation.otherParty.id);
                   }
                 }}
                 className="w-full text-left px-3.5 py-2 hover:bg-gray-50 flex items-center gap-2 text-rose-600 font-medium"
@@ -292,7 +292,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
                 {/* Sender badge on incoming messages */}
                 {!isMine && (
                   <span className="text-[10px] font-bold text-[#002f34] block mb-0.5">
-                    {conversation.otherParty.name} ({conversation.otherParty.role})
+                    {conversation.otherParty?.name || 'User'} ({conversation.otherParty?.role || 'User'})
                   </span>
                 )}
 
@@ -358,7 +358,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
         {isOtherTyping && (
           <div className="flex items-center gap-1.5 text-xs text-gray-400 italic py-1">
             <span className="w-2 h-2 rounded-full bg-gray-400 animate-ping" />
-            <span>{conversation.otherParty.name} is typing...</span>
+            <span>{conversation.otherParty?.name || 'User'} is typing...</span>
           </div>
         )}
 

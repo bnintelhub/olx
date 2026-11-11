@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/api-client';
@@ -9,6 +10,9 @@ import {
 } from './firebaseMessaging';
 
 export function usePushNotifications() {
+  const navigate = useNavigate();
+  const navigateRef = useRef(navigate);
+  navigateRef.current = navigate;
   const { user } = useAuth();
   const [permission, setPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [isRegistering, setIsRegistering] = useState(false);
@@ -46,7 +50,7 @@ export function usePushNotifications() {
           ? {
               label: 'View',
               onClick: () => {
-                window.location.href = `/chat?conversationId=${conversationId}`;
+                navigateRef.current(`/chat?conversationId=${conversationId}`);
               },
             }
           : undefined,
