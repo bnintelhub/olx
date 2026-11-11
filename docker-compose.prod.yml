@@ -1,0 +1,211 @@
+services:
+  # ========================================================
+  # PostgreSQL 16 Relational Database Container
+  # ========================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: bharatmarket_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-olx_marketplace}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-olx_marketplace}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Redis 7 In-Memory Cache & Session Store (AOF Persistence)
+  # ========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: bharatmarket_redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Media Microservice (Uploads, Validation & Storage Engine)
+  # ========================================================
+  media-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.media
+    container_name: bharatmarket_media_service
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 5005
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_ROOT: "/data/olx-media"
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-https://yourdomain.com/media}
+      MAX_FILE_SIZE_BYTES: ${MAX_FILE_SIZE_BYTES:-15728640}
+    volumes:
+      - media_data:/data/olx-media
+    networks:
+      bharatmarket_net:
+        aliases:
+          - media-service
+
+  # ========================================================
+  # Backend API Server (Fastify 5 + Clustered Socket.IO)
+  # ========================================================
+  server:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.server
+    container_name: bharatmarket_server
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      media-service:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?JWT_ACCESS_SECRET must be set in .env}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in .env}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+      SMS_PROVIDER: ${SMS_PROVIDER:-MSG91}
+      MOCK_OTP_CODE: ${MOCK_OTP_CODE:-}
+      OTP_EXPIRY_SECONDS: ${OTP_EXPIRY_SECONDS:-300}
+      OTP_RESEND_COOLDOWN_SECONDS: ${OTP_RESEND_COOLDOWN_SECONDS:-45}
+      CLIENT_URL: ${CLIENT_URL:?CLIENT_URL must be set in .env}
+      ADMIN_URL: ${ADMIN_URL:-}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      ADMIN_LOGIN_WINDOW_MS: ${ADMIN_LOGIN_WINDOW_MS:-900000}
+      ADMIN_LOGIN_MAX_ATTEMPTS: ${ADMIN_LOGIN_MAX_ATTEMPTS:-10}
+      MEDIA_ROOT: "/data/olx-media"
+      MEDIA_SERVICE_URL: "http://media-service:5005"
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-https://yourdomain.com/media}
+      ENABLE_RATE_LIMIT: "true"
+      FIREBASE_SERVICE_ACCOUNT_PATH: ${FIREBASE_SERVICE_ACCOUNT_PATH:-}
+    volumes:
+      - media_data:/data/olx-media
+    networks:
+      bharatmarket_net:
+        aliases:
+          - backend
+          - backend_service
+
+  # ========================================================
+  # BullMQ Background Worker Service (Sharp WebP & Jobs)
+  # ========================================================
+  workers:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.worker
+    container_name: bharatmarket_workers
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      media-service:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_ROOT: "/data/olx-media"
+    volumes:
+      - media_data:/data/olx-media
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Client Customer Web Application (Production React Build)
+  # ========================================================
+  client:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.client
+    container_name: bharatmarket_client
+    restart: always
+    depends_on:
+      - server
+    networks:
+      bharatmarket_net:
+        aliases:
+          - client
+          - client_service
+
+  # ========================================================
+  # Admin Operations Portal (Production React Build)
+  # ========================================================
+  admin:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.admin
+    container_name: bharatmarket_admin
+    restart: always
+    depends_on:
+      - server
+    networks:
+      bharatmarket_net:
+        aliases:
+          - admin
+          - admin_service
+
+  # ========================================================
+  # Production Nginx Gateway & Direct Media Static Delivery
+  # ========================================================
+  nginx:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.nginx
+    container_name: bharatmarket_nginx
+    restart: always
+    depends_on:
+      - server
+      - media-service
+      - client
+      - admin
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - media_data:/data/olx-media:ro
+    networks:
+      - bharatmarket_net
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  media_data:
+    driver: local
+
+networks:
+  bharatmarket_net:
+    driver: bridge
