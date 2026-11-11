@@ -1,444 +1,254 @@
-# OLX ORBIT
+# OLX Orbit / BharatMarket
 
-OLX ORBIT भारत के लिए बनाया गया mobile-first peer-to-peer classifieds marketplace है। इसमें users cars, bikes, mobiles, electronics, furniture, properties, jobs और services जैसी categories में listing देख सकते हैं, search कर सकते हैं, ad publish कर सकते हैं और buyer-seller chat कर सकते हैं।
+OLX Orbit is a mobile-first, peer-to-peer classifieds marketplace designed for hyper-local buying and selling across India. Users can discover, search, post classified listings across categories (Cars, Mobiles, Properties, Electronics, Furniture, Bikes, Commercial Vehicles), negotiate via real-time chat, and receive instant push notifications.
 
-यह README वर्तमान codebase की architecture, modules, data flow, admin portal और local setup को समझाने के लिए है।
+This document serves as the comprehensive technical reference for the platform's architecture, monorepo structure, data flow, admin portal, and local development setup.
 
-## 1. Project Summary
+---
 
-### मुख्य capabilities
+## 1. Project Overview & Capabilities
 
-- Phone OTP आधारित login/register
-- Category और city आधारित ad discovery
-- Keyword, category, city, price और sorting के साथ search
-- Dynamic category attributes, जैसे fuel type, kms driven, storage और BHK
-- Authenticated user द्वारा images के साथ ad posting
-- My Ads में listing status manage करना
-- Wishlist/favourites
-- Buyer-seller conversations और real-time Socket.IO messaging
-- Listing report, user block और moderation workflow
-- Admin dashboard, ad moderation, category builder और admin publishing
-- PWA manifest और service worker
-- MySQL persistence और Prisma ORM
+### Core Features
 
-### Current implementation
+- **Authentication & Security**: Phone OTP / Email authentication, JWT access/refresh token rotation, rate-limiting, and Role-Based Access Control (RBAC).
+- **Listing Discovery & Search**: City and geolocation-based discovery, category hierarchy filtering, full-text search, and price range sorting.
+- **Dynamic Category Specifications**: Form schemas dynamically adapt per category (e.g., fuel type, mileage, storage capacity, BHK, property type).
+- **Listing Lifecycle & Moderation**: Multi-step post-ad flow with image uploads, automated moderation queue, state transitions (`DRAFT` → `PENDING_REVIEW` → `ACTIVE` / `REJECTED` → `SOLD` / `EXPIRED`).
+- **Real-Time Chat & Negotiation**: Socket.IO messaging with Redis clustering adapter, read/delivery receipts, typing indicators, image attachments, and automated fraud/UPI security alerts.
+- **Media Optimization Pipeline**: Standalone microservice utilizing Sharp to convert uploaded media into high-performance WebP variants (thumb, card, large).
+- **Notifications**: Integrated Firebase Cloud Messaging (FCM) web push notifications and PWA background service worker.
+- **Enterprise Admin Portal**: Comprehensive moderation queue, listing approvals, category attribute builder, disk storage monitoring, analytics, and audit logging.
 
-यह repository functional React + Express application है। कुछ enterprise features जैसे payment gateway, production SMS provider setup, CDN/S3 media pipeline और advanced analytics का architecture documentation में उल्लेख हो सकता है, लेकिन वर्तमान runtime में मुख्यतः local uploads, MySQL, JWT, REST और Socket.IO लागू हैं।
+---
 
 ## 2. Technology Stack
 
-| Layer | Technology | उपयोग |
+| Layer | Technologies | Responsibilities |
 |---|---|---|
-| Customer frontend | React 18, TypeScript, Vite | Home, search, listing, chat और user flows |
-| Styling/UI | Tailwind CSS, Lucide React | Responsive UI और icons |
-| Admin frontend | React + Vite SPA | `/admin` portal और management modules |
-| Backend | Node.js, Express, TypeScript | REST API, validation और business logic |
-| ORM/database | Prisma + MySQL 8.4 | Relational data और relationships |
-| Authentication | JWT access/refresh tokens | User और admin sessions |
-| OTP | Configurable MOCK, MSG91 या TWILIO provider | Phone login/registration |
-| Real-time | Socket.IO | Chat, typing indicator और read receipts |
-| Uploads | Multer + local `/uploads` directory | Ad images |
-| Security | Helmet, CORS, Zod, role middleware | Headers, origin control, env validation और RBAC |
-| Deployment | Docker Compose, Nginx | MySQL, backend और frontend containers |
+| **Client Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Zustand | Customer PWA interface: search, ad posting, real-time chat, wishlist |
+| **Admin Frontend** | React 18, TypeScript, Vite, Tailwind CSS, Lucide | Operational portal: moderation queue, category management, disk metrics |
+| **API Backend** | Fastify 5, Node.js, TypeScript | Modular REST API endpoints, Swagger documentation, JWT authentication |
+| **Media Service** | Fastify, TypeScript, Sharp, Multer | Media upload validation, WebP compression, local file storage management |
+| **Real-Time Layer** | Socket.IO, `@socket.io/redis-adapter` | Multi-server clustered real-time messaging, presence, and chat events |
+| **Background Jobs** | BullMQ, Redis 7 | Asynchronous media processing, cleanup tasks, and notification dispatch |
+| **Database & Cache** | PostgreSQL 16, Prisma ORM, Redis 7 | Relational persistence, spatial data, caching, and rate limiting |
+| **Proxy & Gateways** | Nginx, Docker Compose | Reverse proxy, static asset delivery, SSL termination, environment isolation |
+
+---
 
 ## 3. High-Level Architecture
 
 ```mermaid
-flowchart LR
-    Browser["React/Vite Customer or Admin UI"]
-    Nginx["Nginx / Vite Dev Proxy"]
-    API["Express API<br/>/api/v1"]
-    Socket["Socket.IO Server"]
-    Prisma["Prisma ORM"]
-    DB[("MySQL 8.4")]
-    Uploads[("Local uploads volume")]
+flowchart TD
+    Client["Client PWA (React / Vite :5173)"]
+    Admin["Admin Portal (React / Vite :5174)"]
+    Nginx["Nginx Reverse Proxy (:80)"]
 
-    Browser --> Nginx
-    Nginx --> API
-    Browser --> Socket
-    API --> Prisma
-    Prisma --> DB
-    API --> Uploads
-    Socket --> Prisma
+    subgraph Backend_Services["Backend Infrastructure"]
+        Server["Fastify Core Server (:5000)<br/>REST API & Socket.IO"]
+        MediaService["Media Microservice (:5005)<br/>Image Uploads & WebP Delivery"]
+        Worker["BullMQ Worker<br/>Async Image Processing & Push Jobs"]
+    end
+
+    subgraph Data_Stores["Data & Messaging Tier"]
+        DB[("PostgreSQL 16")]
+        RedisStore[("Redis 7<br/>Pub/Sub & Queue")]
+        Storage[("Disk Storage Volume<br/>/uploads")]
+    end
+
+    Client --> Nginx
+    Admin --> Nginx
+    Nginx --> Server
+    Nginx --> MediaService
+
+    Server --> DB
+    Server --> RedisStore
+    MediaService --> Storage
+    MediaService --> RedisStore
+    Worker --> RedisStore
+    Worker --> DB
+    Worker --> Storage
 ```
 
-### Request flow
+---
 
-1. Browser React components API को `/api/v1` पर call करते हैं।
-2. Express route request को controller तक भेजता है।
-3. Protected routes में `requireAuth` JWT verify करता है और database से active user check करता है।
-4. Controller Prisma के माध्यम से MySQL में read/write करता है।
-5. Standard response JSON में `success`, `data` या error information लौटती है।
-6. Chat के लिए REST history/load और Socket.IO live events दोनों उपयोग होते हैं।
+## 4. Monorepo Structure
 
-### Repository structure
+The codebase is organized as a unified monorepo managed with **pnpm workspaces**:
 
 ```text
 olx/
-├── frontend/
-│   ├── src/
-│   │   ├── components/       # Customer और admin UI modules
-│   │   ├── context/          # AuthContext
-│   │   ├── utils/            # Wishlist जैसे client helpers
-│   │   ├── types/            # Shared frontend types
-│   │   ├── App.tsx           # View routing और global modal state
-│   │   └── main.tsx          # React entry point
-│   ├── public/               # Manifest, service worker और static assets
-│   └── Dockerfile
-├── backend/
-│   ├── src/
-│   │   ├── routes/           # API route registration
-│   │   ├── controllers/      # HTTP handlers
-│   │   ├── services/         # JWT, OTP, search और Socket.IO
-│   │   ├── middleware/       # Auth, upload और error handler
-│   │   ├── config/           # Environment validation
-│   │   └── prisma.ts         # Prisma client
-│   ├── prisma/
-│   │   ├── schema.prisma     # MySQL schema
-│   │   └── seed*.ts          # Seed/data maintenance scripts
-│   └── Dockerfile
-├── docs/                     # Product, API, security और deployment docs
-├── tests/                    # PowerShell E2E test flow
-├── docker-compose.yml
-└── package.json
+├── apps/
+│   ├── client/                  # Customer-facing React 18 PWA application
+│   │   ├── public/              # Service workers, icons, manifest
+│   │   └── src/
+│   │       ├── features/        # Ads, auth, chat, home, search modules
+│   │       ├── components/      # UI components & shared modals
+│   │       └── context/         # Auth and layout providers
+│   ├── admin/                   # Administrative dashboard & moderation portal
+│   │   └── src/
+│   │       └── features/        # Moderation, categories, listings, media library
+│   ├── server/                  # Core Fastify API & Socket.IO backend
+│   │   └── src/
+│   │       ├── modules/         # Auth, ads, categories, chat, moderation, admin
+│   │       └── integrations/    # Storage adapters, push services
+│   ├── media-service/           # Dedicated media upload & optimization microservice
+│   └── workers/                 # BullMQ asynchronous background workers
+├── packages/
+│   ├── database/                # Prisma ORM schema, migrations, and seed scripts
+│   └── shared/                  # Common TypeScript interfaces, utilities, and storage providers
+├── infrastructure/
+│   ├── docker/dev/              # Dockerfiles for development containers
+│   └── nginx/                   # Nginx reverse proxy configuration
+├── docs/                        # Architectural documentation and specifications
+├── docker-compose.dev.yml       # Complete local containerized stack configuration
+└── package.json                 # Monorepo root configuration
 ```
 
-## 4. Customer Application Modules
+---
 
-### Home and discovery
+## 5. Application Modules
 
-- `Navbar`: logo, search, city selection, login, wishlist, chat, My Ads और admin entry.
-- `HeroBanner`: primary search/discovery area.
-- `CategoriesRibbon` और `CategoryGrid`: category navigation.
-- Recommendation feed newest ads को `/api/v1/ads?limit=12&sort=newest` से लाता है।
-- `AdCard`: listing preview, price, location और favourite action।
+### Customer Frontend (`apps/client`)
+- **Home & Catalog**: Hero banner with localized imagery, category ribbons, and algorithmic recommendation feeds.
+- **Search & Filters**: Multi-faceted search by keyword, price range, state, city, and dynamic category attributes.
+- **Ad Publishing (`PostAdModal`)**: Multi-step wizard supporting client-side image compression, attribute validation, and location tagging.
+- **Chat & Messaging (`/chat`)**: WhatsApp-style conversational thread supporting real-time presence indicators, delivered/read checkmarks, image attachments, and quick negotiation prompts.
+- **User Dashboard**: Listings manager ("My Ads"), status updates (Mark Sold, Renew), and personal wishlist.
 
-### Search
+### Administrative Portal (`apps/admin`)
+- **Moderation Queue**: Real-time inspection of pending classified advertisements, user reports, and scam detection triggers.
+- **Dynamic Category Builder**: Visual interface to construct category trees and define custom input specifications (text, number, boolean, select, multi-select).
+- **Media Library & Disk Storage**: Live visualization of disk capacity, storage utilization graphs, and media asset tracking.
+- **RBAC & User Governance**: Role assignment (`SUPER_ADMIN`, `ADMIN`, `MODERATOR`, `USER`) and account moderation (suspend, ban).
 
-`SearchPage` `/api/v1/ads` को query parameters के साथ call करता है। User keyword, category, city, min/max price और sort के आधार पर listings filter कर सकता है। Listing पर click करने पर `AdDetailModal` खुलता है।
+---
 
-### Authentication
+## 6. Real-Time Chat & Notification Architecture
 
-`AuthModal` का flow:
+### Message Lifecycle
 
-1. User phone number देता है।
-2. Frontend `/api/v1/auth/otp/send` call करता है।
-3. OTP verify होने पर `/api/v1/auth/otp/verify` JWT tokens देता है।
-4. `AuthContext` user session restore, current user और logout handle करता है।
-5. Expiry और refresh के लिए access/refresh token mechanism उपलब्ध है।
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Buyer as Buyer (Client A)
+    participant Server as Socket.IO (Server)
+    participant DB as PostgreSQL
+    participant FCM as Push Service (FCM)
+    actor Seller as Seller (Client B)
 
-Development में `SMS_PROVIDER=MOCK` और `MOCK_OTP_CODE` उपयोग किया जा सकता है।
+    Buyer->>Server: emit("message.send", payload)
+    Server->>DB: Persist message & update conversation.lastMessageAt
+    Server->>Server: Deduplicate room broadcasts
+    par Real-Time Broadcast
+        Server-->>Buyer: emit("message.sent", ack)
+        Server-->>Seller: emit("message.new", messageData)
+        Server-->>Buyer: emit("conversation.updated", preview)
+        Server-->>Seller: emit("conversation.updated", preview)
+    and Offline Push Notification
+        alt Seller is not in active chat room
+            Server->>FCM: Evaluate push notification rules
+            FCM-->>Seller: Deliver background web push
+        end
+    end
+```
 
-### Post Ad
+### Shared Socket Management
+The client features a centralized socket singleton ([chatSocket.service.ts](file:///apps/client/src/features/chat/services/chatSocket.service.ts)) to prevent multiple connections per browser tab, eliminate handshake race conditions during React 18 Strict Mode mounts, and preserve connections across route transitions.
 
-`PostAdModal`:
+---
 
-1. Category tree और cities load करता है।
-2. Selected category की dynamic attributes load करता है।
-3. अधिकतम configured image files upload endpoint पर भेजता है।
-4. Title, description, price, location और attributes के साथ ad create करता है।
-5. Listing सामान्यतः `PENDING_REVIEW` state में जाती है और admin review के बाद active होती है।
+## 7. Database Design & State Transitions
 
-### My Ads और favourites
+The database schema is defined in [packages/database/prisma/schema.prisma](../packages/database/prisma/schema.prisma) targeting PostgreSQL 16.
 
-- `MyAdsModal` user की अपनी listings दिखाता है और status update/mark sold flow देता है।
-- `WishlistModal` favourite ads दिखाता है।
-- Favourite toggle `/api/v1/ads/:id/favourite` से होता है।
-
-### Ad details और contact
-
-`AdDetailModal` listing details, images, seller information, similar listings और contact action दिखाता है। Contact information protected endpoint से आता है और logged-in access rules लागू होते हैं।
-
-### Chat
-
-`ChatModal`:
-
-- Conversation list और message history REST से load करता है।
-- Socket.IO से authenticated connection बनाता है।
-- `join_conversation`, `send_message`, `typing`, `mark_read` और `leave_conversation` events उपयोग करता है।
-- Messages database में persist होते हैं।
-- Unread counts और read status conversation में maintain होते हैं।
-- Message content में UPI, Google Pay, PhonePe, advance, token money, QR code और PIN जैसे fraud-risk terms मिलने पर warning metadata भेजा जाता है।
-
-### Safety
-
-- User listing को report कर सकता है।
-- User दूसरे user को block कर सकता है।
-- Report reasons में spam/fraud, inappropriate content, prohibited item, misleading price, duplicate और already sold शामिल हैं।
-
-## 5. Admin Portal
-
-Admin portal customer site से अलग authenticated SPA view है। इसे `/admin` path या `?view=admin` से खोला जा सकता है। Admin login `/api/v1/auth/admin-login` से होता है और session token local storage में persist होता है।
-
-### Dashboard Overview
-
-- Total ads, active, pending, rejected और sold counts
-- Total categories, users, reports और conversations
-- Category breakdown
-- Recent ads
-- Date-wise trend data
-- Pending moderation और quick action links
-
-### Post New Listing
-
-Admin verified listing की तरह ad publish कर सकता है। Category चुनने पर dynamic specification schema आता है। Admin title, description, price, location, image URL और category-specific attributes भरकर ad create कर सकता है।
-
-### Categories & Specs
-
-`AdminCategoryBuilder` से:
-
-- Root और child categories manage की जा सकती हैं।
-- Category name, description और hierarchy बनाई जा सकती है।
-- Category attributes add/edit/delete किए जा सकते हैं।
-- Attribute types `TEXT`, `NUMBER`, `BOOLEAN`, `SELECT`, `MULTI_SELECT` और `DATE` हैं।
-- Required, filterable, unit और display order configure किए जा सकते हैं।
-
-इससे अलग-अलग category के लिए अलग form fields और search filters बनते हैं, बिना frontend में हर field hard-code किए।
-
-### Manage All Ads
-
-- सभी ads की सूची
-- Status filter: active, pending, rejected, sold आदि
-- Category filter
-- Search
-- Admin status update
-- Listing delete
-- Listing detail/open action
-
-### Users Management
-
-Admin navigation में user management module मौजूद है। इसका उद्देश्य user accounts, role/status और account operations को manage करना है। Backend user model में `GUEST`, `USER`, `MODERATOR`, `ADMIN` roles तथा `ACTIVE`, `SUSPENDED`, `BANNED`, `DELETED` statuses हैं।
-
-### Reports & Analytics
-
-- Dashboard statistics और trend visualization
-- Category-wise distribution
-- Recent activity
-- Operational reporting के लिए summary cards
-
-### Comments & Messages
-
-Admin navigation में comments/messages workspace है। Conversation data backend में buyer, seller, messages और unread counters के साथ store होता है। Live chat operations Socket.IO से चलते हैं।
-
-### Safety & Fraud Desk
-
-- Pending ads moderation queue
-- Reported ads/users की सूची
-- Approve, reject या review action
-- Report resolve/dismiss action
-- Ad boost types जैसे `FEATURED`, `URGENT`, `HOME_SPOTLIGHT`
-- Fraud और policy violations के लिए review workflow
-
-### Settings
-
-Admin settings area application-level operational settings के लिए रखा गया है। Runtime secrets और environment configuration `.env`/deployment configuration से नियंत्रित होते हैं।
-
-### Admin authorization
-
-Backend पर:
-
-- `requireAuth` Bearer JWT validate करता है।
-- User active है या नहीं, database से verify होता है।
-- `requireRole(UserRole.ADMIN, UserRole.MODERATOR)` जैसे guards category/moderation actions को restrict करते हैं।
-- Delete category और attribute जैसे destructive actions ADMIN-only हैं।
-
-## 6. Backend API Modules
-
-सभी endpoints `/api/v1` के नीचे mounted हैं।
-
-| Module | प्रमुख endpoints | काम |
-|---|---|---|
-| Auth | `/auth/otp/send`, `/auth/otp/verify`, `/auth/admin-login`, `/auth/me`, `/auth/refresh`, `/auth/logout` | Login, registration, admin auth और sessions |
-| Categories | `/categories`, `/categories/tree`, `/categories/:id/attributes` | Category tree और dynamic specs |
-| Locations | `/locations/cities` | City/location data |
-| Ads | `/ads`, `/ads/:id`, `/ads/upload-images`, `/ads/:id/favourite` | Search, CRUD, images और favourites |
-| User | `/user/my-ads`, `/user/favourites` | Current user data |
-| Chat | `/chat/conversations`, `/chat/conversations/:id/messages` | Conversations और message history |
-| Moderation | `/moderation/pending`, `/moderation/reports`, `/moderation/ads/:id/review` | Review और reports |
-| Admin | `/admin/stats`, `/admin/ads`, `/admin/ads/:id/status` | Admin statistics और listing management |
-| Health | `/health` | Service/database health response |
-
-## 7. Database Design
-
-Prisma schema [packages/database/prisma/schema.prisma](../packages/database/prisma/schema.prisma) में PostgreSQL के लिए defined है।
-
-### Identity
-
-- `User`: phone/email, verification flags, role, status और tokens
-- `Profile`: name, avatar, bio, location और ratings
-- `OtpSession`: hashed OTP, attempts, purpose और expiry
-
-### Catalog
-
-- `Location`: state/city/locality hierarchy और coordinates
-- `Category`: parent-child category tree
-- `CategoryAttribute`: dynamic form/filter schema
-- `Ad`: listing owner, category, location, price, status और timestamps
-- `AdImage`: listing images
-- `AdAttributeValue`: category-specific values
-
-### Engagement
-
-- `Favourite`
-- `SavedSearch`
-- `Conversation`
-- `Message`
-- `Notification`
-- `Review`
-
-### Trust and operations
-
-- `Report`
-- `Block`
-- `FeaturedAd`
-- `Banner`
-- `AuditLog`
-
-### Ad lifecycle
+### Ad Status State Diagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT
-    DRAFT --> PENDING_REVIEW: User/Admin submits
-    PENDING_REVIEW --> ACTIVE: Approved
-    PENDING_REVIEW --> REJECTED: Policy issue
-    REJECTED --> PENDING_REVIEW: User edits/resubmits
-    ACTIVE --> SOLD: Seller marks sold
-    ACTIVE --> EXPIRED: Expiry
-    ACTIVE --> ARCHIVED: User/Admin archives
-    EXPIRED --> ACTIVE: Renew
+    [*] --> DRAFT: Initial Creation
+    DRAFT --> PENDING_REVIEW: Submission
+    PENDING_REVIEW --> ACTIVE: Admin Approval
+    PENDING_REVIEW --> REJECTED: Policy Violation
+    REJECTED --> PENDING_REVIEW: Resubmission with edits
+    ACTIVE --> SOLD: Seller marks as sold
+    ACTIVE --> EXPIRED: 30-day lifecycle expiry
+    ACTIVE --> ARCHIVED: Soft-deleted by user or admin
+    EXPIRED --> ACTIVE: Ad renewal
 ```
 
-## 8. Security and Reliability
+---
 
-- Helmet security headers enabled हैं।
-- CORS configured client URL और local development origins के लिए है।
-- Environment variables Zod schema से validate होते हैं; invalid required config पर server start नहीं होता।
-- Password/OTP values plain text में persist नहीं की जानी चाहिए; OTP session expiry और attempt tracking schema में है।
-- JWT access और refresh secrets अलग हैं।
-- Protected routes Bearer token और active-user check का उपयोग करते हैं।
-- Role-based authorization admin/moderator operations पर लागू है।
-- Multer upload middleware image upload handling के लिए उपयोग होता है।
-- Global error handler API errors को centralized तरीके से handle करता है।
-- Chat में conversation ownership verify होती है, इसलिए user केवल अपनी buyer/seller conversation access कर सकता है।
+## 8. API Endpoints Reference
 
-Production में `.env` secrets, strong JWT secrets, real SMS provider, HTTPS, managed database backup और object storage जरूर configure करें।
+All REST endpoints are prefixed under `/api/v1`:
 
-## 9. Local Development
+| Module | Key Routes | Functionality |
+|---|---|---|
+| **Auth** | `/auth/otp/send`, `/auth/otp/verify`, `/auth/refresh`, `/auth/me`, `/auth/logout` | Phone OTP login, token rotation, profile identity |
+| **Categories** | `/categories`, `/categories/tree`, `/categories/:id/attributes` | Nested categories and dynamic specification schemas |
+| **Locations** | `/locations/cities`, `/locations/states` | Geolocation and indexed cities |
+| **Listings** | `/ads`, `/ads/:id`, `/ads/:id/status`, `/ads/:id/favourite` | Search, filtering, posting, status transitions |
+| **Chat** | `/chat/conversations`, `/chat/conversations/:id/messages`, `/chat/conversations/:id/read` | Inbox management, message history, read status |
+| **Media** | `/media/images`, `/media/status/:id` | Image upload, validation, variant processing |
+| **Admin** | `/admin/metrics/storage`, `/admin/ads`, `/admin/users`, `/admin/reports` | Operational control, moderation, storage graphs |
+| **Health** | `/health` | Liveness and readiness probes |
+
+---
+
+## 9. Local Development Setup
 
 ### Prerequisites
+- **Node.js**: v20 LTS or higher
+- **pnpm**: v9 or higher (`corepack enable pnpm`)
+- **Docker Desktop**: For running containerized PostgreSQL, Redis, and services
 
-- Node.js 18+ (Node.js 20 LTS recommended)
-- npm
-- Docker Desktop, यदि Compose database/backend/frontend चलाना हो
-- MySQL 8.4 या Docker MySQL
+### Option 1: Running the Complete Docker Stack (Recommended)
 
-### Install
+1. Clone repository and initialize environment files:
+   ```bash
+   cp .env.example .env
+   ```
 
-```powershell
-npm install
-npm --prefix backend install
-npm --prefix frontend install
-```
+2. Start all services in development mode:
+   ```bash
+   docker compose -f docker-compose.dev.yml up -d
+   ```
 
-Backend में `backend/.env` बनाकर कम-से-कम ये values दें:
+3. Service Access Endpoints:
+   - **Customer Web Application**: [http://localhost:5173](http://localhost:5173)
+   - **Admin Portal**: [http://localhost:5174](http://localhost:5174)
+   - **Backend API**: [http://localhost:5000](http://localhost:5000)
+   - **Swagger Documentation**: [http://localhost:5000/docs](http://localhost:5000/docs)
+   - **Media Service**: [http://localhost:5005](http://localhost:5005)
 
-```env
-NODE_ENV=development
-PORT=5000
-CLIENT_URL=http://localhost:5173
-DATABASE_URL="mysql://olx_user:olx_secret_pass@localhost:3306/olx_marketplace"
-JWT_ACCESS_SECRET="replace-with-a-long-development-secret"
-JWT_REFRESH_SECRET="replace-with-another-long-development-secret"
-SMS_PROVIDER=MOCK
-MOCK_OTP_CODE=123456
-```
+### Option 2: Running Locally via pnpm
 
-### Database and seed
+1. Install monorepo dependencies:
+   ```bash
+   pnpm install
+   ```
 
-```powershell
-npm --prefix backend run prisma:generate
-npm --prefix backend run prisma:push
-npm --prefix backend run prisma:seed
-```
+2. Generate Prisma client & apply database schema:
+   ```bash
+   pnpm --filter @olx/database exec prisma generate
+   pnpm --filter @olx/database exec prisma db push
+   pnpm --filter @olx/database exec prisma db seed
+   ```
 
-### Run frontend and backend
+3. Launch development servers concurrently:
+   ```bash
+   pnpm dev
+   ```
 
-दो अलग terminals में:
+---
 
-```powershell
-npm run dev:backend
-npm run dev:frontend
-```
+## 10. Related Technical Documentation
 
-- Frontend: `http://localhost:5173`
-- Backend health: `http://localhost:5000/api/v1/health`
-- Admin: `http://localhost:5173/admin`
+For deeper architectural details, consult the specialized documentation files:
 
-### Docker Compose
-
-```powershell
-docker compose up --build -d
-docker compose down
-```
-
-Compose में तीन services हैं:
-
-1. `mysql`: persistent MySQL data volume
-2. `backend`: Express API और Socket.IO, port `5000`
-3. `frontend`: built React app और Nginx, port `80`
-
-## 10. Build and Test
-
-```powershell
-# Backend और frontend दोनों build
-npm run build
-
-# E2E PowerShell flow
-npm run test:e2e
-```
-
-Frontend build में TypeScript check और Vite production bundle शामिल है। Backend build TypeScript compiler से होता है।
-
-## 11. Related Documentation
-
-| File | विषय |
-|---|---|
-| [01-PRD.md](01-PRD.md) | Product vision, personas और requirements |
-| [02-SYSTEM-ARCHITECTURE.md](02-SYSTEM-ARCHITECTURE.md) | विस्तृत architecture plan |
-| [03-DATABASE-SCHEMA.md](03-DATABASE-SCHEMA.md) | Data model और schema reference |
-| [04-API-SPEC.md](04-API-SPEC.md) | REST/Socket protocol reference |
-| [AUTH_WORKFLOW.md](AUTH_WORKFLOW.md) | Fastify Authentication, BullMQ Email OTP Queue, and API Payloads |
-| [RBAC_WORKFLOW.md](RBAC_WORKFLOW.md) | Role-Based Access Control, Granular Permissions, and Capabilities |
-| [05-UI-UX-PLAN.md](05-UI-UX-PLAN.md) | UI/UX plan और responsive layouts |
-| [06-SECURITY-AND-COMPLIANCE.md](06-SECURITY-AND-COMPLIANCE.md) | Security और compliance guidance |
-| [07-SEARCH-AND-RECOMMENDATION.md](07-SEARCH-AND-RECOMMENDATION.md) | Search और recommendation design |
-| [08-DEVOPS-AND-TESTING.md](08-DEVOPS-AND-TESTING.md) | Deployment और testing strategy |
-| [09-IMPLEMENTATION-ROADMAP.md](09-IMPLEMENTATION-ROADMAP.md) | Phase-wise implementation plan |
-
-### Detailed implementation planning
-
-वर्तमान implementation को execute करने के लिए detailed planning notes [planning/](planning/) folder में हैं:
-
-- [Planning overview](planning/00-PLANNING-OVERVIEW.md)
-- [Design system और admin shell](planning/01-DESIGN-SYSTEM-AND-ADMIN-SHELL.md)
-- [Admin modules plan](planning/02-ADMIN-MODULES-PLAN.md)
-- [Architecture और data flow plan](planning/03-ARCHITECTURE-DATA-FLOW-PLAN.md)
-- [Phase execution plan](planning/04-PHASE-EXECUTION-PLAN.md)
-- [QA, acceptance और release checklist](planning/05-QA-ACCEPTANCE-AND-RELEASE.md)
-- [Phase 0 audit report](planning/06-PHASE-0-AUDIT-REPORT.md)
-- [API integration matrix](planning/07-API-INTEGRATION-MATRIX.md)
-- [Defect and risk register](planning/08-DEFECT-AND-RISK-REGISTER.md)
-- [Rebuild scope approval](planning/09-REBUILD-SCOPE-APPROVAL.md)
-- [Phase 2 auth/RBAC implementation](planning/10-PHASE-2-AUTH-RBAC-IMPLEMENTATION.md)
-- [Phase 3 dashboard and analytics implementation](planning/11-PHASE-3-DASHBOARD-ANALYTICS-IMPLEMENTATION.md)
-- [Phase 4 listing management and moderation](planning/12-PHASE-4-LISTING-MANAGEMENT-IMPLEMENTATION.md)
-- [Phase 5 user management and safety](planning/13-PHASE-5-USER-MANAGEMENT-AND-SAFETY-IMPLEMENTATION.md)
-
-## 12. Important Notes
-
-- README में वर्णित modules वर्तमान codebase के नाम और routes के अनुसार हैं।
-- Local development में mock OTP default है; production में real provider configure करें।
-- Default/example secrets केवल development के लिए हैं; production में इन्हें बदलना अनिवार्य है।
-- Database schema बदलने के बाद Prisma generate और database push/migration process चलाएँ।
-- Admin actions को production में audit logging, least-privilege roles और HTTPS के साथ deploy करें।
+- [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md): Production container topology, Nginx routing, and Zero-Downtime deployment guide.
+- [media.md](media.md): Dedicated media service architecture, WebP processing pipeline, and storage strategy.
+- [AUTH_WORKFLOW.md](AUTH_WORKFLOW.md): Fastify OTP authentication lifecycle, Redis session management, and JWT validation.
+- [RBAC_WORKFLOW.md](RBAC_WORKFLOW.md): Granular permission sets, user roles, and access control matrices.
+- [AD_CREATION_AND_MODERATION_FLOW.md](AD_CREATION_AND_MODERATION_FLOW.md): Detailed classified advertisement lifecycle and moderation mechanics.
