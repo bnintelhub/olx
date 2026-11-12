@@ -22,6 +22,16 @@ data/*
 .env.local
 .env.*.local
 !.env.example
+*.env
+*.env.*
+infrastructure/.env.production
+infrastructure/.env.dev
+infrastructure/secrets/*.env
+!infrastructure/.env.production.example
+!infrastructure/.env.dev.example
+!infrastructure/secrets/*.example
+!*.example
+!*.example.*
 *-firebase-adminsdk-*.json
 
 # Logs and system artifacts

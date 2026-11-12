@@ -3,12 +3,16 @@ RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* turbo.json .npmrc ./
 COPY packages/database ./packages/database
 COPY packages/shared ./packages/shared
 COPY apps/media-service ./apps/media-service
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm --filter @olx/database db:generate
 RUN pnpm --filter @olx/database build
 RUN pnpm --filter @olx/shared build
@@ -16,4 +20,3 @@ RUN pnpm --filter @olx/media-service build
 
 EXPOSE 5005
 CMD ["pnpm", "--filter", "@olx/media-service", "start"]
-

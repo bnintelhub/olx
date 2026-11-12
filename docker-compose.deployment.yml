@@ -1,0 +1,179 @@
+services:
+  # ========================================================
+  # Redis 7 In-Memory Cache & Session Store (AOF Persistence)
+  # ========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: bharatmarket_redis
+    restart: always
+    command: redis-server --appendonly yes
+    env_file:
+      - ./infrastructure/secrets/redis.env
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Media Microservice (Uploads, Validation & Storage Engine)
+  # Configured via central infrastructure secrets (Neon DB / Cloud DB)
+  # ========================================================
+  media-service:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.media
+    container_name: bharatmarket_media_service
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+    env_file:
+      - ./infrastructure/.env.production
+      - ./infrastructure/secrets/database.env
+      - ./infrastructure/secrets/redis.env
+      - ./infrastructure/secrets/media.env
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_SERVICE_URL: "http://media-service:5005"
+    volumes:
+      - media_data:/data/olx-media
+    networks:
+      bharatmarket_net:
+        aliases:
+          - media-service
+
+  # ========================================================
+  # Backend API Server (Fastify 5 + Clustered Socket.IO)
+  # Configured via central infrastructure secrets (Neon DB / Cloud DB)
+  # ========================================================
+  server:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.server
+    container_name: bharatmarket_server
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      media-service:
+        condition: service_started
+    env_file:
+      - ./infrastructure/.env.production
+      - ./infrastructure/secrets/database.env
+      - ./infrastructure/secrets/redis.env
+      - ./infrastructure/secrets/jwt.env
+      - ./infrastructure/secrets/payment.env
+      - ./infrastructure/secrets/firebase.env
+      - ./infrastructure/secrets/media.env
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_SERVICE_URL: "http://media-service:5005"
+    ports:
+      - "5000:5000"
+    volumes:
+      - media_data:/data/olx-media
+    networks:
+      bharatmarket_net:
+        aliases:
+          - backend
+          - backend_service
+
+  # ========================================================
+  # BullMQ Background Worker Service (Sharp WebP & Jobs)
+  # Configured via central infrastructure secrets (Neon DB / Cloud DB)
+  # ========================================================
+  workers:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.worker
+    container_name: bharatmarket_workers
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      media-service:
+        condition: service_started
+    env_file:
+      - ./infrastructure/.env.production
+      - ./infrastructure/secrets/database.env
+      - ./infrastructure/secrets/redis.env
+      - ./infrastructure/secrets/media.env
+      - ./infrastructure/secrets/firebase.env
+    environment:
+      REDIS_URL: "redis://redis:6379"
+      MEDIA_SERVICE_URL: "http://media-service:5005"
+    volumes:
+      - media_data:/data/olx-media
+    networks:
+      - bharatmarket_net
+
+  # ========================================================
+  # Client Customer Web Application (Production React Build)
+  # ========================================================
+  client:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.client
+    container_name: bharatmarket_client
+    restart: always
+    depends_on:
+      - server
+    networks:
+      bharatmarket_net:
+        aliases:
+          - client
+          - client_service
+
+  # ========================================================
+  # Admin Operations Portal (Production React Build)
+  # ========================================================
+  admin:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.admin
+    container_name: bharatmarket_admin
+    restart: always
+    depends_on:
+      - server
+    networks:
+      bharatmarket_net:
+        aliases:
+          - admin
+          - admin_service
+
+  # ========================================================
+  # Production Nginx Gateway & Direct Media Static Delivery
+  # ========================================================
+  nginx:
+    build:
+      context: .
+      dockerfile: ./infrastructure/docker/prod/Dockerfile.nginx
+    container_name: bharatmarket_nginx
+    restart: always
+    depends_on:
+      - server
+      - media-service
+      - client
+      - admin
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - media_data:/data/olx-media:ro
+    networks:
+      - bharatmarket_net
+
+volumes:
+  redis_data:
+    driver: local
+  media_data:
+    driver: local
+
+networks:
+  bharatmarket_net:
+    driver: bridge

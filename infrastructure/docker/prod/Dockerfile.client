@@ -3,11 +3,15 @@ RUN apk add --no-cache libc6-compat
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* turbo.json .npmrc ./
 COPY packages/shared ./packages/shared
 COPY apps/client ./apps/client
 
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 RUN pnpm --filter @olx/client build
 
 FROM nginx:alpine
@@ -19,4 +23,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:80/ || exit 1
 
 CMD ["nginx", "-g", "daemon off;"]
-

@@ -108,16 +108,39 @@ flowchart TD
 
 ---
 
-## 2. Environment Files & Variables Matrix
+## 2. Centralized Infrastructure Secrets & Variables Architecture
+
+To make VPS terminal operations effortless and avoid modifying files across multiple directories, all environment secrets and configuration are organized in a single central directory:
+
+```text
+infrastructure/
+├── .env.production               # Production top-level app settings (ports, URLs, rates)
+├── .env.production.example
+├── .env.dev                      # Local dev top-level app settings
+├── .env.dev.example
+└── secrets/
+    ├── database.env              # Production DB (Neon DB / Cloud PostgreSQL)
+    ├── database.dev.env          # Dev DB (Local Docker PostgreSQL)
+    ├── database.env.example
+    ├── redis.env                 # Redis connection URI (internal Docker / local)
+    ├── redis.env.example
+    ├── jwt.env                   # High-entropy JWT authentication secrets
+    ├── jwt.env.example
+    ├── payment.env               # PayU payment gateway keys
+    ├── payment.env.example
+    ├── firebase.env              # Firebase Cloud Messaging credentials
+    ├── firebase.env.example
+    ├── media.env                 # Media microservice & storage paths
+    └── media.env.example
+```
 
 ### Where to Place Which `.env` File
 
-Depending on your deployment model, configuration files are placed in different directories:
-
 | Deployment Model | File Path | Target Component | How It Is Loaded |
 |:---|:---|:---|:---|
-| **Docker Compose (Production)** | `olx/.env` | All 8 Containers | Docker Compose automatically injects variables into `docker-compose.prod.yml` |
-| **Bare-Metal: DB Migrations** | `olx/packages/database/.env` | Prisma CLI | Prisma CLI automatically loads `DATABASE_URL` from this folder |
+| **Docker Compose (Cloud DB / Neon)** | `infrastructure/secrets/*.env` | `docker-compose.deployment.yml` | Injected securely via `env_file:` |
+| **Docker Compose (Local Postgres)** | `infrastructure/secrets/*.env` | `docker-compose.prod.yml` | Injected securely via `env_file:` |
+| **Bare-Metal: DB Migrations** | `olx/packages/database/.env` | Prisma CLI | Prisma CLI loads `DATABASE_URL` from this folder |
 | **Bare-Metal: Backend API** | `olx/apps/server/.env` | Fastify REST API & Socket.IO | Loaded by server process on boot |
 | **Bare-Metal: Media Service** | `olx/apps/media-service/.env` | Media Ingestion Service | Loaded by media-service process on boot |
 | **Bare-Metal: Workers** | `olx/apps/workers/.env` | BullMQ Sharp Worker | Loaded by worker process on boot |
@@ -341,21 +364,23 @@ Set strong passwords for `DB_PASSWORD`, `JWT_ACCESS_SECRET`, and `JWT_REFRESH_SE
 
 ### Step 2: Build & Start Containers
 
-Run with the production compose file:
+Choose the compose file that matches your database architecture:
 
+#### Option 1: Self-Hosted PostgreSQL Container
+When running PostgreSQL inside Docker on the host:
 ```bash
 docker compose -f docker-compose.prod.yml up -d --build
 ```
+Spins up all 8 services: `postgres`, `redis`, `media-service`, `server`, `workers`, `client`, `admin`, and `nginx`.
 
-Docker Compose builds and spins up all 8 services:
-1. `bharatmarket_postgres` (PostgreSQL 16)
-2. `bharatmarket_redis` (Redis 7)
-3. `bharatmarket_media_service` (Media Ingestion Engine)
-4. `bharatmarket_server` (Fastify API & Socket.IO)
-5. `bharatmarket_workers` (BullMQ WebP Processors)
-6. `bharatmarket_client` (Customer Web SPA)
-7. `bharatmarket_admin` (Admin Operations Portal)
-8. `bharatmarket_nginx` (Unified Gateway on Port 80 & 443)
+#### Option 2: Cloud Managed Database (Neon DB / Supabase / AWS RDS) — *Recommended*
+When using an external managed PostgreSQL database like **Neon DB**, no local database container is needed:
+```bash
+docker compose -f docker-compose.deployment.yml up -d --build
+```
+* Bypasses the local `postgres` container and `postgres_data` volume.
+* Reads `DATABASE_URL` dynamically from your root `.env` (e.g. `postgresql://user:pass@ep-xyz-pooler.aws.neon.tech/neondb?sslmode=require&pgbouncer=true`).
+* Starts only the 7 necessary application and gateway services (`redis`, `media-service`, `server`, `workers`, `client`, `admin`, `nginx`).
 
 ---
 

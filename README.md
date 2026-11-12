@@ -507,9 +507,18 @@ To boot all infrastructure services (PostgreSQL, Redis, Media Microservice, Fast
    ```
 
 2. **Start containerized stack:**
-   ```bash
-   docker compose -f docker-compose.dev.yml up -d
-   ```
+   * **Development (Local Node/Vite + local DB):**
+     ```bash
+     docker compose -f docker-compose.dev.yml up -d
+     ```
+   * **Production with Neon DB / External PostgreSQL (Recommended):**
+     ```bash
+     docker compose -f docker-compose.deployment.yml up -d --build
+     ```
+   * **Production with Self-Hosted PostgreSQL Container:**
+     ```bash
+     docker compose -f docker-compose.prod.yml up -d --build
+     ```
 
 3. **Verify running containers:**
    ```bash
