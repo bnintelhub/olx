@@ -20,35 +20,7 @@ services:
       - bharatmarket_net
 
   # ========================================================
-  # Media Microservice (Uploads, Validation & Storage Engine)
-  # Configured via central infrastructure secrets (Neon DB / Cloud DB)
-  # ========================================================
-  media-service:
-    build:
-      context: .
-      dockerfile: ./infrastructure/docker/prod/Dockerfile.media
-    container_name: bharatmarket_media_service
-    restart: always
-    depends_on:
-      redis:
-        condition: service_healthy
-    env_file:
-      - ./infrastructure/.env.production
-      - ./infrastructure/secrets/database.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/media.env
-    environment:
-      REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
-    volumes:
-      - media_data:/data/olx-media
-    networks:
-      bharatmarket_net:
-        aliases:
-          - media-service
-
-  # ========================================================
-  # Backend API Server (Fastify 5 + Clustered Socket.IO)
+  # Backend API Server (Fastify 5 + Clustered Socket.IO + Direct Media Engine)
   # Configured via central infrastructure secrets (Neon DB / Cloud DB)
   # ========================================================
   server:
@@ -60,8 +32,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      media-service:
-        condition: service_started
     env_file:
       - ./infrastructure/.env.production
       - ./infrastructure/secrets/database.env
@@ -72,7 +42,6 @@ services:
       - ./infrastructure/secrets/media.env
     environment:
       REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
     ports:
       - "5000:5000"
     volumes:
@@ -96,8 +65,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-      media-service:
-        condition: service_started
     env_file:
       - ./infrastructure/.env.production
       - ./infrastructure/secrets/database.env
@@ -106,7 +73,6 @@ services:
       - ./infrastructure/secrets/firebase.env
     environment:
       REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
     volumes:
       - media_data:/data/olx-media
     networks:
@@ -157,7 +123,6 @@ services:
     restart: always
     depends_on:
       - server
-      - media-service
       - client
       - admin
     ports:

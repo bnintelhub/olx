@@ -368,6 +368,14 @@ export class ChatService {
 
     // Database Transaction
     const message = await prisma.$transaction(async (tx) => {
+      let mediaAssetId: string | null = null;
+      if (attachmentUrl) {
+        const mediaMatch = attachmentUrl.match(/med_[a-zA-Z0-9_]+/);
+        if (mediaMatch) {
+          mediaAssetId = mediaMatch[0];
+        }
+      }
+
       const created = await tx.message.create({
         data: {
           conversationId,
@@ -376,6 +384,7 @@ export class ChatService {
           type: attachmentUrl ? MessageType.IMAGE : MessageType.TEXT,
           content: textContent || (attachmentUrl ? 'Photo' : ''),
           attachmentUrl: attachmentUrl || null,
+          attachmentMediaAssetId: mediaAssetId,
           replyToMessageId: replyToMessageId || null,
           clientMessageId: clientMessageId || null,
           status: MessageStatus.SENT,
@@ -385,14 +394,11 @@ export class ChatService {
         },
       });
 
-      if (attachmentUrl) {
-        const mediaMatch = attachmentUrl.match(/med_[a-zA-Z0-9_]+/);
-        if (mediaMatch) {
-          await tx.mediaAsset.updateMany({
-            where: { id: mediaMatch[0] },
-            data: { entityType: 'CHAT', entityId: created.id },
-          }).catch(() => {});
-        }
+      if (mediaAssetId) {
+        await tx.mediaAsset.updateMany({
+          where: { id: mediaAssetId },
+          data: { entityType: 'CHAT', entityId: created.id, status: 'READY' },
+        }).catch(() => {});
       }
 
       await tx.conversation.update({

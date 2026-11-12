@@ -39,37 +39,7 @@ services:
       - bharatmarket_net
 
   # ========================================================
-  # Media Microservice (Uploads, Validation & Storage Engine)
-  # ========================================================
-  media-service:
-    build:
-      context: .
-      dockerfile: ./infrastructure/docker/prod/Dockerfile.media
-    container_name: bharatmarket_media_service
-    restart: always
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - ./infrastructure/.env.production
-      - ./infrastructure/secrets/database.dev.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/media.env
-    environment:
-      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
-      REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
-    volumes:
-      - media_data:/data/olx-media
-    networks:
-      bharatmarket_net:
-        aliases:
-          - media-service
-
-  # ========================================================
-  # Backend API Server (Fastify 5 + Clustered Socket.IO)
+  # Backend API Server (Fastify 5 + Clustered Socket.IO + Direct Media Engine)
   # ========================================================
   server:
     build:
@@ -82,8 +52,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      media-service:
-        condition: service_started
     env_file:
       - ./infrastructure/.env.production
       - ./infrastructure/secrets/database.dev.env
@@ -95,7 +63,6 @@ services:
     environment:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
     ports:
       - "5000:5000"
     volumes:
@@ -120,8 +87,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      media-service:
-        condition: service_started
     env_file:
       - ./infrastructure/.env.production
       - ./infrastructure/secrets/database.dev.env
@@ -131,7 +96,6 @@ services:
     environment:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
     volumes:
       - media_data:/data/olx-media
     networks:
@@ -182,7 +146,6 @@ services:
     restart: always
     depends_on:
       - server
-      - media-service
       - client
       - admin
     ports:

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, MessageCircle, LogIn, Info } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
+import { getInMemoryAccessToken } from '@/lib/api-client';
 import { useAuth } from '../context/AuthContext';
 import { AdItem } from '../types';
 import {
@@ -35,7 +36,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
   const typingTimerRef = useRef<any>(null);
 
   const getActiveToken = (): string | null => {
-    return token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
+    return token || getInMemoryAccessToken();
   };
 
   // 1. Initialize Socket.IO connection

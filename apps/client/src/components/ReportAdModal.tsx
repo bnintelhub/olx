@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ShieldAlert, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiClient } from '@/lib/api-client';
 
 interface ReportAdModalProps {
   adId: string | null;
@@ -45,32 +46,23 @@ export const ReportAdModal: React.FC<ReportAdModalProps> = ({
     setErrorMsg('');
 
     try {
-      const token = localStorage.getItem('olx_access_token') || localStorage.getItem('token');
-      const res = await fetch('/api/v1/moderation/reports', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          adId,
-          reason: selectedReason,
-          details: details.trim(),
-        }),
+      const res = await apiClient.post('/moderation/reports', {
+        adId,
+        reason: selectedReason,
+        details: details.trim(),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      if (res.data?.success) {
         setSubmitted(true);
         setTimeout(() => {
           setSubmitted(false);
           onClose();
         }, 2200);
       } else {
-        setErrorMsg(data.error?.message || 'Failed to submit report');
+        setErrorMsg(res.data?.error?.message || 'Failed to submit report');
       }
-    } catch {
-      setErrorMsg('Network error. Please try again.');
+    } catch (err: any) {
+      setErrorMsg(err.response?.data?.message || 'Network error. Please try again.');
     } finally {
       setSubmitting(false);
     }

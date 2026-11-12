@@ -42,43 +42,7 @@ services:
       - bharatmarket_net
 
   # ========================================================
-  # Media Microservice (Uploads & Filesystem Management)
-  # ========================================================
-  media-service:
-    build:
-      context: .
-      dockerfile: ./infrastructure/docker/dev/Dockerfile.media
-    container_name: bharatmarket_media_service
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    env_file:
-      - ./infrastructure/.env.dev
-      - ./infrastructure/secrets/database.dev.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/media.env
-    environment:
-      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
-      REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
-    ports:
-      - "5005:5005"
-    volumes:
-      - ./apps/media-service/src:/app/apps/media-service/src
-      - ./packages/shared/src:/app/packages/shared/src
-      - ./packages/shared/dist:/app/packages/shared/dist
-      - ./packages/database/prisma:/app/packages/database/prisma
-      - ./data/olx-media:/data/olx-media
-    networks:
-      bharatmarket_net:
-        aliases:
-          - media-service
-
-  # ========================================================
-  # Backend API Server (Fastify + Auto-Reload with tsx watch)
+  # Backend API Server (Fastify + Auto-Reload with tsx watch + Direct Media Engine)
   # ========================================================
   server:
     build:
@@ -91,8 +55,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      media-service:
-        condition: service_started
     env_file:
       - ./infrastructure/.env.dev
       - ./infrastructure/secrets/database.dev.env
@@ -104,7 +66,6 @@ services:
     environment:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
     ports:
       - "5000:5000"
     volumes:
@@ -142,7 +103,6 @@ services:
     environment:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
-      MEDIA_SERVICE_URL: "http://media-service:5005"
     volumes:
       - ./apps/workers/src:/app/apps/workers/src
       - ./packages/shared/src:/app/packages/shared/src
@@ -166,6 +126,7 @@ services:
       - server
     environment:
       - VITE_API_TARGET=http://server:5000
+      - VITE_FIREBASE_VAPID_KEY=BP3j_WxEhVpyjY4_cnup4YUqWevdNUr2Dxhzu3_aG8X06ceM5xS7MX9OtJRFjYWLmY-B2X6zS97ccdssaS5uy8s
     ports:
       - "5173:5173"
     volumes:
@@ -195,6 +156,7 @@ services:
       - server
     environment:
       - VITE_API_TARGET=http://server:5000
+      - VITE_FIREBASE_VAPID_KEY=BP3j_WxEhVpyjY4_cnup4YUqWevdNUr2Dxhzu3_aG8X06ceM5xS7MX9OtJRFjYWLmY-B2X6zS97ccdssaS5uy8s
     ports:
       - "5174:5174"
     volumes:
@@ -222,7 +184,6 @@ services:
     restart: unless-stopped
     depends_on:
       - server
-      - media-service
       - client
       - admin
     ports:

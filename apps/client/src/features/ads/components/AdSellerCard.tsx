@@ -29,17 +29,24 @@ interface AdSellerCardProps {
   ad: any;
   locationText: string;
   onStartChat: (initialMessage?: string) => void;
+  isOfferOpen?: boolean;
+  setIsOfferOpen?: (open: boolean) => void;
 }
 
 export const AdSellerCard: React.FC<AdSellerCardProps> = ({
   ad,
   locationText,
   onStartChat,
+  isOfferOpen: externalOfferOpen,
+  setIsOfferOpen: externalSetIsOfferOpen,
 }) => {
   const [revealedPhone, setRevealedPhone] = useState<string | null>(null);
   const [isRevealingPhone, setIsRevealingPhone] = useState(false);
-  const [isOfferOpen, setIsOfferOpen] = useState(false);
+  const [internalOfferOpen, setInternalOfferOpen] = useState(false);
   const [offerPrice, setOfferPrice] = useState('');
+
+  const isOfferOpen = externalOfferOpen !== undefined ? externalOfferOpen : internalOfferOpen;
+  const setIsOfferOpen = externalSetIsOfferOpen || setInternalOfferOpen;
 
   const handleRevealPhone = async () => {
     if (!ad?.id || revealedPhone) return;
@@ -169,6 +176,27 @@ export const AdSellerCard: React.FC<AdSellerCardProps> = ({
               </Button>
             )}
           </div>
+
+          {/* Mobile Action Buttons inside Seller Details */}
+          <div className="lg:hidden space-y-2.5 pt-1">
+            <Button
+              type="button"
+              onClick={() => setIsOfferOpen(true)}
+              variant="sell"
+              className="w-full text-sm font-bold shadow-xs py-4"
+            >
+              Make an Offer
+            </Button>
+            <Button
+              type="button"
+              onClick={() => onStartChat()}
+              variant="default"
+              className="w-full text-sm font-bold gap-2 py-4"
+            >
+              <MessageCircle className="w-4 h-4 shrink-0" />
+              <span>Chat with Seller</span>
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -234,6 +262,43 @@ export const AdSellerCard: React.FC<AdSellerCardProps> = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Sticky Mobile Bottom Action Bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-[#E5EAED] px-4 py-2.5 shadow-[0_-4px_20px_rgba(0,0,0,0.08)]">
+        <div className="flex items-center justify-between gap-3 max-w-lg mx-auto">
+          <div className="flex flex-col min-w-0">
+            <span className="text-lg font-black text-[#002f34] leading-tight truncate">
+              {formatCurrency(ad.price)}
+            </span>
+            {ad.isNegotiable && (
+              <span className="text-[10px] text-emerald-600 font-semibold leading-none">
+                Negotiable
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              onClick={() => setIsOfferOpen(true)}
+              variant="sell"
+              size="sm"
+              className="font-bold text-xs h-9 px-3.5 shadow-xs"
+            >
+              Make Offer
+            </Button>
+            <Button
+              type="button"
+              onClick={() => onStartChat()}
+              variant="default"
+              size="sm"
+              className="font-bold text-xs gap-1.5 h-9 px-3.5"
+            >
+              <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+              <span>Chat</span>
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

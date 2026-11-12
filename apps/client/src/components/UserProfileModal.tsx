@@ -13,6 +13,7 @@ import {
   Award,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { apiClient } from '@/lib/api-client';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -27,7 +28,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onOpenMyAds,
   onOpenWishlist,
 }) => {
-  const { user, loginWithTokens, token } = useAuth();
+  const { user, setUser } = useAuth();
 
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -52,30 +53,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       setMessage(null);
 
       // Fetch latest profile & stats from API
-      const authToken = token || localStorage.getItem('olx_access_token');
-      if (authToken) {
-        setIsLoading(true);
-        fetch('/api/v1/user/profile', {
-          headers: { Authorization: `Bearer ${authToken}` },
+      setIsLoading(true);
+      apiClient.get('/user/profile')
+        .then((res) => {
+          if (res.data?.success && res.data.data) {
+            const u = res.data.data;
+            setName(u.profile?.name || '');
+            setBio(u.profile?.bio || '');
+            setEmail(u.email || '');
+            setBusinessName(u.profile?.businessName || '');
+            setIsIdentityVerified(Boolean(u.profile?.isIdentityVerified));
+            setAdsCount(u._count?.ads || 0);
+            setFavCount(u._count?.favourites || 0);
+          }
         })
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success && data.data) {
-              const u = data.data;
-              setName(u.profile?.name || '');
-              setBio(u.profile?.bio || '');
-              setEmail(u.email || '');
-              setBusinessName(u.profile?.businessName || '');
-              setIsIdentityVerified(Boolean(u.profile?.isIdentityVerified));
-              setAdsCount(u._count?.ads || 0);
-              setFavCount(u._count?.favourites || 0);
-            }
-          })
-          .catch(() => {})
-          .finally(() => setIsLoading(false));
-      }
+        .catch(() => {})
+        .finally(() => setIsLoading(false));
     }
-  }, [isOpen, user, token]);
+  }, [isOpen, user]);
 
   if (!isOpen || !user) return null;
 
@@ -84,74 +79,50 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     setMessage(null);
     setIsSaving(true);
 
-    const authToken = token || localStorage.getItem('olx_access_token');
     try {
-      const res = await fetch('/api/v1/user/profile', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${authToken}`,
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          bio: bio.trim(),
-          email: email.trim() || undefined,
-          businessName: businessName.trim() || undefined,
-        }),
+      const res = await apiClient.put('/user/profile', {
+        name: name.trim(),
+        bio: bio.trim(),
+        email: email.trim() || undefined,
+        businessName: businessName.trim() || undefined,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message || 'Failed to update profile.');
-      }
-
-      if (data.data) {
-        const refreshToken = localStorage.getItem('olx_refresh_token') || '';
-        loginWithTokens(data.data, authToken || '', refreshToken);
+      if (res.data?.data) {
+        setUser(res.data.data);
         setMessage({ type: 'success', text: 'Profile updated successfully!' });
       }
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Something went wrong.' });
+      const errMsg = err.response?.data?.message || err.message || 'Something went wrong.';
+      setMessage({ type: 'error', text: errMsg });
     } finally {
       setIsSaving(false);
     }
   };
 
   const handleGetVerified = async () => {
-    const authToken = token || localStorage.getItem('olx_access_token');
     setIsVerifying(true);
     setMessage(null);
 
     try {
-      const res = await fetch('/api/v1/user/verify-identity', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${authToken}`,
-        },
-      });
+      const res = await apiClient.post('/user/verify-identity');
+      if (res.data?.success) {
+        setIsIdentityVerified(true);
+        setMessage({
+          type: 'success',
+          text: 'Congratulations! Your profile identity verification badge is now ACTIVE.',
+        });
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message || 'Failed to verify badge.');
-      }
-
-      setIsIdentityVerified(true);
-      setMessage({
-        type: 'success',
-        text: 'Congratulations! Your profile identity verification badge is now ACTIVE.',
-      });
-
-      // Refresh user profile in context
-      if (user.profile) {
-        const updated = {
-          ...user,
-          profile: { ...user.profile, isIdentityVerified: true },
-        };
-        const refreshToken = localStorage.getItem('olx_refresh_token') || '';
-        loginWithTokens(updated, authToken || '', refreshToken);
+        if (user.profile) {
+          const updated = {
+            ...user,
+            profile: { ...user.profile, isIdentityVerified: true },
+          };
+          setUser(updated);
+        }
       }
     } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Verification failed.' });
+      const errMsg = err.response?.data?.message || err.message || 'Verification failed.';
+      setMessage({ type: 'error', text: errMsg });
     } finally {
       setIsVerifying(false);
     }

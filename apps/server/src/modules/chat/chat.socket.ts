@@ -148,13 +148,12 @@ export function setupChatSocket(io: SocketIOServer) {
         const clientMatch = rawCookies.match(/(?:^|;\s*)access_token=([^;]+)/)?.[1];
         const adminMatch = rawCookies.match(/(?:^|;\s*)admin_access_token=([^;]+)/)?.[1];
 
-        // In admin context, prioritize admin_access_token
+        // In admin context, prioritize admin_access_token; in client context, NEVER accept admin token
         if (isAdminContext) {
           if (adminMatch) candidateAccessTokens.push(adminMatch);
           if (clientMatch) candidateAccessTokens.push(clientMatch);
         } else {
           if (clientMatch) candidateAccessTokens.push(clientMatch);
-          if (adminMatch) candidateAccessTokens.push(adminMatch);
         }
       }
 
@@ -168,8 +167,13 @@ export function setupChatSocket(io: SocketIOServer) {
         try {
           const decoded = jwt.verify(candidate, env.JWT_ACCESS_SECRET) as any;
           if (decoded?.userId || decoded?.id || decoded?.sub) {
+            const role = decoded.role || 'USER';
+            // In customer client context, ignore admin tokens to prevent session collision
+            if (!isAdminContext && (role === 'ADMIN' || role === 'SUPER_ADMIN')) {
+              continue;
+            }
             userId = decoded.userId || decoded.id || decoded.sub;
-            userRole = decoded.role || 'USER';
+            userRole = role;
             userPhone = decoded.phoneNumber;
             userEmail = decoded.email;
             break;
@@ -185,9 +189,10 @@ export function setupChatSocket(io: SocketIOServer) {
         const clientRefresh = rawCookies.match(/(?:^|;\s*)refresh_token=([^;]+)/)?.[1];
         const adminRefresh = rawCookies.match(/(?:^|;\s*)admin_refresh_token=([^;]+)/)?.[1];
 
+        // In client context, never fall back to admin_refresh_token to avoid session leakage across tabs
         const candidateRefreshTokens = isAdminContext
           ? [adminRefresh, clientRefresh].filter(Boolean)
-          : [clientRefresh, adminRefresh].filter(Boolean);
+          : [clientRefresh].filter(Boolean);
 
         for (const refToken of candidateRefreshTokens) {
           if (!refToken) continue;

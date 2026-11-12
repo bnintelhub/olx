@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Plus,
 } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 interface MyAdItem {
   id: string;
@@ -45,15 +46,10 @@ export const MyAdsModal: React.FC<{
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   const fetchMyAds = async () => {
-    const token = localStorage.getItem('olx_access_token');
-    if (!token) return;
-
     setIsLoading(true);
     try {
-      const res = await fetch('/api/v1/user/my-ads', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
+      const res = await apiClient.get('/user/my-ads');
+      const data = res.data;
       if (data.success && data.data) {
         setAds(data.data.ads || []);
         if (data.data.counts) setCounts(data.data.counts);
@@ -72,28 +68,16 @@ export const MyAdsModal: React.FC<{
   }, [isOpen]);
 
   const handleUpdateStatus = async (adId: string, newStatus: string) => {
-    const token = localStorage.getItem('olx_access_token');
-    if (!token) return;
-
     setUpdatingId(adId);
     try {
-      const res = await fetch(`/api/v1/ads/${adId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (res.ok) {
+      const res = await apiClient.patch(`/ads/${adId}/status`, { status: newStatus });
+      if (res.data?.success) {
         fetchMyAds();
       } else {
-        const data = await res.json();
-        alert(data.error?.message || 'Failed to update status');
+        alert(res.data?.error?.message || 'Failed to update status');
       }
     } catch (err: any) {
-      alert(err.message);
+      alert(err.response?.data?.message || err.message || 'Failed to update status');
     } finally {
       setUpdatingId(null);
     }

@@ -15,7 +15,7 @@ flowchart TD
     RedisQueue[("Redis 7 BullMQ (media-process)")]
     Worker["Media Worker (Sharp Engine)"]
     DLQ[("Dead Letter Queue (media-dead-letter)")]
-    LocalStorage[("Local Persistent Volume (/data/olx-media)")]
+    LocalStorage[("Local Persistent Volume / Directory (MEDIA_ROOT)")]
 
     Client -->|"1. Multipart Upload Stream"| Server
     Server -->|"2. Magic Bytes + Immediate Temp File"| LocalStorage
@@ -39,14 +39,16 @@ flowchart TD
 
 ### Core Architectural Principles
 
-1. **Local Persistent Volume Architecture (Zero-MinIO Overhead)**
-   - Media assets are stored on a persistent Docker volume (`media_data`), mounted at `/data/olx-media`.
+1. **Local Persistent Volume Architecture (Zero S3 / MinIO Overhead)**
+   - Media assets are stored on a persistent volume or directory configured by `MEDIA_ROOT`.
+   - **In Docker**: Mounted at `/data/olx-media` via the named volume `media_data`.
+   - **Without Docker (Bare Metal / Local)**: Defaults to `./data/olx-media` (or any custom directory like `/var/www/olx-media`).
    - No external S3 or MinIO dependencies required. Reduces container memory usage by >500MB and eliminates external authentication/network latency.
-   - Nginx serves all static media requests (`/media/...`) directly from disk using kernel-level `sendfile`, HTTP browser caching (`Cache-Control: public, max-age=2592000`), and `Access-Control-Allow-Origin: *`.
+   - Nginx serves all static media requests (`/media/...`) directly from disk using kernel-level `sendfile`, HTTP browser caching (`Cache-Control: public, max-age=2592000, immutable`), and CORS headers (`Access-Control-Allow-Origin: *`). If Nginx is not used, Fastify serves it directly from `MEDIA_ROOT`.
 
 2. **Ultra-Fast Ingestion with Instant Variant Staging (<200ms Response)**
-   - When files are uploaded, the Fastify HTTP server validates magic bytes, writes an initial copy directly into the storage location, registers the asset in PostgreSQL with `status: PROCESSING`, and returns `201 Created` immediately.
-   - Because the initial copy is already in place, newly created listings load their images with `200 OK` instantly without race-condition `404` errors while the background worker optimizes them.
+   - When files are uploaded, the Fastify HTTP server validates magic bytes (header validation), writes an initial copy directly into the storage location, registers the asset in PostgreSQL with `status: PROCESSING`, and returns `201 Created` immediately.
+   - Because the initial copy is already in place, newly created listings or chat messages load their images with `200 OK` instantly without race-condition `404` errors while the background worker optimizes them.
 
 3. **Multi-Tier WebP Generation via BullMQ & Sharp Libvips**
    - The BullMQ worker processes image optimization jobs with controlled concurrency (`max 4`) to prevent memory thrashing.
@@ -117,11 +119,18 @@ model MediaAsset {
 
 ## 3. Directory Layout & Storage Sharding
 
-All files are structured inside `/data/olx-media` using clean domain prefixes:
+All files are structured inside `MEDIA_ROOT` (e.g. `/data/olx-media` or `./data/olx-media`) using clean domain prefixes:
 
 ```
-/data/olx-media/
+{MEDIA_ROOT}/
 ├── ads/
+│   ├── drafts/
+│   │   └── images/
+│   │       └── {mediaId}/
+│   │           ├── thumbnail.webp
+│   │           ├── card.webp
+│   │           ├── medium.webp
+│   │           └── large.webp
 │   └── {adId}/
 │       └── images/
 │           └── {mediaId}/
@@ -144,6 +153,7 @@ All files are structured inside `/data/olx-media` using clean domain prefixes:
 ├── chats/
 │   └── {conversationId}/
 │       └── {mediaId}/
+│           ├── thumbnail.webp
 │           └── large.webp
 └── temp/
     └── {mediaId}.tmp
@@ -153,12 +163,49 @@ All files are structured inside `/data/olx-media` using clean domain prefixes:
 
 ## 4. API Endpoints Reference
 
-### 4.1 Upload Media Images
+### 4.1 Unified Multi-Resource Upload Endpoint
+- **Method**: `POST`
+- **Path**: `/api/v1/uploads?resource={resource}&resourceId={resourceId}`
+- **Auth**: Bearer Token (or authenticated session cookie) required
+- **Content-Type**: `multipart/form-data`
+- **Supported Resources**:
+  - `ads`: Uploads to `ads/drafts/...` until listing creation attaches them.
+  - `chats`: Immediately binds media to conversation via `resourceId={conversationId}`, preventing orphan deletion.
+  - `banners`: Admin promotional banner upload.
+  - `users`: User profile picture/avatar.
+- **Max file size**: 15MB per file (up to 5000×5000px).
+- **Supported Formats**: JPEG, PNG, WebP, AVIF.
+
+#### Request Example:
+```bash
+curl -X POST "http://localhost:5000/api/v1/uploads?resource=chats&resourceId=conv_12345" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -F "file=@screenshot.png"
+```
+
+#### Response (`201 Created`):
+```json
+{
+  "success": true,
+  "data": {
+    "mediaId": "med_mwb8x7291a",
+    "url": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/large.webp",
+    "variants": {
+      "thumbnail": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/thumbnail.webp",
+      "card": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/card.webp",
+      "medium": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/medium.webp",
+      "large": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/large.webp"
+    }
+  }
+}
+```
+
+### 4.2 Ad Image Upload Endpoint (Convenience Route)
 - **Method**: `POST`
 - **Path**: `/api/v1/ads/upload-images` (or `/api/v1/media/images`)
 - **Auth**: Bearer Token required
 - **Content-Type**: `multipart/form-data`
-- **Max file size**: 15MB per image (up to 5000×5000px)
+- **Max Files**: 10 images per batch
 
 #### Response (`201 Created`):
 ```json
@@ -171,17 +218,17 @@ All files are structured inside `/data/olx-media` using clean domain prefixes:
       "mimeType": "image/jpeg",
       "fileSize": 2048500,
       "variants": {
-        "thumbnail": "http://localhost/media/ads/drafts/images/med_mwb8x7291a/thumbnail.webp",
-        "card": "http://localhost/media/ads/drafts/images/med_mwb8x7291a/card.webp",
-        "medium": "http://localhost/media/ads/drafts/images/med_mwb8x7291a/medium.webp",
-        "large": "http://localhost/media/ads/drafts/images/med_mwb8x7291a/large.webp"
+        "thumbnail": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/thumbnail.webp",
+        "card": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/card.webp",
+        "medium": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/medium.webp",
+        "large": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/large.webp"
       }
     }
   ]
 }
 ```
 
-### 4.2 Admin Media Storage Overview & Graphs
+### 4.3 Admin Media Storage Overview & Graphs
 - **Method**: `GET`
 - **Path**: `/api/v1/admin/media/overview`
 - **Auth**: Super Admin / Admin (`MEDIA_MANAGE` permission)
@@ -247,9 +294,10 @@ All files are structured inside `/data/olx-media` using clean domain prefixes:
 }
 ```
 
-### 4.3 Clean Orphaned Media
+### 4.4 Clean Orphaned Media
 - **Method**: `POST`
 - **Path**: `/api/v1/admin/media/cleanup-orphans`
-- **Auth**: Super Admin / Admin
-- **Payload**: `{ "olderThanHours": 24 }` (or `0` to purge all unattached uploads immediately)
-- **Action**: Unlinks unattached `MediaAsset` database rows and completely purges all corresponding physical files and directories from the `/data/olx-media` persistent disk volume.
+- **Auth**: Super Admin / Admin (`MEDIA_MANAGE` permission)
+- **Payload**: `{ "olderThanHours": 24 }` (or `0` to purge unattached draft uploads immediately)
+- **Action**: Unlinks unattached `MediaAsset` database rows and completely purges all corresponding physical files and directories from the disk storage root.
+- **Safety**: Uploads that have been bound to a chat conversation (`entityType: CHAT`), ad listing (`entityType: LISTING`), banner (`entityType: BANNER`), or user profile (`entityType: USER`) are strictly preserved and never deleted by orphan cleanup.

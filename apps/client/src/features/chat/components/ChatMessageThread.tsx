@@ -51,7 +51,109 @@ interface ChatMessageThreadProps {
   isSending?: boolean;
 }
 
-export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
+interface ChatMessageRowProps {
+  msg: MessageItem;
+  isMine: boolean;
+  isLatest: boolean;
+  otherPartyName: string;
+  otherPartyRole: string;
+  isFailed: boolean;
+  onImageError: (id: string) => void;
+  onDeleteMessage?: (id: string) => void;
+}
+
+// Memoized individual message row
+const ChatMessageRow: React.FC<ChatMessageRowProps> = React.memo(({
+  msg,
+  isMine,
+  isLatest,
+  otherPartyName,
+  otherPartyRole,
+  isFailed,
+  onImageError,
+  onDeleteMessage,
+}) => {
+  const attachmentSrc = formatAttachmentUrl((msg as any).localPreviewUrl || msg.attachmentUrl);
+  const formattedTime = React.useMemo(() => {
+    try {
+      return new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  }, [msg.createdAt]);
+
+  return (
+    <div className={`flex flex-col group ${isMine ? 'items-end' : 'items-start'}`}>
+      <div
+        className={`max-w-[78%] sm:max-w-md rounded-2xl px-3.5 py-2 text-xs shadow-xs relative ${
+          isMine
+            ? 'bg-[#002f34] text-white rounded-br-xs'
+            : 'bg-white text-gray-900 border border-gray-200 rounded-bl-xs'
+        }`}
+      >
+        {/* Sender badge on incoming messages */}
+        {!isMine && (
+          <span className="text-[10px] font-bold text-[#002f34] block mb-0.5">
+            {otherPartyName} ({otherPartyRole})
+          </span>
+        )}
+
+        {/* Image attachment */}
+        {(msg.attachmentUrl || (msg as any).localPreviewUrl) && !msg.isDeleted && (
+          isFailed ? (
+            <div className="mb-2 flex items-center gap-2 py-2 px-3 text-xs bg-black/10 rounded-lg text-gray-400">
+              <ImageIcon className="w-4 h-4 text-gray-400" />
+              <span>Attachment unavailable</span>
+            </div>
+          ) : (
+            <div className="mb-2 rounded-lg overflow-hidden border border-black/10 bg-black/5 inline-block max-w-full">
+              <img
+                src={attachmentSrc}
+                alt="Attachment"
+                className="max-h-72 max-w-full w-auto h-auto object-contain rounded-lg cursor-pointer hover:opacity-95 block"
+                onClick={() => window.open(attachmentSrc, '_blank')}
+                loading="eager"
+                onError={() => onImageError(msg.id)}
+              />
+            </div>
+          )
+        )}
+
+        <p className={`whitespace-pre-wrap leading-relaxed break-words ${msg.isDeleted ? 'italic text-gray-400' : ''}`}>
+          {msg.content}
+        </p>
+
+        <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isMine ? 'text-gray-300' : 'text-gray-400'}`}>
+          <span>{formattedTime}</span>
+          {isMine && !msg.isDeleted && (
+            msg.status === 'READ' ? (
+              <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+            ) : msg.status === 'DELIVERED' ? (
+              <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-gray-300" /></span>
+            ) : (
+              <span title="Sent"><Check className="w-3.5 h-3.5 text-gray-400" /></span>
+            )
+          )}
+        </div>
+
+        {/* Soft delete icon for own messages */}
+        {isMine && !msg.isDeleted && onDeleteMessage && (
+          <button
+            type="button"
+            onClick={() => onDeleteMessage(msg.id)}
+            title="Delete message"
+            className="absolute -left-6 top-2 hidden group-hover:block text-gray-400 hover:text-rose-500 p-1"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+ChatMessageRow.displayName = 'ChatMessageRow';
+
+export const ChatMessageThread: React.FC<ChatMessageThreadProps> = React.memo(({
   conversation,
   currentUserId,
   messages,
@@ -77,6 +179,10 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [clickedPrompts, setClickedPrompts] = useState<string[]>([]);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const handleImageError = React.useCallback((msgId: string) => {
+    setFailedImages((prev) => ({ ...prev, [msgId]: true }));
+  }, []);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -153,7 +259,10 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       try {
         const formData = new FormData();
         formData.append('file', selectedImage);
-        const res = await apiClient.post('/uploads?resource=chats', formData);
+        const uploadUrl = conversation?.id
+          ? `/uploads?resource=chats&resourceId=${encodeURIComponent(conversation.id)}`
+          : '/uploads?resource=chats';
+        const res = await apiClient.post(uploadUrl, formData);
         const uploadedUrl =
           res.data?.data?.[0]?.url ||
           res.data?.data?.[0]?.displayUrl ||
@@ -263,7 +372,10 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       </div>
 
       {/* Message Thread Scroll View */}
-      <div ref={messagesContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-[#f8f9fa] no-scrollbar overscroll-contain">
+      <div
+        ref={messagesContainerRef}
+        className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-[#f8f9fa] no-scrollbar overscroll-contain"
+      >
         {hasMoreOlder && (
           <div className="text-center py-1">
             <button
@@ -277,83 +389,19 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
           </div>
         )}
 
-        {messages.map((msg) => {
-          const isMine = msg.senderId === currentUserId;
-
-          return (
-            <div key={msg.id} className={`flex flex-col group ${isMine ? 'items-end' : 'items-start'}`}>
-              <div
-                className={`max-w-[78%] sm:max-w-md rounded-2xl px-3.5 py-2 text-xs shadow-xs relative ${
-                  isMine
-                    ? 'bg-[#002f34] text-white rounded-br-xs'
-                    : 'bg-white text-gray-900 border border-gray-200 rounded-bl-xs'
-                }`}
-              >
-                {/* Sender badge on incoming messages */}
-                {!isMine && (
-                  <span className="text-[10px] font-bold text-[#002f34] block mb-0.5">
-                    {conversation.otherParty?.name || 'User'} ({conversation.otherParty?.role || 'User'})
-                  </span>
-                )}
-
-                {/* Image attachment */}
-                {(msg.attachmentUrl || (msg as any).localPreviewUrl) && !msg.isDeleted && (
-                  <div className="mb-2 rounded-lg overflow-hidden border border-black/10 bg-black/5 inline-block max-w-full">
-                    <img
-                      src={formatAttachmentUrl((msg as any).localPreviewUrl || msg.attachmentUrl)}
-                      alt="Attachment"
-                      className="max-h-80 max-w-full w-auto h-auto object-contain rounded-lg cursor-pointer hover:opacity-95 block"
-                      onClick={() => window.open(formatAttachmentUrl((msg as any).localPreviewUrl || msg.attachmentUrl!), '_blank')}
-                      onError={(e) => {
-                        const target = e.currentTarget;
-                        const attempts = Number(target.dataset.retry || 0);
-                        if (attempts < 3) {
-                          target.dataset.retry = String(attempts + 1);
-                          setTimeout(() => {
-                            const originalSrc = target.src.split('?')[0];
-                            target.src = `${originalSrc}?retry=${attempts + 1}_${Date.now()}`;
-                          }, 1000);
-                        }
-                      }}
-                      loading="lazy"
-                    />
-                  </div>
-                )}
-
-                <p className={`whitespace-pre-wrap leading-relaxed break-words ${msg.isDeleted ? 'italic text-gray-400' : ''}`}>
-                  {msg.content}
-                </p>
-
-                <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isMine ? 'text-gray-300' : 'text-gray-400'}`}>
-                  <span>
-                    {new Date(msg.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                  {isMine && !msg.isDeleted && (
-                    msg.status === 'READ' ? (
-                      <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
-                    ) : msg.status === 'DELIVERED' ? (
-                      <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-gray-300" /></span>
-                    ) : (
-                      <span title="Sent"><Check className="w-3.5 h-3.5 text-gray-400" /></span>
-                    )
-                  )}
-                </div>
-
-                {/* Soft delete icon for own messages */}
-                {isMine && !msg.isDeleted && onDeleteMessage && (
-                  <button
-                    type="button"
-                    onClick={() => onDeleteMessage(msg.id)}
-                    title="Delete message"
-                    className="absolute -left-6 top-2 hidden group-hover:block text-gray-400 hover:text-rose-500 p-1"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {messages.map((msg, idx) => (
+          <ChatMessageRow
+            key={msg.id}
+            msg={msg}
+            isMine={msg.senderId === currentUserId}
+            isLatest={idx >= messages.length - 2}
+            otherPartyName={conversation.otherParty?.name || 'User'}
+            otherPartyRole={conversation.otherParty?.role || 'User'}
+            isFailed={Boolean(failedImages[msg.id])}
+            onImageError={handleImageError}
+            onDeleteMessage={onDeleteMessage}
+          />
+        ))}
 
         {isOtherTyping && (
           <div className="flex items-center gap-1.5 text-xs text-gray-400 italic py-1">
@@ -494,4 +542,4 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
       )}
     </div>
   );
-};
+});

@@ -31,7 +31,92 @@ interface ChatConversationListProps {
   onSelectConversation: (id: string) => void;
 }
 
-export const ChatConversationList: React.FC<ChatConversationListProps> = ({
+interface ConversationRowProps {
+  conv: ConversationItem;
+  isActive: boolean;
+  isFirst: boolean;
+  onSelect: (id: string) => void;
+}
+
+// Memoized individual conversation row
+const ConversationRow: React.FC<ConversationRowProps> = React.memo(({
+  conv,
+  isActive,
+  isFirst,
+  onSelect,
+}) => {
+  const adThumb =
+    conv.ad?.imageUrl ||
+    conv.ad?.images?.[0]?.thumbnailUrl ||
+    conv.ad?.images?.[0]?.displayUrl ||
+    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=100&auto=format&fit=crop&q=80';
+
+  const formattedTime = React.useMemo(() => {
+    if (!conv.lastMessageAt) return '';
+    try {
+      return new Date(conv.lastMessageAt).toLocaleTimeString('en-IN', {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return '';
+    }
+  }, [conv.lastMessageAt]);
+
+  return (
+    <div
+      onClick={() => onSelect(conv.id)}
+      className={`p-3.5 flex items-start gap-3 cursor-pointer transition ${
+        isActive
+          ? 'bg-teal-50/70 border-l-4 border-[#002f34]'
+          : 'hover:bg-gray-100 bg-white'
+      }`}
+    >
+      <div className="relative flex-shrink-0 w-12 h-12">
+        <img
+          src={adThumb}
+          alt=""
+          className="w-12 h-12 rounded object-cover border border-gray-200"
+          loading={isFirst ? 'eager' : 'lazy'}
+          {...({ fetchpriority: isFirst ? 'high' : 'auto' } as any)}
+        />
+        {conv.otherParty?.isOnline && (
+          <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Online" />
+        )}
+      </div>
+
+      <div className="flex-grow min-w-0">
+        <div className="flex items-baseline justify-between gap-1">
+          <div className="flex items-center gap-1.5 truncate">
+            <h4 className="text-xs font-bold text-gray-900 truncate">
+              {conv.otherParty?.name || 'User'}
+            </h4>
+            {conv.isBlocked && (
+              <span className="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded font-semibold">Blocked</span>
+            )}
+          </div>
+          <span className="text-[10px] text-gray-400 flex-shrink-0">{formattedTime}</span>
+        </div>
+        <p className="text-[11px] font-medium text-[#002f34] truncate mt-0.5">
+          {conv.ad?.title || 'Classified Ad'}
+        </p>
+        <div className="flex items-center justify-between mt-1">
+          <p className="text-xs text-gray-500 truncate max-w-[160px]">
+            {conv.lastMessageText || 'Tap to chat'}
+          </p>
+          {conv.unreadCount > 0 && (
+            <span className="w-4 h-4 rounded-full bg-[#00a49f] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+              {conv.unreadCount}
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
+ConversationRow.displayName = 'ConversationRow';
+
+export const ChatConversationList: React.FC<ChatConversationListProps> = React.memo(({
   conversations,
   activeConvId,
   loading,
@@ -45,7 +130,10 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
         </span>
       </div>
 
-      <div className="overflow-y-auto flex-1 min-h-0 divide-y divide-gray-100 no-scrollbar overscroll-contain">
+      <div
+        style={{ contain: 'layout paint' }}
+        className="overflow-y-auto flex-1 min-h-0 divide-y divide-gray-100 no-scrollbar overscroll-contain"
+      >
         {loading ? (
           <div className="p-8 text-center text-xs text-gray-500">
             <div className="w-6 h-6 border-2 border-[#002f34] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
@@ -58,73 +146,17 @@ export const ChatConversationList: React.FC<ChatConversationListProps> = ({
             <p>Click "Chat with Seller" on any ad listing to start chatting!</p>
           </div>
         ) : (
-          conversations.map((conv) => {
-            const isActive = conv.id === activeConvId;
-            const adThumb =
-              conv.ad?.imageUrl ||
-              conv.ad?.images?.[0]?.thumbnailUrl ||
-              conv.ad?.images?.[0]?.displayUrl ||
-              'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=100&auto=format&fit=crop&q=80';
-
-            return (
-              <div
-                key={conv.id}
-                onClick={() => onSelectConversation(conv.id)}
-                className={`p-3.5 flex items-start gap-3 cursor-pointer transition ${
-                  isActive
-                    ? 'bg-teal-50/70 border-l-4 border-[#002f34]'
-                    : 'hover:bg-gray-100 bg-white'
-                }`}
-              >
-                <div className="relative flex-shrink-0">
-                  <img
-                    src={adThumb}
-                    alt=""
-                    className="w-12 h-12 rounded object-cover border border-gray-200"
-                  />
-                  {conv.otherParty?.isOnline && (
-                    <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Online" />
-                  )}
-                </div>
-
-                <div className="flex-grow min-w-0">
-                  <div className="flex items-baseline justify-between gap-1">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <h4 className="text-xs font-bold text-gray-900 truncate">
-                        {conv.otherParty?.name || 'User'}
-                      </h4>
-                      {conv.isBlocked && (
-                        <span className="text-[9px] bg-red-100 text-red-700 px-1 py-0.2 rounded font-semibold">Blocked</span>
-                      )}
-                    </div>
-                    <span className="text-[10px] text-gray-400 flex-shrink-0">
-                      {conv.lastMessageAt
-                        ? new Date(conv.lastMessageAt).toLocaleTimeString('en-IN', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })
-                        : ''}
-                    </span>
-                  </div>
-                  <p className="text-[11px] font-medium text-[#002f34] truncate mt-0.5">
-                    {conv.ad?.title || 'Classified Ad'}
-                  </p>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className="text-xs text-gray-500 truncate max-w-[160px]">
-                      {conv.lastMessageText || 'Tap to chat'}
-                    </p>
-                    {conv.unreadCount > 0 && (
-                      <span className="w-4 h-4 rounded-full bg-[#00a49f] text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                        {conv.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            );
-          })
+          conversations.map((conv, idx) => (
+            <ConversationRow
+              key={conv.id}
+              conv={conv}
+              isActive={conv.id === activeConvId}
+              isFirst={idx === 0}
+              onSelect={onSelectConversation}
+            />
+          ))
         )}
       </div>
     </div>
   );
-};
+});

@@ -3,13 +3,16 @@ export function formatAttachmentUrl(url?: string | null): string {
   if (url.startsWith('blob:') || url.startsWith('data:')) {
     return url;
   }
-  // Strip any host/origin and repeated media/uploads prefixes so it routes cleanly through Vite's dev proxy /media/
+
+  // Strip Docker internal hostnames and leading origin
   let clean = url
-    .replace(/^https?:\/\/[^/]+/, '')
-    .replace(/^s3:\/\/[^/]+/, '')
+    .replace(/^https?:\/\/(?:server|backend):5000/i, '')
+    .replace(/^https?:\/\/[^/]+/i, '')
+    .replace(/^s3:\/\/[^/]+/i, '')
     .replace(/^[/\\]+/, '')
     .trim();
 
+  // Strip repeated media prefixes
   while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
     clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
   }

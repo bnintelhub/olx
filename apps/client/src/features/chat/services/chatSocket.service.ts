@@ -1,13 +1,25 @@
 import { io, Socket } from 'socket.io-client';
-import { executeSilentRefresh } from '@/lib/api-client';
+import { executeSilentRefresh, getInMemoryAccessToken } from '@/lib/api-client';
 
 let socketInstance: Socket | null = null;
 let connectingPromise: Promise<Socket | null> | null = null;
 let currentSocketUserId: string | null = null;
 
 function getActiveToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem('olx_access_token') || localStorage.getItem('token');
+  return getInMemoryAccessToken();
+}
+
+function isTokenExpiringSoon(tok: string | null): boolean {
+  if (!tok) return true;
+  try {
+    const parts = tok.split('.');
+    if (parts.length !== 3) return true;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    if (!payload.exp) return true;
+    return payload.exp * 1000 - Date.now() < 60_000;
+  } catch {
+    return true;
+  }
 }
 
 /**
@@ -37,7 +49,7 @@ export async function getChatSocket(userId?: string | null): Promise<Socket | nu
 
   connectingPromise = (async () => {
     let activeToken = getActiveToken();
-    if (!activeToken) {
+    if (!activeToken || isTokenExpiringSoon(activeToken)) {
       await executeSilentRefresh();
       activeToken = getActiveToken();
     }
@@ -50,8 +62,8 @@ export async function getChatSocket(userId?: string | null): Promise<Socket | nu
     if (!socketInstance) {
       socketInstance = io('/', {
         path: '/socket.io',
-        auth: { token: activeToken, accessToken: activeToken },
-        query: { token: activeToken },
+        auth: { token: activeToken, accessToken: activeToken, context: 'client' },
+        query: { token: activeToken, context: 'client' },
         transports: ['polling', 'websocket'],
         upgrade: true,
         withCredentials: true,

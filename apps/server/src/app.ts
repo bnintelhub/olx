@@ -36,6 +36,7 @@ import { uploadRoutes } from './modules/uploads/uploads.routes';
 import { mediaRoutes } from './modules/media/media.routes';
 import { notificationRoutes } from './modules/notifications/notifications.routes';
 import { revenueRoutes } from './modules/revenue/revenue.routes';
+import { bannerRoutes } from './modules/banners/banners.routes';
 import { ListingsController } from './modules/listings/listings.controller';
 import { defaultStorage } from './integrations/storage/storage.adapter';
 
@@ -76,8 +77,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   // File Uploads & Static files
   await app.register(fastifyMultipart, {
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB max per file
-      files: 10, // max 10 images per upload
+      fileSize: 50 * 1024 * 1024, // 50MB max per file (supports 50MB promotional videos)
+      files: 10, // max 10 files per batch
     },
   });
 
@@ -214,6 +215,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(mediaRoutes, { prefix: '/media' });
     await api.register(notificationRoutes, { prefix: '/notifications' });
     await api.register(revenueRoutes, { prefix: '/revenue' });
+    await api.register(bannerRoutes, { prefix: '/banners' });
   }, { prefix: '/api/v1' });
 
   return app;

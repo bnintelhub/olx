@@ -36,6 +36,25 @@ class FcmService {
         return;
       }
 
+      // Check direct environment variables (useful for containerized/cloud deployments)
+      if (env.FIREBASE_PRIVATE_KEY && env.FIREBASE_CLIENT_EMAIL) {
+        const privateKey = env.FIREBASE_PRIVATE_KEY.includes('\\n')
+          ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+          : env.FIREBASE_PRIVATE_KEY;
+        this.app = initializeApp({
+          credential: cert({
+            projectId: env.FIREBASE_PROJECT_ID || 'gen-lang-client-0067863163',
+            clientEmail: env.FIREBASE_CLIENT_EMAIL,
+            privateKey,
+          }),
+          projectId: env.FIREBASE_PROJECT_ID || 'gen-lang-client-0067863163',
+        });
+        this.messaging = getMessaging(this.app);
+        this.initialized = true;
+        console.log(`[FCM] Initialized successfully for project: ${env.FIREBASE_PROJECT_ID || 'gen-lang-client-0067863163'}`);
+        return;
+      }
+
       // Check configured path or default service account JSON in server root
       const candidatePaths: string[] = [];
 

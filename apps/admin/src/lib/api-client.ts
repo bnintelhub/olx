@@ -15,6 +15,9 @@ export const apiClient = axios.create({
 apiClient.interceptors.request.use((config) => {
   config.headers = config.headers || {};
   config.headers['X-App-Context'] = 'admin';
+  if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 

@@ -7,6 +7,7 @@ import {
   MapPin,
   ArrowLeft,
   Sparkles,
+  MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAdDetailQuery, useSimilarAdsQuery } from '../hook/useAdsQuery';
@@ -38,6 +39,7 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
   const { data: similarAds = [] } = useSimilarAdsQuery(id || null);
 
   const [isWishlisted, setIsWishlisted] = useState(false);
+  const [isOfferOpen, setIsOfferOpen] = useState(false);
 
   // Sync wishlist status
   useEffect(() => {
@@ -76,9 +78,15 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
     }
   };
 
-  const handleStartChat = () => {
+  const handleStartChat = (initialMessage?: string) => {
     if (!ad) return;
-    const targetUrl = `/chat?adId=${ad.id}`;
+    if (onOpenChat) {
+      onOpenChat(ad, initialMessage);
+      return;
+    }
+    const targetUrl = initialMessage
+      ? `/chat?adId=${ad.id}&message=${encodeURIComponent(initialMessage)}`
+      : `/chat?adId=${ad.id}`;
     if (!user) {
       openAuthModal(() => navigate(targetUrl));
       return;
@@ -128,7 +136,7 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
   );
 
   return (
-    <div className="min-h-screen bg-[#F5F7F8] pb-16">
+    <div className="min-h-screen bg-[#F5F7F8] pb-24 lg:pb-16">
       {/* Top Breadcrumb & Share Strip */}
       <div className="bg-white border-b border-[#E5EAED] sticky top-0 z-20">
         <div className="mx-auto max-w-[1300px] px-4 py-2.5 flex items-center justify-between">
@@ -216,6 +224,27 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
                 </div>
                 <span>Posted {formatPostingDate(ad.createdAt)}</span>
               </div>
+
+              {/* Action buttons for mobile */}
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <Button
+                  type="button"
+                  onClick={() => setIsOfferOpen(true)}
+                  variant="sell"
+                  className="w-full text-sm font-bold shadow-xs py-4"
+                >
+                  Make an Offer
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => handleStartChat()}
+                  variant="default"
+                  className="w-full text-sm font-bold gap-2 py-4"
+                >
+                  <MessageCircle className="w-4 h-4 shrink-0" />
+                  <span>Chat with Seller</span>
+                </Button>
+              </div>
             </div>
 
             {/* 1. Ad Description (First) */}
@@ -242,6 +271,8 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
               ad={ad}
               locationText={locationText}
               onStartChat={handleStartChat}
+              isOfferOpen={isOfferOpen}
+              setIsOfferOpen={setIsOfferOpen}
             />
 
             {/* Right Side Location & Live Map Embed */}

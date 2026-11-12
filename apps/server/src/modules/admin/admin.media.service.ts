@@ -107,13 +107,17 @@ export class AdminMediaService {
         by: ['mimeType'],
         _count: { id: true },
       }),
-      // Count genuine unattached orphans (not attached to any category or ad listing)
+      // Count genuine unattached orphans (not attached to any category, ad listing, banner, or chat message)
       prisma.mediaAsset.count({
         where: {
           categories: { none: {} },
           adImages: { none: {} },
           banners: { none: {} },
           messages: { none: {} },
+          NOT: {
+            entityType: 'CHAT',
+            entityId: { not: null },
+          },
         },
       }),
       prisma.mediaAsset.findMany({
@@ -643,6 +647,10 @@ export class AdminMediaService {
       adImages: { none: {} },
       banners: { none: {} },
       messages: { none: {} },
+      NOT: {
+        entityType: 'CHAT',
+        entityId: { not: null },
+      },
     };
 
     if (gracePeriodHours > 0) {

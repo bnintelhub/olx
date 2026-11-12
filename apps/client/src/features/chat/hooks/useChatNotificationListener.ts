@@ -22,13 +22,17 @@ export function useChatNotificationListener(): void {
       return;
     }
 
-    // Fetch initial badge count on login
-    void useChatUnreadStore.getState().fetchUnreadCount();
+    // Fetch initial badge count on login (skip if already on Chat page which loads inbox directly)
+    if (!window.location.pathname.startsWith('/chat')) {
+      void useChatUnreadStore.getState().fetchUnreadCount();
+    }
 
     const clientBurstMap = new Map<string, { count: number; time: number }>();
 
     const handleConnect = () => {
-      void useChatUnreadStore.getState().fetchUnreadCount();
+      if (!window.location.pathname.startsWith('/chat')) {
+        void useChatUnreadStore.getState().fetchUnreadCount();
+      }
     };
 
     const handleMessageNew = (msg: any) => {
@@ -98,11 +102,11 @@ export function useChatNotificationListener(): void {
     };
 
     const handleConvUpdated = () => {
-      void useChatUnreadStore.getState().fetchUnreadCount();
+      // Local badge counts are maintained by message.new and active chat read events
     };
 
     const handleMessageRead = () => {
-      void useChatUnreadStore.getState().fetchUnreadCount();
+      // Read receipts update status ticks without altering recipient badge count
     };
 
     void getChatSocket(user.id).then((sock) => {

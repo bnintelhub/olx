@@ -11,9 +11,10 @@ export function useAuth() {
     isAuthModalOpen: store.isAuthModalOpen,
     openAuthModal: store.openAuthModal,
     closeAuthModal: store.closeAuthModal,
-    loginWithTokens: (userData: any, accessToken: string, _refreshToken?: string) => {
+    loginWithTokens: (userData: any, accessToken?: string, _refreshToken?: string) => {
       store.setAuth(userData, accessToken);
     },
+    setUser: store.setUser,
     logout: store.logout,
     checkAuth: store.checkAuth,
   };

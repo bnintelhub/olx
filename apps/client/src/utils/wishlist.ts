@@ -1,4 +1,5 @@
 import { AdItem } from '../types';
+import { apiClient, getInMemoryAccessToken } from '@/lib/api-client';
 
 const WISHLIST_IDS_KEY = 'olx_wishlist_ids';
 const WISHLIST_ITEMS_KEY = 'olx_wishlist_items';
@@ -70,15 +71,10 @@ export const toggleWishlist = async (
   }
 
   // If user is authenticated, sync with backend
-  const activeToken = token || localStorage.getItem('olx_access_token');
+  const activeToken = token || getInMemoryAccessToken();
   if (activeToken) {
     try {
-      await fetch(`/api/v1/ads/${ad.id}/favourite`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${activeToken}`,
-        },
-      });
+      await apiClient.post(`/ads/${ad.id}/favourite`);
     } catch (err) {
       console.warn('Backend favourite sync error:', err);
     }
@@ -112,15 +108,10 @@ export const removeFromWishlist = async (
     console.error('Error removing from wishlist localStorage:', e);
   }
 
-  const activeToken = token || localStorage.getItem('olx_access_token');
+  const activeToken = token || getInMemoryAccessToken();
   if (activeToken) {
     try {
-      await fetch(`/api/v1/ads/${adId}/favourite`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${activeToken}`,
-        },
-      });
+      await apiClient.post(`/ads/${adId}/favourite`);
     } catch (err) {
       console.warn('Backend favourite removal error:', err);
     }

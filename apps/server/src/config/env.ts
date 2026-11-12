@@ -56,7 +56,6 @@ const envSchema = z
     // Media & Storage Configuration
     MEDIA_ROOT: z.string().default('/data/olx-media'),
     MEDIA_PUBLIC_BASE_URL: z.string().default('http://localhost:5000/media'),
-    MEDIA_SERVICE_URL: z.string().default('http://localhost:5005'),
     // PayU Hosted Checkout configuration
     PAYU_MERCHANT_KEY: z.string().default(process.env.PAYUKEY || process.env.PAYU_MERCHANT_KEY || 'payu_merchant_key_placeholder'),
     PAYU_MERCHANT_SALT: z.string().default(process.env.PAYUSALT || process.env.PAYU_MERCHANT_SALT || 'payu_merchant_salt_placeholder'),
@@ -67,9 +66,11 @@ const envSchema = z
     PAYU_FAILURE_URL: z.string().optional(),
     // Firebase Cloud Messaging configuration
     FIREBASE_SERVICE_ACCOUNT_PATH: z.string().default('gen-lang-client-0067863163-firebase-adminsdk-fbsvc-3a9115427b.json'),
+    FIREBASE_PROJECT_ID: z.string().optional(),
+    FIREBASE_CLIENT_EMAIL: z.string().optional(),
+    FIREBASE_PRIVATE_KEY: z.string().optional(),
     FIREBASE_API_KEY: z.string().optional(),
     FIREBASE_AUTH_DOMAIN: z.string().optional(),
-    FIREBASE_PROJECT_ID: z.string().optional(),
     FIREBASE_STORAGE_BUCKET: z.string().optional(),
     FIREBASE_MESSAGING_SENDER_ID: z.string().optional(),
     FIREBASE_APP_ID: z.string().optional(),

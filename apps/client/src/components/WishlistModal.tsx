@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Heart, Trash2, Eye, MapPin } from 'lucide-react';
 import { AdItem } from '../types';
 import { getWishlistItems, removeFromWishlist, WISHLIST_EVENT } from '../utils/wishlist';
+import { apiClient, getInMemoryAccessToken } from '@/lib/api-client';
 
 interface WishlistModalProps {
   isOpen: boolean;
@@ -21,17 +22,15 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
     setLoading(true);
     try {
       const localItems = getWishlistItems();
-      const token = localStorage.getItem('olx_access_token');
+      const token = getInMemoryAccessToken();
 
       if (!token) {
         setFavouriteAds(localItems);
         return;
       }
 
-      const res = await fetch('/api/v1/user/favourites', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
+      const res = await apiClient.get('/user/favourites');
+      const data = res.data;
       if (data.success && data.data?.ads) {
         // Merge backend and local items, deduplicated by ad ID
         const backendAds: AdItem[] = data.data.ads;
@@ -68,8 +67,7 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
   }, [isOpen]);
 
   const handleRemove = async (adId: string) => {
-    const token = localStorage.getItem('olx_access_token');
-    await removeFromWishlist(adId, token);
+    await removeFromWishlist(adId);
     setFavouriteAds((prev) => prev.filter((a) => a.id !== adId));
   };
 

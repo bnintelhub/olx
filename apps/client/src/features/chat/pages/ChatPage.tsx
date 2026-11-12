@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import { ArrowLeft, ShieldCheck, AlertCircle, ChevronLeft } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { apiClient } from '@/lib/api-client';
+import { apiClient, getInMemoryAccessToken } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
 import { ChatErrorBoundary } from '../components/ChatErrorBoundary';
@@ -28,8 +28,12 @@ export const ChatPage: React.FC = () => {
   const targetAdId = searchParams.get('adId');
 
   const { user, token, openAuthModal, isLoading: isAuthLoading } = useAuth();
+  const userId = user?.id;
+  const getActiveToken = (): string | null => token || getInMemoryAccessToken();
+  const hasSession = Boolean(userId || getActiveToken());
+
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
-  const [activeConvId, setActiveConvId] = useState<string | null>(null);
+  const [activeConvId, setActiveConvId] = useState<string | null>(() => targetConvIdParam);
   const [messages, setMessages] = useState<MessageItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -45,6 +49,9 @@ export const ChatPage: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
   activeConvIdRef.current = activeConvId;
+  const readConversationsRef = useRef<Set<string>>(new Set());
+  const lastFetchedConvIdRef = useRef<string | null>(null);
+  const isFetchingInboxRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
@@ -53,7 +60,6 @@ export const ChatPage: React.FC = () => {
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesContainerRef.current?.scrollTo({ top: messagesContainerRef.current.scrollHeight, behavior });
   };
-  const getActiveToken = (): string | null => token || localStorage.getItem('olx_access_token') || localStorage.getItem('token');
 
   // 1. Subscribe to shared Socket.IO connection
   useEffect(() => {
@@ -232,7 +238,10 @@ export const ChatPage: React.FC = () => {
     if (!activeConvId) return;
 
     if (typeof window !== 'undefined' && window.location.pathname.startsWith('/chat')) {
-      window.history.replaceState(null, '', `/chat?conversationId=${activeConvId}`);
+      const currentParam = new URLSearchParams(window.location.search).get('conversationId');
+      if (currentParam !== activeConvId) {
+        window.history.replaceState(null, '', `/chat?conversationId=${activeConvId}`);
+      }
     }
 
     if (socketRef.current?.connected) {
@@ -245,18 +254,36 @@ export const ChatPage: React.FC = () => {
     };
   }, [activeConvId]);
 
+  // Optimized mark as read: updates local badge and suppresses redundant network calls
   const markConversationAsRead = React.useCallback((convId: string) => {
-    setConversations((prev) => prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0 } : c)));
-    if (socketRef.current?.connected) {
-      socketRef.current.emit('message.read', { conversationId: convId });
-    }
-    void apiClient.patch(`/chat/conversations/${convId}/read`).catch(() => {});
-    void useChatUnreadStore.getState().fetchUnreadCount();
+    if (!convId) return;
+
+    setConversations((prev) => {
+      const target = prev.find((c) => c.id === convId);
+      const unread = target?.unreadCount || 0;
+
+      // Deduplicate: if 0 unread, nothing to mark as read
+      if (unread === 0 && readConversationsRef.current.has(convId)) {
+        return prev;
+      }
+      readConversationsRef.current.add(convId);
+
+      if (unread > 0) {
+        useChatUnreadStore.getState().decrementUnread(unread);
+        if (socketRef.current?.connected) {
+          socketRef.current.emit('message.read', { conversationId: convId });
+        }
+        void apiClient.patch(`/chat/conversations/${convId}/read`).catch(() => {});
+      }
+
+      return prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0 } : c));
+    });
   }, []);
 
-  // 3. Fetch conversations inbox and handle adId deep link
+  // 3. Fetch conversations inbox in parallel without waiting for serial auth waterfall
   const fetchInbox = React.useCallback(async (isInitial = false) => {
-    if (!user) return;
+    if (!hasSession || isFetchingInboxRef.current) return;
+    isFetchingInboxRef.current = true;
     if (isInitial) setLoading(true);
     try {
       let targetConvId: string | null = null;
@@ -293,24 +320,31 @@ export const ChatPage: React.FC = () => {
       // Prioritize explicit target conversation from param, route, or ad click
       const selectedId = targetConvId || targetConvIdParam || (!activeConvIdRef.current && convList.length > 0 ? convList[0].id : null);
       if (selectedId) {
-        setActiveConvId(selectedId);
+        if (selectedId !== activeConvIdRef.current) {
+          setActiveConvId(selectedId);
+        }
         markConversationAsRead(selectedId);
         if (targetConvId || targetConvIdParam) setMobileShowThread(true);
       }
     } catch (err) {
       console.error('Failed to load conversations', err);
     } finally {
+      isFetchingInboxRef.current = false;
       if (isInitial) setLoading(false);
     }
-  }, [user, targetAdId, targetConvIdParam, markConversationAsRead]);
+  }, [hasSession, targetAdId, targetConvIdParam, markConversationAsRead]);
 
   useEffect(() => {
-    void fetchInbox(true);
-  }, [fetchInbox]);
+    if (hasSession) {
+      void fetchInbox(true);
+    }
+  }, [hasSession, targetAdId, targetConvIdParam, fetchInbox]);
 
-  // 4. Load active conversation messages on conversation switch or auto-reconnect
-  const fetchConversationMessages = React.useCallback(async (convId: string) => {
-    if (!convId || !user) return;
+  // 4. Load active conversation messages concurrently without blocking UI
+  const fetchConversationMessages = React.useCallback(async (convId: string, force = false) => {
+    if (!convId || !hasSession) return;
+    if (!force && lastFetchedConvIdRef.current === convId) return;
+    lastFetchedConvIdRef.current = convId;
     try {
       const res = await apiClient.get(`/chat/conversations/${convId}/messages?limit=30`);
       if (res.data?.success && res.data.data?.messages) {
@@ -329,10 +363,14 @@ export const ChatPage: React.FC = () => {
         setTimeout(() => scrollToBottom('auto'), 50);
         markConversationAsRead(convId);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch messages', err);
+      const errMsg = err.response?.data?.message;
+      if (errMsg && errMsg.includes('Access denied')) {
+        setChatAlert('Access denied to this conversation. You are not a participant in this chat.');
+      }
     }
-  }, [user, markConversationAsRead]);
+  }, [hasSession, markConversationAsRead]);
   fetchConversationMessagesRef.current = fetchConversationMessages;
 
   useEffect(() => {
@@ -487,7 +525,7 @@ export const ChatPage: React.FC = () => {
     } catch (err) { console.error('Failed to submit report', err); }
   };
 
-  if (isAuthLoading) {
+  if (isAuthLoading && !hasSession) {
     return (
       <div className="w-full h-screen flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-3">
@@ -498,7 +536,7 @@ export const ChatPage: React.FC = () => {
     );
   }
 
-  if (!user) return <ChatAuthRequired onLogin={openAuthModal} />;
+  if (!user && !isAuthLoading && !hasSession) return <ChatAuthRequired onLogin={openAuthModal} />;
   const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;
 
   return (
@@ -522,7 +560,7 @@ export const ChatPage: React.FC = () => {
         </div>
         <div className="flex items-center gap-3 text-xs">
           <span className="text-gray-300 hidden md:inline">
-            Logged in as <strong className="text-white">{user.profile?.name || user.email || user.phoneNumber || 'User'}</strong>
+            Logged in as <strong className="text-white">{user?.profile?.name || user?.email || user?.phoneNumber || 'User'}</strong>
           </span>
         </div>
       </div>
@@ -547,8 +585,11 @@ export const ChatPage: React.FC = () => {
             activeConvId={activeConvId}
             loading={loading}
             onSelectConversation={(id) => {
-              setActiveConvId(id);
-              markConversationAsRead(id);
+              if (id !== activeConvId) {
+                setChatAlert(null);
+                setActiveConvId(id);
+                markConversationAsRead(id);
+              }
               setMobileShowThread(true);
             }}
           />

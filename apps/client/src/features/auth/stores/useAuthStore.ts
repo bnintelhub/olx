@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { User } from '@/types';
 import { authService } from '../service/auth.service';
-import { executeSilentRefresh } from '@/lib/api-client';
+import { executeSilentRefresh, getInMemoryAccessToken, setInMemoryAccessToken } from '@/lib/api-client';
 import { disconnectChatSocket } from '@/features/chat/services/chatSocket.service';
 
 interface AuthState {
@@ -24,7 +24,7 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      token: typeof window !== 'undefined' ? localStorage.getItem('olx_access_token') : null,
+      token: null, // Always memory-only to eliminate XSS token theft
       isAuthenticated: false,
       isLoading: true,
       isAuthModalOpen: false,
@@ -32,14 +32,13 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user: User, token?: string) => {
         if (token) {
-          localStorage.setItem('olx_access_token', token);
-          localStorage.setItem('token', token);
+          setInMemoryAccessToken(token);
         }
         localStorage.setItem('olx_wishlist_user_id', user.id);
 
         set({
           user,
-          token: token || get().token,
+          token: token || getInMemoryAccessToken(),
           isAuthenticated: true,
           isLoading: false,
           isAuthModalOpen: false,
@@ -72,16 +71,21 @@ export const useAuthStore = create<AuthState>()(
 
       checkAuth: async () => {
         try {
+          if (get().user) {
+            set({ isLoading: false });
+          }
+
+          let activeToken = getInMemoryAccessToken();
+          if (!activeToken) {
+            await executeSilentRefresh();
+            activeToken = getInMemoryAccessToken();
+          }
+
           const res = await authService.getMe();
           if (res?.success && res.data) {
-            let activeToken = get().token || localStorage.getItem('olx_access_token');
-            if (!activeToken) {
-              await executeSilentRefresh();
-              activeToken = localStorage.getItem('olx_access_token');
-            }
             set({
               user: res.data,
-              token: activeToken,
+              token: activeToken || getInMemoryAccessToken(),
               isAuthenticated: true,
               isLoading: false,
             });
@@ -92,9 +96,8 @@ export const useAuthStore = create<AuthState>()(
           // Guest user or token expired
         }
 
-        // Reset state and clear stale storage tokens on unauthenticated status
-        localStorage.removeItem('olx_access_token');
-        localStorage.removeItem('token');
+        // Reset state and clear memory token
+        setInMemoryAccessToken(null);
         set({
           user: null,
           token: null,
@@ -110,9 +113,7 @@ export const useAuthStore = create<AuthState>()(
         } catch {
           // ignore error on logout
         }
-        localStorage.removeItem('olx_access_token');
-        localStorage.removeItem('token');
-        localStorage.removeItem('olx_refresh_token');
+        setInMemoryAccessToken(null);
         localStorage.removeItem('olx_wishlist_user_id');
         set({
           user: null,
@@ -124,6 +125,11 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'olx-client-auth',
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.isLoading = false;
+        }
+      },
     }
   )
 );

@@ -4,16 +4,25 @@ import { apiClient } from '@/lib/api-client';
 
 export const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY || '',
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || '',
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || 'gen-lang-client-0067863163.firebaseapp.com',
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || 'gen-lang-client-0067863163',
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || 'gen-lang-client-0067863163.appspot.com',
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
   appId: import.meta.env.VITE_FIREBASE_APP_ID || '',
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || '',
 };
 
+export function getPublicVapidKey(): string | undefined {
+  return (
+    import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+    import.meta.env.VITE_FIREBASE_VAPID_KEY ||
+    (typeof window !== 'undefined' ? (window as any).__FIREBASE_VAPID_KEY__ : undefined)
+  );
+}
+
 export function isFirebaseConfigured(): boolean {
-  return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
+  const vapid = getPublicVapidKey();
+  return Boolean(firebaseConfig.projectId && (firebaseConfig.apiKey || vapid));
 }
 
 // Safe Firebase App Initialization
@@ -86,11 +95,15 @@ export async function requestAndRegisterPushToken(): Promise<string | null> {
     // Wait until service worker is active
     await navigator.serviceWorker.ready;
 
-    const vapidKey = (import.meta as any).env?.VITE_FIREBASE_VAPID_KEY || (typeof window !== 'undefined' ? (window as any).__FIREBASE_VAPID_KEY__ : undefined);
+    const vapidKey = getPublicVapidKey();
+    if (!vapidKey) {
+      console.warn('[FCM] VAPID Key required for FCM background web push. Native browser notifications active.');
+      return 'native-granted';
+    }
 
     const token = await getToken(messaging, {
       serviceWorkerRegistration: registration,
-      ...(vapidKey ? { vapidKey } : {}),
+      vapidKey,
     });
 
     if (token) {

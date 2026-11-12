@@ -36,8 +36,10 @@ export function toPublicMediaUrl(pathOrUrl: string | null | undefined, baseUrl?:
   if (!pathOrUrl || typeof pathOrUrl !== 'string') return '';
   const cleanKey = normalizeMediaKey(pathOrUrl);
   if (!cleanKey) return '';
+  // Avoid leaking Docker internal service hostnames like http://server:5000 or http://backend:5000 to public clients
+  const isInternalHost = baseUrl && (baseUrl.includes('server:') || baseUrl.includes('backend:'));
   const base = (
-    baseUrl ||
+    (!isInternalHost && baseUrl) ||
     process.env.MEDIA_PUBLIC_BASE_URL ||
     process.env.MEDIA_CDN_URL ||
     'http://localhost:5000/media'
