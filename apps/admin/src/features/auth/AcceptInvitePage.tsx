@@ -138,7 +138,7 @@ export function AcceptInvitePage() {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black font-black text-sm">
             <Command className="h-4 w-4" />
           </div>
-          <span className="font-extrabold text-base tracking-tight text-white">OLX Operations Console</span>
+          <span className="font-extrabold text-base tracking-tight text-white">BLX Orbit Operations Console</span>
         </div>
 
         {/* Invitation Welcome Card */}

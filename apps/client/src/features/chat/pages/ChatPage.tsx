@@ -511,7 +511,7 @@ export const ChatPage: React.FC = () => {
           </button>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold tracking-tight">OLX Messages</h1>
+              <h1 className="text-base font-bold tracking-tight">BLX Orbit Messages</h1>
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/10 px-2 py-0.5 rounded-full text-teal-300">
                 <ShieldCheck className="w-3 h-3 text-emerald-400" />
                 Verified & Protected

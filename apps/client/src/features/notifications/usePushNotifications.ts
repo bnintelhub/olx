@@ -83,7 +83,7 @@ export function usePushNotifications() {
         // Instant audio & desktop notification confirmation
         try {
           playNewMessageSound();
-          new Notification('OLX ORBIT — Chat Alerts Active', {
+          new Notification('BLX Orbit — Chat Alerts Active', {
             body: 'WhatsApp-style instant notifications enabled! You will be notified of new messages.',
             icon: '/icon-192.svg',
             badge: '/icon-192.svg',

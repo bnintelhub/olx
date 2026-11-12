@@ -12,7 +12,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdminPortal }) => {
   return (
     <footer className="bg-[#00343A] text-white py-10 border-t border-[#00282D]">
       <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-gray-300">
-        <p>© 2026 OLX India Marketplace. All rights reserved.</p>
+        <p>© 2026 BLX Orbit India Marketplace. All rights reserved.</p>
         <div className="flex flex-wrap items-center gap-6">
           <span className="hover:text-white cursor-pointer transition">About Us</span>
           <span className="hover:text-white cursor-pointer transition">Security & Safety</span>

@@ -222,7 +222,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
             <div className="flex-1 text-center sm:text-left">
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                <h3 className="text-xl font-bold text-[#002f34]">{name || 'OLX Member'}</h3>
+                <h3 className="text-xl font-bold text-[#002f34]">{name || 'BLX Orbit Member'}</h3>
                 {isIdentityVerified ? (
                   <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700">
                     <ShieldCheck size={12} className="text-blue-600" /> VERIFIED BADGE
@@ -285,7 +285,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
                 <div>
                   <h4 className="text-xs sm:text-sm font-bold text-[#002f34]">
-                    Add your OLX Verification Badge
+                    Add your BLX Orbit Verification Badge
                   </h4>
                   <p className="text-[11px] text-gray-600">
                     Verified profiles receive 3x more buyer inquiries and higher trust ranking.
@@ -316,7 +316,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="rounded-xl bg-blue-50/60 border border-blue-200 p-3.5 flex items-center gap-3 text-xs text-blue-900">
               <ShieldCheck size={20} className="text-blue-600 flex-shrink-0" />
               <span>
-                <strong>Verification Badge Active:</strong> Your public seller profile carries the official OLX verified trust shield.
+                <strong>Verification Badge Active:</strong> Your public seller profile carries the official BLX Orbit verified trust shield.
               </span>
             </div>
           )}

@@ -19,7 +19,7 @@ export interface Team {
 
 const DEFAULT_TEAMS: Team[] = [
   {
-    name: 'OLX India',
+    name: 'BLX Orbit India',
     logo: Building2,
     plan: 'Enterprise Admin',
   },

@@ -458,7 +458,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = ({
         <div className="absolute inset-0 bg-black/50 z-40 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-xl">
             <h3 className="text-sm font-bold text-gray-900">Report Conversation</h3>
-            <p className="text-xs text-gray-500">Help us keep the OLX marketplace safe by reporting suspicious behavior.</p>
+            <p className="text-xs text-gray-500">Help us keep the BLX Orbit marketplace safe by reporting suspicious behavior.</p>
             <form onSubmit={handleReportSubmit} className="space-y-3">
               <div>
                 <label className="text-[11px] font-semibold text-gray-700 block mb-1">Reason</label>

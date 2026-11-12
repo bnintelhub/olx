@@ -148,22 +148,31 @@ export const Navbar: React.FC<NavbarProps> = ({
               if (onLogoClick) onLogoClick();
             }}
             className="flex items-center gap-2 focus:outline-none cursor-pointer group transition-transform active:scale-98"
-            title="OLX India Marketplace"
+            title="BLX Orbit Marketplace"
           >
-            <svg
-              className="h-7 sm:h-8 w-auto text-[#002F34] transition-colors"
-              viewBox="0 0 102 48"
-              fill="currentColor"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                fillRule="evenodd"
-                clipRule="evenodd"
-                d="M21 4C10.5066 4 2 12.5066 2 23C2 33.4934 10.5066 42 21 42C31.4934 42 40 33.4934 40 23C40 12.5066 31.4934 4 21 4ZM21 33C15.4772 33 11 28.5228 11 23C11 17.4772 15.4772 13 21 13C26.5228 13 31 17.4772 31 23C31 28.5228 26.5228 33 21 33Z"
-              />
-              <path d="M46 5H55V34H66V42H46V5Z" />
-              <path d="M70 5H79.5L88 19L96.5 5H106L94 23.5L106 42H96.5L88 28L79.5 42H70L82 23.5L70 5Z" />
-            </svg>
+            <div className="flex items-center gap-1.5">
+              <svg
+                className="h-7 sm:h-8 w-auto text-[#002F34] transition-colors"
+                viewBox="0 0 108 48"
+                fill="currentColor"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                {/* B */}
+                <path
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                  d="M4 5H23C29.5 5 34.5 8.5 34.5 14C34.5 17.5 32 20.5 28 22C33 23.5 36 27 36 32C36 38 31 42 23 42H4V5ZM13 13V19.5H22C24 19.5 25.5 18.2 25.5 16.2C25.5 14.2 24 13 22 13H13ZM13 27V34H22.5C25 34 27 32.5 27 30.5C27 28.5 25 27 22.5 27H13Z"
+                />
+                {/* L */}
+                <path d="M43 5H52V34H63V42H43V5Z" />
+                {/* X */}
+                <path d="M68 5H77.5L86 19L94.5 5H104L92 23.5L104 42H94.5L86 28L77.5 42H68L80 23.5L68 5Z" />
+              </svg>
+              <span className="bg-[#002F34] text-[#00E5FF] text-[10px] sm:text-[11px] font-black tracking-widest px-2 py-0.5 rounded uppercase leading-tight flex items-center gap-1 shadow-2xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#00E5FF] animate-pulse" />
+                ORBIT
+              </span>
+            </div>
             <span className="hidden sm:inline-block rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
               India
             </span>

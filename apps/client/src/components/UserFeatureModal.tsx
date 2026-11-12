@@ -60,7 +60,7 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
               {type === 'ELITE_SELLER' && 'Become an Elite Seller'}
               {type === 'HELP' && 'Help & Support Desk'}
               {type === 'SETTINGS' && 'Account Settings'}
-              {type === 'INSTALL_APP' && 'Install OLX Lite App'}
+              {type === 'INSTALL_APP' && 'Install BLX Orbit Lite App'}
             </h3>
           </div>
 
@@ -161,7 +161,7 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
                 <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
                   <ShieldCheck size={12} className="text-[#FFD54A]" /> Exclusive Buyer Tier
                 </div>
-                <h4 className="text-lg font-black mt-2">OLX Elite Buyer Club</h4>
+                <h4 className="text-lg font-black mt-2">BLX Orbit Elite Buyer Club</h4>
                 <p className="text-xs text-gray-200 mt-1">
                   Get direct priority access to verified sellers, early-bird notifications, and escrow purchase assurance.
                 </p>
@@ -202,7 +202,7 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
                 </div>
                 <h4 className="text-lg font-black mt-2">Become an Elite Seller</h4>
                 <p className="text-xs text-gray-200 mt-1">
-                  Scale your store on OLX India with dedicated store landing page and 10x buyer reach.
+                  Scale your store on BLX Orbit with dedicated store landing page and 10x buyer reach.
                 </p>
               </div>
 
@@ -243,12 +243,12 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
                 </p>
                 <div className="mt-3 flex items-center gap-3">
                   <a
-                    href="mailto:support@olxorbit.in"
+                    href="mailto:support@blxorbit.in"
                     className="bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700"
                   >
                     Email Support
                   </a>
-                  <span className="text-gray-500">or call 1800-OLX-SAFE</span>
+                  <span className="text-gray-500">or call 1800-BLX-SAFE</span>
                 </div>
               </div>
 
@@ -306,7 +306,7 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
                 <Download size={32} />
               </div>
               <div>
-                <h4 className="text-base font-bold text-[#002f34]">Install OLX Orbit Lite App</h4>
+                <h4 className="text-base font-bold text-[#002f34]">Install BLX Orbit Lite App</h4>
                 <p className="text-xs text-gray-500 max-w-xs mx-auto mt-1">
                   Enjoy blazing-fast browsing, offline support, and instant chat notifications on your device.
                 </p>
@@ -314,7 +314,7 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
 
               <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs text-gray-600 max-w-sm mx-auto text-left space-y-1">
                 <p>1. In Chrome / Edge: Click the <strong>Install</strong> icon in the address bar.</p>
-                <p>2. Or click the 3-dots menu &gt; <strong>Install OLX ORBIT...</strong></p>
+                <p>2. Or click the 3-dots menu &gt; <strong>Install BLX Orbit...</strong></p>
               </div>
 
               <button

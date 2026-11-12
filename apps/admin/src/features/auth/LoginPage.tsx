@@ -61,7 +61,7 @@ export function LoginPage() {
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black font-black text-xs">
             <Command className="h-4 w-4" />
           </div>
-          <span>OLX Admin</span>
+          <span>BLX Orbit Admin</span>
         </div>
 
         <div className="relative z-20 mt-auto">

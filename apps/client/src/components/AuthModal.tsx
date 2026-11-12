@@ -152,7 +152,7 @@ export const AuthModal: React.FC = () => {
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white text-black font-black text-xs">
               <Command className="h-4 w-4" />
             </div>
-            <span>OLX Marketplace</span>
+            <span>BLX Orbit Marketplace</span>
           </div>
 
           <div className="mt-auto pt-16">

@@ -107,7 +107,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             <div className="absolute inset-0 bg-gradient-to-r from-[#003F46] via-transparent to-transparent z-10 hidden lg:block w-24 pointer-events-none" />
             <img
               src="/hero-collage.jpg"
-              alt="OLX Marketplace - Cars, Mobiles, Electronics, Furniture"
+              alt="BLX Orbit Marketplace - Cars, Mobiles, Electronics, Furniture"
               className="w-full h-full object-cover object-center lg:object-right scale-100 transition-transform duration-700"
               loading="eager"
             />

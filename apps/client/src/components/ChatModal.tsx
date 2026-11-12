@@ -405,7 +405,7 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
               <MessageCircle className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold tracking-tight">OLX Marketplace Chat</h2>
+              <h2 className="text-sm font-bold tracking-tight">BLX Orbit Chat</h2>
               <p className="text-[11px] text-gray-300">Secure Direct Buyer-Seller Inquiries</p>
             </div>
           </div>

@@ -16,7 +16,7 @@ const REPORT_REASONS = [
   { value: 'INAPPROPRIATE_CONTENT', label: 'Offensive or vulgar content', desc: 'Inappropriate language, offensive imagery or harassment' },
   { value: 'DUPLICATE_LISTING', label: 'Duplicate / spam posting', desc: 'Same product posted multiple times' },
   { value: 'ALREADY_SOLD', label: 'Item is already sold', desc: 'Seller stated item is no longer available' },
-  { value: 'OTHER', label: 'Other issue', desc: 'Any other problem violating OLX ORBIT community guidelines' },
+  { value: 'OTHER', label: 'Other issue', desc: 'Any other problem violating BLX Orbit community guidelines' },
 ];
 
 export const ReportAdModal: React.FC<ReportAdModalProps> = ({
@@ -100,7 +100,7 @@ export const ReportAdModal: React.FC<ReportAdModalProps> = ({
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto animate-bounce" />
               <h4 className="font-bold text-gray-900 text-base">Report Submitted</h4>
               <p className="text-xs text-gray-600 max-w-sm mx-auto">
-                Thank you for helping keep OLX ORBIT safe. Our moderation team will investigate this listing immediately.
+                Thank you for helping keep BLX Orbit safe. Our moderation team will investigate this listing immediately.
               </p>
             </div>
           ) : (

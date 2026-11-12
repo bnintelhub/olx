@@ -399,6 +399,9 @@ This section is dedicated to deployment engineers setting up the application on 
 
 ### Where to Place `.env` Files
 
+> [!TIP]
+> For complete end-to-end production deployment instructions covering **Docker Compose Production**, **Ubuntu 22.04/24.04 VPS Hardening (UFW, SSL Certbot)**, and **Native Process Management (PM2, systemd, host Nginx)** along with exact file-by-file `.env` templates, refer to the dedicated [Deployment Strategy Guide](docs/DEPLOYMENT_STRATEGY.md).
+
 The platform uses environment files in two primary modes:
 
 #### 1. Containerized Deployment (Docker Compose) — *Recommended*
@@ -409,6 +412,9 @@ olx/
 ```
 Docker Compose reads this single file and automatically passes variables to all container services (`postgres`, `redis`, `server`, `media-service`, `workers`, `admin`, `client`, `nginx`).
 
+> [!NOTE]
+> If you recreate individual app containers without rebuilding Nginx, run `docker compose restart nginx` so Nginx refreshes its internal DNS cache for container IP addresses.
+
 #### 2. Native / Bare-Metal Process Management (PM2, systemd, or local CLI)
 When running services directly on the host without Docker:
 * **Root**: `olx/.env` (Global fallback)
@@ -416,8 +422,8 @@ When running services directly on the host without Docker:
 * **Media Service**: `olx/apps/media-service/.env`
 * **Background Workers**: `olx/apps/workers/.env`
 * **Database (Prisma CLI)**: `olx/packages/database/.env`
-* **Customer Client**: `olx/apps/client/.env`
-* **Admin Portal**: `olx/apps/admin/.env`
+* **Customer Client**: `olx/apps/client/.env.production` (or `.env.local` for dev)
+* **Admin Portal**: `olx/apps/admin/.env.production` (or `.env.local` for dev)
 
 ---
 

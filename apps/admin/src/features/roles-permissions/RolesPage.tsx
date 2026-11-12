@@ -501,7 +501,7 @@ export function RolesPage() {
                 <label className="text-xs font-medium text-foreground">Staff Work Email *</label>
                 <Input
                   type="email"
-                  placeholder="staff.member@olx.in"
+                  placeholder="staff.member@blxorbit.in"
                   value={inviteEmail}
                   onChange={(e) => setInviteEmail(e.target.value)}
                   required
