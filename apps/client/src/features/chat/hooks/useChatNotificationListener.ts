@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
@@ -9,10 +9,19 @@ import { getChatSocket } from '../services/chatSocket.service';
 
 export function useChatNotificationListener(): void {
   const navigate = useNavigate();
+  const location = useLocation();
   const navigateRef = useRef(navigate);
   navigateRef.current = navigate;
   const { user } = useAuthStore();
   const socketRef = useRef<Socket | null>(null);
+
+  // Sync unread badge count whenever navigating away from chat or back to pages
+  useEffect(() => {
+    if (!user) return;
+    if (!location.pathname.startsWith('/chat')) {
+      void useChatUnreadStore.getState().fetchUnreadCount();
+    }
+  }, [location.pathname, user?.id]);
 
   useEffect(() => {
     let isCancelled = false;

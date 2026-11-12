@@ -254,27 +254,35 @@ export const ChatPage: React.FC = () => {
     };
   }, [activeConvId]);
 
-  // Optimized mark as read: updates local badge and suppresses redundant network calls
+  // Sync unread count on ChatPage unmount
+  useEffect(() => {
+    return () => {
+      useChatUnreadStore.getState().setActiveConversationId(null);
+      void useChatUnreadStore.getState().fetchUnreadCount();
+    };
+  }, []);
+
+  // Optimized mark as read: updates local badge and notifies backend + socket
   const markConversationAsRead = React.useCallback((convId: string) => {
     if (!convId) return;
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('message.read', { conversationId: convId });
+    }
+    void apiClient.patch(`/chat/conversations/${convId}/read`).catch(() => {});
 
     setConversations((prev) => {
       const target = prev.find((c) => c.id === convId);
       const unread = target?.unreadCount || 0;
 
-      // Deduplicate: if 0 unread, nothing to mark as read
+      if (unread > 0) {
+        useChatUnreadStore.getState().decrementUnread(unread);
+      }
+
       if (unread === 0 && readConversationsRef.current.has(convId)) {
         return prev;
       }
       readConversationsRef.current.add(convId);
-
-      if (unread > 0) {
-        useChatUnreadStore.getState().decrementUnread(unread);
-        if (socketRef.current?.connected) {
-          socketRef.current.emit('message.read', { conversationId: convId });
-        }
-        void apiClient.patch(`/chat/conversations/${convId}/read`).catch(() => {});
-      }
 
       return prev.map((c) => (c.id === convId ? { ...c, unreadCount: 0 } : c));
     });
@@ -312,7 +320,21 @@ export const ChatPage: React.FC = () => {
       convList = sortConversationsDesc(convList);
 
       const initialActiveId = targetConvId || targetConvIdParam || (convList.length > 0 && !activeConvIdRef.current ? convList[0].id : activeConvIdRef.current);
+
+      // Immediately sync store with all other conversations' unread count (excluding active chat)
+      const otherUnreadTotal = convList
+        .filter((c) => c.id !== initialActiveId)
+        .reduce((sum, c) => sum + (Number(c.unreadCount) || 0), 0);
+      useChatUnreadStore.getState().setUnreadCount(otherUnreadTotal);
+
       if (initialActiveId) {
+        const activeItem = convList.find((c) => c.id === initialActiveId);
+        if (activeItem && activeItem.unreadCount > 0) {
+          if (socketRef.current?.connected) {
+            socketRef.current.emit('message.read', { conversationId: initialActiveId });
+          }
+          void apiClient.patch(`/chat/conversations/${initialActiveId}/read`).catch(() => {});
+        }
         convList = convList.map((c) => (c.id === initialActiveId ? { ...c, unreadCount: 0 } : c));
       }
       setConversations(convList);
