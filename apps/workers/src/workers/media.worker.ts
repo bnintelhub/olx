@@ -187,70 +187,33 @@ export function startMediaWorker() {
           const thumbCrop = calculateCropWindow(width, height, 1.0, focalPoint);
           const cardCrop = calculateCropWindow(width, height, 4 / 3, focalPoint);
 
-          // Generate WebP variants
-          const [originalBuffer, largeBuffer, mediumBuffer, thumbBuffer, cardBuffer] = await Promise.all([
-            sharp(tempFullPath, { limitInputPixels: 64000000 })
-              .rotate()
-              .toColorspace('srgb')
-              .webp({ quality: 88, effort: 3 })
-              .toBuffer(),
-            sharp(tempFullPath, { limitInputPixels: 64000000 })
-              .rotate()
-              .toColorspace('srgb')
-              .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-              .webp({ quality: 85, effort: 3 })
-              .toBuffer(),
-            sharp(tempFullPath, { limitInputPixels: 64000000 })
-              .rotate()
-              .toColorspace('srgb')
-              .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-              .webp({ quality: 82, effort: 3 })
-              .toBuffer(),
-            sharp(tempFullPath, { limitInputPixels: 64000000 })
-              .rotate()
-              .toColorspace('srgb')
-              .extract(thumbCrop)
-              .resize(300, 300)
-              .webp({ quality: 80, effort: 3 })
-              .toBuffer(),
-            sharp(tempFullPath, { limitInputPixels: 64000000 })
-              .rotate()
-              .toColorspace('srgb')
-              .extract(cardCrop)
-              .resize(600, 450)
-              .webp({ quality: 82, effort: 3 })
-              .toBuffer(),
-          ]);
+          // Single Source of Truth: WebP at 100% Quality
+          const webpBuffer = await sharp(tempFullPath, { limitInputPixels: 64000000 })
+            .rotate()
+            .toColorspace('srgb')
+            .webp({ quality: 100, effort: 3 })
+            .toBuffer();
 
           const baseDir = `images/${year}/${month}/${day}/${assetId}`;
-          const originalKey = `${baseDir}/original.webp`;
-          const largeKey = `${baseDir}/large.webp`;
-          const mediumKey = `${baseDir}/medium.webp`;
-          const thumbKey = `${baseDir}/thumb.webp`;
-          const cardKey = `${baseDir}/card.webp`;
+          const imageKey = `${baseDir}/image.webp`;
 
-          // Atomic writes to storage
-          await Promise.all([
-            storage.save({ destinationKey: originalKey, streamOrBuffer: originalBuffer }),
-            storage.save({ destinationKey: largeKey, streamOrBuffer: largeBuffer }),
-            storage.save({ destinationKey: mediumKey, streamOrBuffer: mediumBuffer }),
-            storage.save({ destinationKey: thumbKey, streamOrBuffer: thumbBuffer }),
-            storage.save({ destinationKey: cardKey, streamOrBuffer: cardBuffer }),
-          ]);
+          await storage.save({ destinationKey: imageKey, streamOrBuffer: webpBuffer });
 
           const variants = {
-            original: originalKey,
-            large: largeKey,
-            medium: mediumKey,
-            thumb: thumbKey,
-            card: cardKey,
+            original: imageKey,
+            large: imageKey,
+            medium: imageKey,
+            card: imageKey,
+            thumbnail: imageKey,
+            thumb: imageKey,
+            url: imageKey,
           };
 
           await prisma.mediaAsset.update({
             where: { id: assetId },
             data: {
               status: 'READY',
-              storageKey: baseDir,
+              storageKey: imageKey,
               width,
               height,
               variants,
@@ -352,58 +315,25 @@ export function startMediaWorker() {
         const width = isRotated ? (metadata.height || 0) : (metadata.width || 0);
         const height = isRotated ? (metadata.width || 0) : (metadata.height || 0);
 
-        const focalPoint = await detectFocalPoint(tempPath, width, height);
-        const thumbCrop = calculateCropWindow(width, height, 1.0, focalPoint);
-        const cardCrop = calculateCropWindow(width, height, 4 / 3, focalPoint);
+        // Single Source of Truth: WebP at 100% Quality
+        const webpBuffer = await sharp(tempPath, { limitInputPixels: 64000000 })
+          .rotate()
+          .toColorspace('srgb')
+          .webp({ quality: 100, effort: 3 })
+          .toBuffer();
 
-        const [largeBuffer, mediumBuffer, thumbBuffer, cardBuffer] = await Promise.all([
-          sharp(tempPath, { limitInputPixels: 64000000 })
-            .rotate()
-            .toColorspace('srgb')
-            .resize(1600, 1600, { fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 85, effort: 3 })
-            .toBuffer(),
-          sharp(tempPath, { limitInputPixels: 64000000 })
-            .rotate()
-            .toColorspace('srgb')
-            .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-            .webp({ quality: 82, effort: 3 })
-            .toBuffer(),
-          sharp(tempPath, { limitInputPixels: 64000000 })
-            .rotate()
-            .toColorspace('srgb')
-            .extract(thumbCrop)
-            .resize(300, 300)
-            .webp({ quality: 80, effort: 3 })
-            .toBuffer(),
-          sharp(tempPath, { limitInputPixels: 64000000 })
-            .rotate()
-            .toColorspace('srgb')
-            .extract(cardCrop)
-            .resize(600, 450)
-            .webp({ quality: 82, effort: 3 })
-            .toBuffer(),
-        ]);
+        const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'image', format: 'webp' });
 
-        const largePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'large', format: 'webp' });
-        const mediumPath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'medium', format: 'webp' });
-        const thumbPath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'thumbnail', format: 'webp' });
-        const cardPath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'card', format: 'webp' });
-        const relativeDir = buildMediaDirectory({ resource, resourceId, mediaType, mediaId });
-
-        // Save atomically using storageProvider
-        await Promise.all([
-          storage.save({ destinationKey: largePath, streamOrBuffer: largeBuffer }),
-          storage.save({ destinationKey: mediumPath, streamOrBuffer: mediumBuffer }),
-          storage.save({ destinationKey: thumbPath, streamOrBuffer: thumbBuffer }),
-          storage.save({ destinationKey: cardPath, streamOrBuffer: cardBuffer }),
-        ]);
+        await storage.save({ destinationKey: imagePath, streamOrBuffer: webpBuffer });
 
         const variants = {
-          thumbnail: thumbPath,
-          card: cardPath,
-          medium: mediumPath,
-          large: largePath,
+          original: imagePath,
+          large: imagePath,
+          medium: imagePath,
+          card: imagePath,
+          thumbnail: imagePath,
+          thumb: imagePath,
+          url: imagePath,
         };
 
         await prisma.mediaAsset.update({
@@ -412,9 +342,8 @@ export function startMediaWorker() {
             status: 'READY',
             width,
             height,
-            storageKey: relativeDir,
+            storageKey: imagePath,
             variants,
-            metadata: { focalPoint },
           },
         }).catch(() => {});
 

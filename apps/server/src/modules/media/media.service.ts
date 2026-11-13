@@ -86,21 +86,19 @@ export class MediaService {
     const resourceId = context?.resourceId || 'drafts';
     const mediaType = context?.mediaType || 'images';
 
-    const largePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'large', format: 'webp' });
-    const mediumPath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'medium', format: 'webp' });
-    const thumbnailPath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'thumbnail', format: 'webp' });
-    const cardPath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'card', format: 'webp' });
+    const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'image', format: 'webp' });
 
     const host = baseUrl || process.env.MEDIA_CDN_URL || 'http://localhost:5000';
     const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
     const relativeVariants = {
-      thumbnail: thumbnailPath,
-      card: cardPath,
-      medium: mediumPath,
-      large: largePath,
+      thumbnail: imagePath,
+      card: imagePath,
+      medium: imagePath,
+      large: imagePath,
+      original: imagePath,
+      url: imagePath,
     };
-    const diskPath = buildMediaDirectory({ resource, resourceId, mediaType, mediaId });
 
     const entityType = resource === 'chats' ? 'CHAT' : resource === 'categories' ? 'CATEGORY' : resource === 'users' ? 'USER' : 'LISTING';
 
@@ -111,25 +109,20 @@ export class MediaService {
         ownerId: userId,
         entityType: entityType as any,
         entityId: resourceId || null,
-        storageKey: relativeVariants.large || `images/${mediaId}/original.webp`,
+        storageKey: imagePath,
         originalName: path.basename(part.filename || 'image.jpg'),
         mimeType: validated.mimeType,
-        extension: path.extname(part.filename || '').replace('.', '') || 'jpg',
+        extension: 'webp',
         sizeBytes: BigInt(size),
         status: 'PROCESSING',
         variants: relativeVariants,
       },
     });
 
-    // Immediately write initial image file to storage variant locations so URLs resolve with 200 OK without 404 delays
+    // Immediately write initial image file to single storage location so URLs resolve immediately with 200 OK
     try {
       const fileBuffer = await fs.promises.readFile(tempPath);
-      await Promise.all([
-        defaultStorage.writeVariantFile(largePath, fileBuffer),
-        defaultStorage.writeVariantFile(cardPath, fileBuffer),
-        defaultStorage.writeVariantFile(thumbnailPath, fileBuffer),
-        defaultStorage.writeVariantFile(mediumPath, fileBuffer),
-      ]);
+      await defaultStorage.writeVariantFile(imagePath, fileBuffer);
     } catch (writeErr) {
       console.warn('[MediaService] Instant storage sync warning:', writeErr);
     }

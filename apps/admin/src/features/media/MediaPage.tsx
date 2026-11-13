@@ -967,20 +967,14 @@ export function MediaPage() {
             <div className="text-xs text-muted-foreground mt-2">Loading asset details...</div>
           </div>
         ) : (() => {
-          const selectedVariantUrl = previewVariant ? detailData.variants?.[previewVariant] : null;
-          const fallbackVariantUrl =
-            detailData.variants?.large ||
-            detailData.largeUrl ||
-            detailData.variants?.medium ||
-            detailData.variants?.card ||
+          const activePreviewUrl = formatMediaUrl(
             detailData.displayUrl ||
-            detailData.variants?.thumbnail ||
-            detailData.variants?.thumb ||
             detailData.thumbnailUrl ||
-            (detailData.variants ? Object.values(detailData.variants).find((v) => Boolean(v)) : null) ||
-            '';
-
-          const activePreviewUrl = formatMediaUrl(selectedVariantUrl || fallbackVariantUrl);
+            detailData.largeUrl ||
+            (detailData.variants && (detailData.variants.url || Object.values(detailData.variants)[0])) ||
+            detailData.diskPath ||
+            ''
+          );
 
           return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-3 text-xs">
@@ -994,21 +988,18 @@ export function MediaPage() {
                       <Sparkles className="h-4 w-4 text-primary absolute inset-0 m-auto animate-pulse" />
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold text-foreground">Processing WebP Variants...</p>
+                      <p className="text-xs font-semibold text-foreground">Processing WebP Image...</p>
                       <p className="text-[11px] text-muted-foreground max-w-xs">
-                        Generating multi-tier WebP variants (Thumbnail, Card, Medium, Large) via Sharp Libvips and syncing to storage.
+                        Encoding single source-of-truth WebP image at 100% quality and saving directly to local disk.
                       </p>
                     </div>
-                    <Badge variant="outline" className="text-[10px] animate-pulse bg-primary/10 text-primary border-primary/20">
-                      Auto-refreshing live...
-                    </Badge>
                   </div>
                 ) : detailData.status === 'FAILED' ? (
                   <div className="flex flex-col items-center justify-center p-6 text-center text-destructive gap-2">
                     <AlertTriangle className="h-8 w-8 text-destructive" />
                     <p className="text-xs font-semibold">Processing Failed</p>
                     <p className="text-[11px] text-muted-foreground max-w-xs">
-                      {detailData.errorMessage || 'Sharp failed to process image variants. Check dead-letter queue.'}
+                      {detailData.errorMessage || 'Failed to process image to WebP. Check logs.'}
                     </p>
                   </div>
                 ) : previewImgError || !activePreviewUrl ? (
@@ -1040,18 +1031,7 @@ export function MediaPage() {
                       src={activePreviewUrl}
                       alt={detailData.originalName}
                       className="max-h-full max-w-full object-contain"
-                      onError={() => {
-                        // Fall back to lower tiers if requested variant is missing
-                        if (previewVariant === 'large' && (detailData.variants?.medium || detailData.variants?.card || detailData.variants?.thumbnail)) {
-                          setPreviewVariant(detailData.variants?.medium ? 'medium' : detailData.variants?.card ? 'card' : 'thumbnail');
-                        } else if (previewVariant === 'medium' && (detailData.variants?.card || detailData.variants?.thumbnail)) {
-                          setPreviewVariant(detailData.variants?.card ? 'card' : 'thumbnail');
-                        } else if (previewVariant === 'card' && (detailData.variants?.thumbnail || detailData.thumbnailUrl)) {
-                          setPreviewVariant('thumbnail');
-                        } else {
-                          setPreviewImgError(true);
-                        }
-                      }}
+                      onError={() => setPreviewImgError(true)}
                     />
                     <a
                       href={activePreviewUrl}
@@ -1071,7 +1051,7 @@ export function MediaPage() {
                 <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground">Dimensions:</span>
                   <span className="font-semibold text-foreground">
-                    {detailData.width && detailData.height ? `${detailData.width} × ${detailData.height} px` : 'Auto WebP'}
+                    {detailData.width && detailData.height ? `${detailData.width} × ${detailData.height} px` : 'WebP'}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -1080,57 +1060,33 @@ export function MediaPage() {
                 </div>
               </div>
 
-              {/* 4-Tier WebP Variants Pill Links */}
+              {/* Single Source of Truth WebP Image Info */}
               <div className="bg-muted/20 p-3 rounded-lg border space-y-2">
                 <div className="text-xs font-semibold flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    <span>WebP Optimization Tiers</span>
+                    <span>Single Source of Truth File</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground">Direct Media Links</span>
+                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-600 border-emerald-500/20 font-medium">
+                    100% Quality WebP
+                  </Badge>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(detailData.variants || {}).map(([key, url]) => {
-                    const isSelected = previewVariant === key;
-                    const formattedUrl = formatMediaUrl(url);
-                    return detailData.status === 'PROCESSING' ? (
-                      <div
-                        key={key}
-                        className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-muted/40 border text-muted-foreground opacity-60 cursor-not-allowed"
-                      >
-                        <span className="capitalize font-medium">{key}</span>
-                        <span className="text-[10px] italic">generating...</span>
-                      </div>
-                    ) : (
-                      <div
-                        key={key}
-                        onClick={() => {
-                          setPreviewVariant(key);
-                          setPreviewImgError(false);
-                        }}
-                        className={`flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md border transition cursor-pointer ${
-                          isSelected
-                            ? 'bg-primary text-primary-foreground border-primary font-bold shadow-xs'
-                            : 'bg-background hover:border-primary text-foreground'
-                        }`}
-                      >
-                        <span className="capitalize font-medium">{key}</span>
-                        <div className="flex items-center gap-1">
-                          {isSelected && <span className="text-[9px] bg-primary-foreground/20 px-1 rounded">Active</span>}
-                          <a
-                            href={formattedUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            onClick={(e) => e.stopPropagation()}
-                            className="p-0.5 hover:text-primary transition"
-                            title="Open direct link in new tab"
-                          >
-                            <ExternalLink className="h-3 w-3 opacity-70 hover:opacity-100" />
-                          </a>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="flex items-center justify-between text-xs p-2.5 rounded-md bg-background border">
+                  <div className="flex items-center gap-2 truncate">
+                    <HardDrive className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="font-mono text-[11px] truncate text-foreground">{detailData.diskPath}</span>
+                  </div>
+                  {activePreviewUrl && (
+                    <a
+                      href={activePreviewUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-primary hover:underline text-[11px] font-medium ml-2 shrink-0"
+                    >
+                      <span>Open</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

@@ -185,16 +185,11 @@ export class AdminMediaService {
       },
       diskBreakdown,
       optimizationTier: {
-        tier: 'WebP optimized tier',
-        variantsPerImage: 4,
-        variantSpecs: [
-          'thumbnail (300x300, 1:1 focal crop)',
-          'card (600x450, 4:3 focal crop)',
-          'medium (800px aspect-fit)',
-          'large (1600px aspect-fit)',
-        ],
-        compressionAlgorithm: 'Sharp Libvips WebP (Effort 3)',
-        estimatedStorageSaved: '~65%',
+        tier: 'Single Source of Truth (100% Quality WebP)',
+        variantsPerImage: 1,
+        variantSpecs: ['1x WebP Master (Quality 100)'],
+        compressionAlgorithm: 'Sharp Libvips (WebP 100Q)',
+        estimatedStorageSaved: 'Zero Multi-Tier Overhead',
       },
       statusBreakdown: statusCounts.reduce((acc, curr) => {
         acc[curr.status] = curr._count.id;
