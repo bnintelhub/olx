@@ -9,7 +9,7 @@ export function DashboardLayout() {
       <AppSidebar />
       <SidebarInset>
         <AdminHeader />
-        <div className="flex-1 p-4 sm:p-6 overflow-x-hidden min-w-0 bg-background text-foreground">
+        <div className="flex-1 p-4 sm:p-6 overflow-x-clip min-w-0 bg-background text-foreground">
           <Outlet />
         </div>
       </SidebarInset>

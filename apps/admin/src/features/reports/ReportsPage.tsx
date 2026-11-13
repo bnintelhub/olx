@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiClient } from '../../lib/api-client';
+import { Card, CardHeader, CardContent } from '../../components/ui/card';
 import {
   Table,
   TableHeader,
@@ -11,11 +13,10 @@ import {
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
+import { formatCurrency, formatDate } from '../../lib/utils';
 import {
   ShieldAlert,
   AlertTriangle,
-  CheckCircle,
-  XCircle,
   Search,
   Clock,
   ExternalLink,
@@ -23,128 +24,125 @@ import {
   ChevronRight,
   ShieldCheck,
   Ban,
+  RotateCw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface ReportRecord {
+interface ServerReport {
   id: string;
-  reportCode: string;
+  reporterId: string;
+  reportedId: string;
+  adId: string | null;
   reason: string;
-  targetType: 'AD' | 'USER';
-  targetTitle: string;
-  targetPrice?: string;
-  imageUrl?: string;
-  reporterName: string;
-  reporterTrust: 'HIGH' | 'REGULAR';
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM';
-  status: 'PENDING' | 'RESOLVED' | 'DISMISSED';
-  timeAgo: string;
-  slaMinutesRemaining: number;
+  details: string;
+  status: 'PENDING' | 'RESOLVED' | 'DISMISSED' | 'UNDER_REVIEW';
+  resolutionReason?: string | null;
+  adminNote?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  ad?: {
+    id: string;
+    title: string;
+    slug?: string;
+    status: string;
+    price: number;
+    images?: Array<{
+      thumbnailUrl?: string;
+      displayUrl?: string;
+      originalUrl?: string;
+    }>;
+  } | null;
+  reporter?: {
+    id: string;
+    phoneNumber?: string;
+    profile?: { name?: string | null } | null;
+  } | null;
+  reported?: {
+    id: string;
+    phoneNumber?: string;
+    status: string;
+    profile?: { name?: string | null } | null;
+  } | null;
 }
 
-const INITIAL_REPORTS: ReportRecord[] = [
-  {
-    id: 'rep_1',
-    reportCode: '#REP-8491',
-    reason: 'Advance Fee Scam Request via WhatsApp (Demanded ₹5,000 courier deposit)',
-    targetType: 'USER',
-    targetTitle: 'User: Rahul_seller99 (+91 91234 56789)',
-    reporterName: 'Amit Verma',
-    reporterTrust: 'HIGH',
-    severity: 'CRITICAL',
-    status: 'PENDING',
-    timeAgo: '12m ago',
-    slaMinutesRemaining: 18,
-  },
-  {
-    id: 'rep_2',
-    reportCode: '#REP-8490',
-    reason: 'Counterfeit / Replica Product sold as Original iPhone 15 Pro',
-    targetType: 'AD',
-    targetTitle: 'iPhone 15 Pro Max 256GB Sealed (Asking ₹22,000)',
-    targetPrice: '₹22,000',
-    imageUrl: 'https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=100&auto=format&fit=crop&q=60',
-    reporterName: 'Priya Sharma',
-    reporterTrust: 'HIGH',
-    severity: 'HIGH',
-    status: 'PENDING',
-    timeAgo: '28m ago',
-    slaMinutesRemaining: 32,
-  },
-  {
-    id: 'rep_3',
-    reportCode: '#REP-8489',
-    reason: 'Vehicle Missing Registration / Stolen Motorcycle Suspicion',
-    targetType: 'AD',
-    targetTitle: 'Royal Enfield Classic 350 - Urgent Cash Distress Sale',
-    targetPrice: '₹45,000',
-    imageUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=100&auto=format&fit=crop&q=60',
-    reporterName: 'Traffic Police Liaison',
-    reporterTrust: 'HIGH',
-    severity: 'CRITICAL',
-    status: 'PENDING',
-    timeAgo: '45m ago',
-    slaMinutesRemaining: 15,
-  },
-  {
-    id: 'rep_4',
-    reportCode: '#REP-8488',
-    reason: 'Watermark of competitor classifieds portal on images',
-    targetType: 'AD',
-    targetTitle: '2 BHK Apartment in Whitefield Bangalore',
-    targetPrice: '₹75,00,000',
-    imageUrl: 'https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=100&auto=format&fit=crop&q=60',
-    reporterName: 'System Anti-Scraper Bot',
-    reporterTrust: 'HIGH',
-    severity: 'MEDIUM',
-    status: 'RESOLVED',
-    timeAgo: '2h ago',
-    slaMinutesRemaining: 0,
-  },
-  {
-    id: 'rep_5',
-    reportCode: '#REP-8487',
-    reason: 'Abusive language in in-app chat after buyer negotiated price',
-    targetType: 'USER',
-    targetTitle: 'User: angry_seller_01',
-    reporterName: 'Neha Gupta',
-    reporterTrust: 'REGULAR',
-    severity: 'MEDIUM',
-    status: 'DISMISSED',
-    timeAgo: '4h ago',
-    slaMinutesRemaining: 0,
-  },
-];
-
 export function ReportsPage() {
-  const [reports, setReports] = useState<ReportRecord[]>(INITIAL_REPORTS);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
-  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
-  const filtered = reports.filter((r) => {
-    const matchesSearch =
-      r.targetTitle.toLowerCase().includes(search.toLowerCase()) ||
-      r.reason.toLowerCase().includes(search.toLowerCase()) ||
-      r.reportCode.toLowerCase().includes(search.toLowerCase());
-
-    const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
-    return matchesSearch && matchesStatus;
+  // Fetch reports from backend
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey: ['admin-reports'],
+    queryFn: async () => {
+      const res = await apiClient.get('/moderation/reports');
+      const reports = res.data?.data?.reports;
+      return (Array.isArray(reports) ? reports : []) as ServerReport[];
+    },
   });
 
-  const resolveReport = (id: string, newStatus: ReportRecord['status'], actionLabel: string) => {
-    setReports((prev) =>
-      prev.map((r) => {
-        if (r.id === id) {
-          toast.success(`${actionLabel} for ${r.reportCode}`);
-          return { ...r, status: newStatus };
-        }
-        return r;
-      })
-    );
+  const reports = data || [];
+
+  // Take down ad mutation
+  const takeDownMutation = useMutation({
+    mutationFn: async ({ id, reportCode }: { id: string; reportCode: string }) => {
+      setActionLoadingId(id);
+      await apiClient.patch(`/moderation/reports/${id}`, {
+        status: 'RESOLVED',
+        resolutionReason: 'Listing taken down due to safety violation',
+        takeDownAd: true,
+      });
+      return reportCode;
+    },
+    onSuccess: (code) => {
+      toast.success(`Listing taken down for ticket ${code}`);
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to take down listing');
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
+    },
+  });
+
+  // Dismiss report mutation
+  const dismissMutation = useMutation({
+    mutationFn: async ({ id, reportCode }: { id: string; reportCode: string }) => {
+      setActionLoadingId(id);
+      await apiClient.patch(`/moderation/reports/${id}`, {
+        status: 'DISMISSED',
+        resolutionReason: 'Dismissed after moderator review',
+      });
+      return reportCode;
+    },
+    onSuccess: (code) => {
+      toast.success(`Report dismissed for ticket ${code}`);
+      queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+    },
+    onError: (err: any) => {
+      toast.error(err.response?.data?.message || 'Failed to dismiss report');
+    },
+    onSettled: () => {
+      setActionLoadingId(null);
+    },
+  });
+
+  const getSeverity = (reason: string) => {
+    const r = reason.toUpperCase();
+    if (r.includes('FRAUD') || r.includes('PROHIBITED') || r.includes('SCAM')) {
+      return 'CRITICAL';
+    }
+    if (r.includes('PRICE') || r.includes('INAPPROPRIATE')) {
+      return 'HIGH';
+    }
+    return 'MEDIUM';
   };
 
-  const getSeverityBadge = (severity: ReportRecord['severity']) => {
+  const getSeverityBadge = (severity: 'CRITICAL' | 'HIGH' | 'MEDIUM') => {
     switch (severity) {
       case 'CRITICAL':
         return (
@@ -169,6 +167,22 @@ export function ReportsPage() {
     }
   };
 
+  const filtered = reports.filter((r) => {
+    const reportCode = `#REP-${r.id.slice(-4).toUpperCase()}`;
+    const targetTitle = r.ad?.title || (r.reported ? `User: ${r.reported.profile?.name || r.reported.phoneNumber}` : '');
+    const reasonText = `${r.reason} ${r.details || ''}`;
+
+    const matchesSearch =
+      reportCode.toLowerCase().includes(search.toLowerCase()) ||
+      targetTitle.toLowerCase().includes(search.toLowerCase()) ||
+      reasonText.toLowerCase().includes(search.toLowerCase());
+
+    const matchesStatus = statusFilter === 'ALL' || r.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const pendingCount = reports.filter((r) => r.status === 'PENDING').length;
+
   return (
     <div className="space-y-6">
       {/* Page Header */}
@@ -176,13 +190,23 @@ export function ReportsPage() {
         <div>
           <h2 className="text-2xl font-extrabold tracking-tight text-foreground">Review Queue & Safety Reports</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Investigate fraud reports, counterfeit products, and trust violations with SLA enforcement.
+            Investigate fraud reports, counterfeit products, and trust violations with real-time enforcement.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="text-xs gap-1.5 h-8"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </Button>
           <Badge variant="outline" className="text-xs gap-1.5 py-1 text-emerald-600 border-emerald-500/30 bg-emerald-500/10">
             <ShieldCheck className="h-3.5 w-3.5" />
-            <span>Automated Fraud Shield Active</span>
+            <span>Fraud Shield Active</span>
           </Badge>
         </div>
       </div>
@@ -214,6 +238,11 @@ export function ReportsPage() {
                   }`}
                 >
                   {s}
+                  {s === 'PENDING' && pendingCount > 0 && (
+                    <span className="ml-1 px-1 py-0.2 rounded-full text-[9px] bg-amber-500 text-white font-bold">
+                      {pendingCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
@@ -230,123 +259,173 @@ export function ReportsPage() {
                   <TableHead className="px-4 py-3 min-w-[260px]">Violation Reason</TableHead>
                   <TableHead className="px-4 py-3 min-w-[100px] text-center">Severity</TableHead>
                   <TableHead className="px-4 py-3 min-w-[140px]">Reported By</TableHead>
-                  <TableHead className="px-4 py-3 min-w-[110px] text-center">SLA Status</TableHead>
                   <TableHead className="px-4 py-3 min-w-[100px] text-center">Status</TableHead>
-                  <TableHead className="px-4 py-3 text-right min-w-[160px]">Enforcement</TableHead>
+                  <TableHead className="px-4 py-3 text-right min-w-[170px]">Enforcement</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.length === 0 ? (
+                {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-32 text-center text-xs text-muted-foreground">
-                      No reports match the current filter.
+                    <TableCell colSpan={7} className="h-32 text-center text-xs text-muted-foreground">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <span>Loading safety reports...</span>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="h-32 text-center text-xs text-muted-foreground">
+                      {reports.length === 0
+                        ? 'No safety violation reports have been submitted yet.'
+                        : 'No reports match the current filter.'}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((report) => (
-                    <TableRow key={report.id} className="transition-colors hover:bg-muted/30">
-                      {/* Ticket Code */}
-                      <TableCell className="px-4 py-3 font-mono font-bold text-xs text-foreground">
-                        {report.reportCode}
-                        <span className="text-[10px] text-muted-foreground block font-sans">{report.timeAgo}</span>
-                      </TableCell>
+                  filtered.map((report) => {
+                    const reportCode = `#REP-${report.id.slice(-4).toUpperCase()}`;
+                    const targetTitle =
+                      report.ad?.title ||
+                      (report.reported ? `User: ${report.reported.profile?.name || report.reported.phoneNumber}` : 'Flagged Listing');
+                    const image =
+                      report.ad?.images?.[0]?.thumbnailUrl ||
+                      report.ad?.images?.[0]?.displayUrl ||
+                      report.ad?.images?.[0]?.originalUrl;
+                    const reporterName =
+                      report.reporter?.profile?.name || report.reporter?.phoneNumber || 'Registered User';
+                    const severity = getSeverity(report.reason);
+                    const isBusy = actionLoadingId === report.id;
 
-                      {/* Flagged Target */}
-                      <TableCell className="px-4 py-3">
-                        <div className="flex items-center gap-2.5">
-                          {report.imageUrl && (
-                            <img
-                              src={report.imageUrl}
-                              alt=""
-                              className="h-9 w-9 rounded-md object-cover border shrink-0 bg-muted"
-                            />
-                          )}
-                          <div className="min-w-0">
-                            <div className="font-bold text-xs text-foreground truncate">
-                              {report.targetTitle}
-                            </div>
-                            <Badge variant="outline" className="text-[9px] font-mono mt-0.5">
-                              {report.targetType}
-                            </Badge>
-                          </div>
-                        </div>
-                      </TableCell>
-
-                      {/* Violation Reason */}
-                      <TableCell className="px-4 py-3">
-                        <div className="text-xs font-semibold text-rose-600 dark:text-rose-400">
-                          {report.reason}
-                        </div>
-                      </TableCell>
-
-                      {/* Severity */}
-                      <TableCell className="px-4 py-3 text-center">
-                        {getSeverityBadge(report.severity)}
-                      </TableCell>
-
-                      {/* Reporter */}
-                      <TableCell className="px-4 py-3 text-xs">
-                        <span className="font-semibold text-foreground">{report.reporterName}</span>
-                        <span className="text-[10px] text-muted-foreground block">
-                          Trust Tier: {report.reporterTrust}
-                        </span>
-                      </TableCell>
-
-                      {/* SLA */}
-                      <TableCell className="px-4 py-3 text-center">
-                        {report.status === 'PENDING' ? (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400">
-                            <Clock className="h-3 w-3" />
-                            <span>{report.slaMinutesRemaining}m left</span>
+                    return (
+                      <TableRow key={report.id} className="transition-colors hover:bg-muted/30">
+                        {/* Ticket Code */}
+                        <TableCell className="px-4 py-3 font-mono font-bold text-xs text-foreground">
+                          {reportCode}
+                          <span className="text-[10px] text-muted-foreground block font-sans">
+                            {formatDate(report.createdAt)}
                           </span>
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground font-mono">Resolved</span>
-                        )}
-                      </TableCell>
+                        </TableCell>
 
-                      {/* Status */}
-                      <TableCell className="px-4 py-3 text-center">
-                        <Badge
-                          variant={
-                            report.status === 'PENDING'
-                              ? 'warning'
-                              : report.status === 'RESOLVED'
-                              ? 'success'
-                              : 'secondary'
-                          }
-                          className="text-[10px]"
-                        >
-                          {report.status}
-                        </Badge>
-                      </TableCell>
-
-                      {/* Enforcement Actions */}
-                      <TableCell className="px-4 py-3 text-right">
-                        {report.status === 'PENDING' ? (
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              onClick={() => resolveReport(report.id, 'RESOLVED', 'Taken down')}
-                              className="h-7 px-2 bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1"
-                            >
-                              <Ban className="h-3 w-3" />
-                              <span>Take Down</span>
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => resolveReport(report.id, 'DISMISSED', 'Dismissed')}
-                              className="h-7 px-2 text-xs"
-                            >
-                              Dismiss
-                            </Button>
+                        {/* Flagged Target */}
+                        <TableCell className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            {image ? (
+                              <img
+                                src={image}
+                                alt=""
+                                className="h-10 w-10 rounded-md object-cover border shrink-0 bg-muted"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 rounded-md bg-muted flex items-center justify-center shrink-0 border text-[10px] text-muted-foreground font-mono">
+                                {report.adId ? 'AD' : 'USR'}
+                              </div>
+                            )}
+                            <div className="min-w-0 max-w-[220px]">
+                              <div className="font-bold text-xs text-foreground truncate" title={targetTitle}>
+                                {targetTitle}
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <Badge variant="outline" className="text-[9px] font-mono">
+                                  {report.adId ? 'AD' : 'USER'}
+                                </Badge>
+                                {report.ad?.price !== undefined && (
+                                  <span className="text-[10px] text-muted-foreground font-semibold">
+                                    {formatCurrency(report.ad.price)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground font-medium">Action Logged</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+
+                        {/* Violation Reason & Details */}
+                        <TableCell className="px-4 py-3">
+                          <div className="text-xs font-semibold text-rose-600 dark:text-rose-400">
+                            {report.reason.replace(/_/g, ' ')}
+                          </div>
+                          {report.details && (
+                            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-2" title={report.details}>
+                              {report.details}
+                            </p>
+                          )}
+                          {report.resolutionReason && (
+                            <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 italic">
+                              Resolved: {report.resolutionReason}
+                            </p>
+                          )}
+                        </TableCell>
+
+                        {/* Severity */}
+                        <TableCell className="px-4 py-3 text-center">
+                          {getSeverityBadge(severity)}
+                        </TableCell>
+
+                        {/* Reporter */}
+                        <TableCell className="px-4 py-3 text-xs">
+                          <span className="font-semibold text-foreground">{reporterName}</span>
+                          <span className="text-[10px] text-muted-foreground block font-mono">
+                            {report.reporter?.phoneNumber || 'Active Account'}
+                          </span>
+                        </TableCell>
+
+                        {/* Status */}
+                        <TableCell className="px-4 py-3 text-center">
+                          <Badge
+                            variant={
+                              report.status === 'PENDING'
+                                ? 'warning'
+                                : report.status === 'RESOLVED'
+                                ? 'success'
+                                : 'secondary'
+                            }
+                            className="text-[10px]"
+                          >
+                            {report.status}
+                          </Badge>
+                        </TableCell>
+
+                        {/* Enforcement Actions */}
+                        <TableCell className="px-4 py-3 text-right">
+                          {report.status === 'PENDING' ? (
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                disabled={isBusy}
+                                onClick={() => takeDownMutation.mutate({ id: report.id, reportCode })}
+                                className="h-7 px-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs gap-1"
+                              >
+                                {isBusy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Ban className="h-3 w-3" />}
+                                <span>Take Down</span>
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isBusy}
+                                onClick={() => dismissMutation.mutate({ id: report.id, reportCode })}
+                                className="h-7 px-2.5 text-xs"
+                              >
+                                Dismiss
+                              </Button>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground font-medium inline-flex items-center gap-1">
+                              {report.status === 'RESOLVED' ? (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                                  <span>Action Logged</span>
+                                </>
+                              ) : (
+                                <>
+                                  <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                                  <span>Dismissed</span>
+                                </>
+                              )}
+                            </span>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>
@@ -354,7 +433,7 @@ export function ReportsPage() {
 
           <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20 text-xs text-muted-foreground">
             <div>
-              Active safety reports: <strong className="text-foreground">{reports.filter((r) => r.status === 'PENDING').length}</strong> pending action
+              Active safety reports: <strong className="text-foreground">{pendingCount}</strong> pending action
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" disabled className="h-7 w-7 p-0">

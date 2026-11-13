@@ -33,6 +33,39 @@ export interface AdminStatsResponse {
     value: number;
     color: string;
   }>;
+  totalOrders?: number;
+  successfulPayments?: number;
+  failedPayments?: number;
+  refunds?: number;
+  categoryDistribution?: Array<{
+    name: string;
+    value: number;
+    color: string;
+  }>;
+  topLocations?: Array<{
+    name: string;
+    count: number;
+  }>;
+  revenueSummary?: {
+    totalEarned: number;
+    today: number;
+    thisWeek: number;
+    thisMonth: number;
+  };
+  revenueTrend?: Array<{
+    date: string;
+    amount: number;
+  }>;
+  avgListingPrice?: number;
+  spamReportsCount?: number;
+  policyViolationCount?: number;
+  recentActivity?: Array<{
+    id: string;
+    time: string;
+    type: 'LISTINGS' | 'PAYMENTS' | 'USERS' | 'REPORTS';
+    title: string;
+    details: string;
+  }>;
 }
 
 export interface PendingAdItem {

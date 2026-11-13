@@ -10,58 +10,198 @@ import { formatAdImages } from '../listings/listings.service';
 
 export class AdminService {
   // Aggregates high-level marketplace metrics tailored dynamically to the caller's role.
-  // Queries non-deleted users, active/pending ads, and unresolved reports concurrently.
+  // Uses optimized database aggregations to compute overview KPIs with zero duplicate queries.
   static async getStats(role?: string) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    // Common marketplace metrics calculated concurrently
+    // Grouped queries to reduce round-trips from 14+ queries to essential aggregations
     const [
+      adStatusGroups,
+      userStatusGroups,
+      openReports,
+      totalBoosts,
+      activeBoosts,
+      topCategoriesGroup,
+      topLocationsGroup,
+      recentLogs,
+      paymentCounts,
+      avgPriceResult,
+      spamCount,
+      policyViolationCount,
+    ] = await Promise.all([
+      prisma.ad.groupBy({
+        by: ['status'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+      }),
+      prisma.user.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+      }),
+      prisma.report.count({ where: { status: 'PENDING' } }),
+      prisma.featuredAd.count(),
+      prisma.featuredAd.count({ where: { status: 'ACTIVE' } }),
+      prisma.ad.groupBy({
+        by: ['categoryId'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+        orderBy: { _count: { categoryId: 'desc' } },
+        take: 6,
+      }),
+      prisma.ad.groupBy({
+        by: ['locationId'],
+        where: { deletedAt: null },
+        _count: { _all: true },
+        orderBy: { _count: { locationId: 'desc' } },
+        take: 5,
+      }),
+      prisma.auditLog.findMany({
+        take: 8,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.paymentOrder.groupBy({
+        by: ['status'],
+        _count: { _all: true },
+      }),
+      prisma.ad.aggregate({
+        _avg: { price: true },
+        where: { deletedAt: null, status: AdStatus.ACTIVE },
+      }),
+      prisma.report.count({ where: { status: 'PENDING', reason: 'SPAM_OR_FRAUD' } }),
+      prisma.report.count({ where: { status: 'PENDING', reason: 'PROHIBITED_ITEM' } }),
+    ]);
+
+    // Map ad counts by status
+    const adStatusMap: Record<string, number> = {};
+    for (const item of adStatusGroups) {
+      adStatusMap[item.status] = item._count._all;
+    }
+
+    const activeAds = adStatusMap[AdStatus.ACTIVE] || 0;
+    const pendingAds = adStatusMap[AdStatus.PENDING_REVIEW] || 0;
+    const soldAds = adStatusMap[AdStatus.SOLD] || 0;
+    const rejectedAds = adStatusMap[AdStatus.REJECTED] || 0;
+    const expiredAds = adStatusMap[AdStatus.EXPIRED] || 0;
+    const draftAds = adStatusMap[AdStatus.DRAFT] || 0;
+    const archivedAds = adStatusMap[AdStatus.ARCHIVED] || 0;
+    const totalAds = Object.values(adStatusMap).reduce((a, b) => a + b, 0);
+
+    // Map user counts by status
+    const userStatusMap: Record<string, number> = {};
+    for (const item of userStatusGroups) {
+      userStatusMap[item.status] = item._count._all;
+    }
+
+    const totalUsers = Object.values(userStatusMap).reduce((a, b) => a + b, 0) - (userStatusMap['DELETED'] || 0);
+    const suspendedUsers = userStatusMap['SUSPENDED'] || 0;
+    const verifiedUsers = userStatusMap['ACTIVE'] || 0;
+    const grossRevenueInr = totalBoosts * 199;
+
+    // Categories & Locations name resolution
+    const [categories, locations] = await Promise.all([
+      topCategoriesGroup.length > 0
+        ? prisma.category.findMany({
+            where: { id: { in: topCategoriesGroup.map((c) => c.categoryId) } },
+            select: { id: true, name: true },
+          })
+        : [],
+      topLocationsGroup.length > 0
+        ? prisma.location.findMany({
+            where: { id: { in: topLocationsGroup.map((l) => l.locationId) } },
+            select: { id: true, name: true },
+          })
+        : [],
+    ]);
+
+    const categoryNameMap = new Map(categories.map((c) => [c.id, c.name]));
+    const locationNameMap = new Map(locations.map((l) => [l.id, l.name]));
+
+    const palette = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#94a3b8'];
+    const categoryDistribution = topCategoriesGroup.map((cg, idx) => ({
+      name: categoryNameMap.get(cg.categoryId) || 'Category',
+      value: cg._count._all,
+      color: palette[idx % palette.length],
+    }));
+
+    const topLocations = topLocationsGroup.map((lg) => ({
+      name: locationNameMap.get(lg.locationId) || 'City',
+      count: lg._count._all,
+    }));
+
+    // Payment stats
+    const paymentStatusMap: Record<string, number> = {};
+    for (const p of paymentCounts) {
+      paymentStatusMap[p.status] = p._count._all;
+    }
+    const successfulPayments = paymentStatusMap['PAID'] || totalBoosts || 0;
+    const failedPayments = paymentStatusMap['FAILED'] || 0;
+    const refunds = paymentStatusMap['REFUNDED'] || 0;
+
+    const statusDistribution = [
+      { name: 'Active', value: activeAds, color: '#10b981' },
+      { name: 'Pending Review', value: pendingAds, color: '#f59e0b' },
+      { name: 'Sold', value: soldAds, color: '#3b82f6' },
+      { name: 'Expired', value: expiredAds, color: '#94a3b8' },
+      { name: 'Rejected', value: rejectedAds, color: '#ef4444' },
+      ...(draftAds > 0 ? [{ name: 'Draft', value: draftAds, color: '#64748b' }] : []),
+      ...(archivedAds > 0 ? [{ name: 'Archived', value: archivedAds, color: '#8b5cf6' }] : []),
+    ];
+
+    // Real recent activity from audit logs
+    const recentActivity = recentLogs.map((log) => {
+      let type: 'LISTINGS' | 'PAYMENTS' | 'USERS' | 'REPORTS' = 'LISTINGS';
+      let title = log.action.replace(/_/g, ' ');
+      if (log.action.includes('AD')) type = 'LISTINGS';
+      else if (log.action.includes('PAY') || log.action.includes('ORDER')) type = 'PAYMENTS';
+      else if (log.action.includes('USER') || log.action.includes('AUTH')) type = 'USERS';
+      else if (log.action.includes('REPORT')) type = 'REPORTS';
+
+      return {
+        id: log.id,
+        time: log.createdAt,
+        type,
+        title,
+        details: log.entityType ? `${log.entityType} ${log.entityId.slice(0, 8)}` : 'System action',
+      };
+    });
+
+    const baseMetrics = {
+      role: role || 'SUPER_ADMIN',
       totalUsers,
       totalAds,
-      pendingAds,
       activeAds,
+      pendingAds,
       soldAds,
       rejectedAds,
       expiredAds,
-      draftAds,
-      archivedAds,
       openReports,
       totalBoosts,
       activeBoosts,
       suspendedUsers,
       verifiedUsers,
-    ] = await Promise.all([
-      prisma.user.count({ where: { status: { not: 'DELETED' } } }),
-      prisma.ad.count({ where: { deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.PENDING_REVIEW, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.ACTIVE, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.SOLD, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.REJECTED, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.EXPIRED, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.DRAFT, deletedAt: null } }),
-      prisma.ad.count({ where: { status: AdStatus.ARCHIVED, deletedAt: null } }),
-      prisma.report.count({ where: { status: 'PENDING' } }),
-      prisma.featuredAd.count(),
-      prisma.featuredAd.count({ where: { status: 'ACTIVE' } }),
-      prisma.user.count({ where: { status: 'SUSPENDED' } }),
-      prisma.user.count({ where: { status: 'ACTIVE', profile: { isNot: null } } }),
-    ]);
+      grossRevenueInr,
+      totalOrders: totalBoosts || successfulPayments,
+      statusDistribution,
+      categoryDistribution,
+      topLocations,
+      successfulPayments,
+      failedPayments,
+      refunds,
+      avgListingPrice: Math.round(Number(avgPriceResult._avg.price) || 0),
+      spamReportsCount: spamCount,
+      policyViolationCount,
+      recentActivity,
+      revenueSummary: {
+        totalEarned: grossRevenueInr,
+        today: 0,
+        thisWeek: 0,
+        thisMonth: grossRevenueInr,
+      },
+      revenueTrend: [] as Array<{ date: string; amount: number }>,
+      operationalStatus: 'OPERATIONAL',
+    };
 
-    const grossRevenueInr = totalBoosts * 199;
-
-    // Status breakdown for distribution charts
-    const statusDistribution = [
-      { name: 'Active', value: activeAds, color: '#10b981' },
-      { name: 'Pending Review', value: pendingAds, color: '#f59e0b' },
-      { name: 'Draft', value: draftAds, color: '#64748b' },
-      { name: 'Archived', value: archivedAds, color: '#8b5cf6' },
-      { name: 'Sold / Closed', value: soldAds, color: '#3b82f6' },
-      { name: 'Expired', value: expiredAds, color: '#94a3b8' },
-      { name: 'Rejected', value: rejectedAds, color: '#ef4444' },
-    ];
-
-    // Role-specific metrics payload
     switch (role) {
       case 'MODERATOR': {
         const [reviewedToday, highRiskItems] = await Promise.all([
@@ -77,12 +217,11 @@ export class AdminService {
         ]);
 
         return {
+          ...baseMetrics,
           role: 'MODERATOR',
           pendingReviews: pendingAds,
-          openReports,
           highRiskItems,
           reviewedToday,
-          totalAds,
         };
       }
 
@@ -100,23 +239,21 @@ export class AdminService {
         ]);
 
         return {
+          ...baseMetrics,
           role: 'CUSTOMER_SUPPORT',
           openTickets: openReports,
           urgentTickets,
           resolvedToday,
-          totalUsers,
-          totalReports: openReports,
         };
       }
 
       case 'FINANCE_ADMIN': {
         return {
+          ...baseMetrics,
           role: 'FINANCE_ADMIN',
           totalTransactions: totalBoosts,
           activePromotions: activeBoosts,
-          grossRevenueInr,
           currency: 'INR',
-          totalAds,
         };
       }
 
@@ -127,63 +264,27 @@ export class AdminService {
         ]);
 
         return {
+          ...baseMetrics,
           role: 'CONTENT_MANAGER',
           activeBanners,
           totalCategories,
           activePromotions: activeBoosts,
-          pendingAds,
         };
       }
 
       case 'ANALYST': {
         return {
+          ...baseMetrics,
           role: 'ANALYST',
-          totalUsers,
-          totalAds,
-          activeAds,
-          soldAds,
           totalReports: openReports,
-          totalBoosts,
           conversionRate: totalAds > 0 ? Number(((soldAds / totalAds) * 100).toFixed(1)) : 0,
-          statusDistribution,
         };
       }
 
-      case 'ADMIN': {
-        return {
-          role: 'ADMIN',
-          totalUsers,
-          totalAds,
-          activeAds,
-          pendingAds,
-          openReports,
-          suspendedUsers,
-          verifiedUsers,
-          statusDistribution,
-        };
-      }
-
+      case 'ADMIN':
       case 'SUPER_ADMIN':
-      default: {
-        return {
-          role: role || 'SUPER_ADMIN',
-          totalUsers,
-          totalAds,
-          pendingAds,
-          activeAds,
-          soldAds,
-          rejectedAds,
-          expiredAds,
-          openReports,
-          totalBoosts,
-          activeBoosts,
-          suspendedUsers,
-          verifiedUsers,
-          grossRevenueInr,
-          statusDistribution,
-          operationalStatus: 'OPERATIONAL',
-        };
-      }
+      default:
+        return baseMetrics;
     }
   }
 
@@ -639,8 +740,9 @@ export class AdminService {
       },
     });
 
-    const clientOrigin = env.CLIENT_URL || 'http://localhost:5174';
-    const inviteLink = `${clientOrigin}/accept-invite?token=${token}`;
+    const adminOrigin =
+      env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174');
+    const inviteLink = `${adminOrigin}/accept-invite?token=${token}`;
 
     return {
       invitation,
@@ -660,7 +762,8 @@ export class AdminService {
       },
     });
 
-    const clientOrigin = env.CLIENT_URL || 'http://localhost:5174';
+    const adminOrigin =
+      env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174');
 
     return list.map((inv: any) => {
       const isLifetime = inv.expiresAt ? new Date(inv.expiresAt).getFullYear() >= 2099 : true;
@@ -668,7 +771,7 @@ export class AdminService {
 
       return {
         ...inv,
-        inviteLink: `${clientOrigin}/accept-invite?token=${inv.token}`,
+        inviteLink: `${adminOrigin}/accept-invite?token=${inv.token}`,
         isLifetime,
         isExpired,
       };

@@ -1,14 +1,20 @@
 FROM node:22-slim
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates musl && rm -rf /var/lib/apt/lists/* \
+    && (ln -sf /usr/lib/x86_64-linux-musl/libc.so /lib/libc.musl-x86_64.so.1 || ln -sf /lib/x86_64-linux-musl/libc.so /lib/libc.musl-x86_64.so.1 || true) \
+    && (ln -sf /usr/lib/x86_64-linux-musl/libc.so /usr/lib/libc.musl-x86_64.so.1 || true)
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
+
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+ENV npm_config_target_libc="glibc"
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* turbo.json .npmrc ./
 COPY packages/database ./packages/database
 COPY packages/shared ./packages/shared
 COPY apps/workers ./apps/workers
 
-RUN pnpm install --frozen-lockfile --filter @olx/workers...
+RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --filter @olx/workers...
 RUN pnpm --filter @olx/database db:generate
 RUN pnpm --filter @olx/database build
 RUN pnpm --filter @olx/shared build

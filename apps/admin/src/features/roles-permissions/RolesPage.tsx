@@ -167,7 +167,9 @@ export function RolesPage() {
   // Temporarily highlights the copied button state for instant visual feedback.
   const handleCopyLink = (token: string, id: string) => {
     const origin = window.location.origin;
-    const link = `${origin}/accept-invite?token=${token}`;
+    const isUnderAdminPath = window.location.pathname.startsWith('/admin');
+    const adminPrefix = isUnderAdminPath ? '/admin' : '';
+    const link = `${origin}${adminPrefix}/accept-invite?token=${token}`;
     navigator.clipboard.writeText(link);
     setCopiedId(id);
     toast.success('Invitation link copied to clipboard');

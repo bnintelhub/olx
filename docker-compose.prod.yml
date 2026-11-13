@@ -1,13 +1,14 @@
 services:
   # ========================================================
   # PostgreSQL 16 Relational Database Container
+  # Note: If using Neon DB / External DB, set DATABASE_URL in .env.production
   # ========================================================
   postgres:
     image: postgres:16-alpine
     container_name: bharatmarket_postgres
     restart: always
     env_file:
-      - ./infrastructure/secrets/database.dev.env
+      - .env.production
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -27,7 +28,7 @@ services:
     restart: always
     command: redis-server --appendonly yes
     env_file:
-      - ./infrastructure/secrets/redis.env
+      - .env.production
     volumes:
       - redis_data:/data
     healthcheck:
@@ -53,15 +54,9 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - ./infrastructure/.env.production
-      - ./infrastructure/secrets/database.dev.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/jwt.env
-      - ./infrastructure/secrets/payment.env
-      - ./infrastructure/secrets/firebase.env
-      - ./infrastructure/secrets/media.env
+      - .env.production
     environment:
-      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      DATABASE_URL: "${DATABASE_URL:-postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public}"
       REDIS_URL: "redis://redis:6379"
     ports:
       - "5000:5000"
@@ -88,13 +83,9 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - ./infrastructure/.env.production
-      - ./infrastructure/secrets/database.dev.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/media.env
-      - ./infrastructure/secrets/firebase.env
+      - .env.production
     environment:
-      DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
+      DATABASE_URL: "${DATABASE_URL:-postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public}"
       REDIS_URL: "redis://redis:6379"
     volumes:
       - media_data:/data/olx-media
@@ -153,6 +144,7 @@ services:
       - "443:443"
     volumes:
       - media_data:/data/olx-media:ro
+      - certbot_data:/var/www/certbot:ro
     networks:
       - bharatmarket_net
 
@@ -162,6 +154,8 @@ volumes:
   redis_data:
     driver: local
   media_data:
+    driver: local
+  certbot_data:
     driver: local
 
 networks:

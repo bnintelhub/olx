@@ -6,10 +6,10 @@ echo "🚀 Starting deployment for environment: ${ENV}..."
 
 # Pull latest images or rebuild
 if [ "$ENV" = "production" ]; then
-    docker compose -f infrastructure/compose/docker-compose.prod.yml pull || docker compose -f infrastructure/compose/docker-compose.prod.yml build
-    docker compose -f infrastructure/compose/docker-compose.prod.yml up -d --remove-orphans
+    docker compose -f docker-compose.prod.yml pull || docker compose -f docker-compose.prod.yml build
+    docker compose -f docker-compose.prod.yml up -d --remove-orphans
 else
-    docker compose -f infrastructure/compose/docker-compose.staging.yml up -d --build --remove-orphans
+    docker compose -f docker-compose.dev.yml up -d --build --remove-orphans
 fi
 
 echo "✅ Running database migrations..."

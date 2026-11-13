@@ -134,14 +134,10 @@ flowchart TD
 
 | Deployment Mode | File Location | Scope / Target Services | Notes |
 |:---|:---|:---|:---|
-| **Docker Compose (Production)** | `olx/.env` (repo root) | Passed to all Docker containers (`postgres`, `redis`, `server`, `workers`, `client`, `admin`, `nginx`) | Single source of truth. Copy from `.env.example`. |
-| **Docker Compose (Dev)** | `olx/.env` (repo root) | Local development stack via `docker-compose.dev.yml` | Sets ports `5433` for DB, `6379` for Redis. |
-| **Without Docker (Native Node/PM2)** | `olx/.env` (repo root) | Global fallback read by pnpm workspace scripts and PM2 | Preferred single file. |
-| **Without Docker (App-Specific)** | `olx/apps/server/.env` | Fastify REST API and Socket.IO server | Optional if root `.env` is present. |
-| **Without Docker (App-Specific)** | `olx/apps/workers/.env` | BullMQ background workers (Sharp + FCM) | Optional if root `.env` is present. |
-| **Without Docker (App-Specific)** | `olx/packages/database/.env` | Prisma CLI migrations (`pnpm db:push`, `prisma migrate`) | Optional if root `.env` is present. |
-| **Without Docker (Frontend Client)** | `olx/apps/client/.env.production` | Vite build bundle for Customer Web App | Embedded into client bundle at `pnpm build` time. |
-| **Without Docker (Frontend Admin)** | `olx/apps/admin/.env.production` | Vite build bundle for Admin Portal | Embedded into admin bundle at `pnpm build` time. |
+| **Docker Compose (Production)** | `olx/.env.production` (repo root) | Injected into all production containers via `docker-compose.prod.yml` | Single source of truth. Copy from `.env.production.example`. |
+| **Docker Compose (Dev)** | `olx/.env.development` (repo root) | Local development stack via `docker-compose.dev.yml` | Sets ports `5433` for DB, `6379` for Redis. |
+| **Without Docker (Native Node/PM2)** | `olx/.env` (repo root) | Read by pnpm workspace scripts and PM2 | Preferred single file. |
+| **Templates** | `.env.production.example`<br/>`.env.development.example` | Version-controlled configuration templates with descriptions | Safe to commit. |
 
 ---
 
@@ -371,32 +367,31 @@ docker compose -f docker-compose.prod.yml exec server pnpm db:push
 
 If using external databases (e.g. Neon PostgreSQL, AWS RDS, Supabase, Upstash Redis):
 
-### Step 1: Configure `.env` with Cloud Database URI
+### Step 1: Configure `.env.production` with Cloud Database URI
 
 ```bash
 cd /var/www/olx
-cp .env.example .env
-nano .env
+cp .env.production.example .env.production
+nano .env.production
 ```
 
 Set:
 ```bash
 DATABASE_URL="postgresql://user:password@ep-name.us-east-2.aws.neon.tech/olx_marketplace?sslmode=require"
-REDIS_URL="redis://default:token@cool-redis.upstash.io:6379"
+DIRECT_URL="postgresql://user:password@ep-name.us-east-2.aws.neon.tech/olx_marketplace?sslmode=require"
 ```
 
 ### Step 2: Launch Deployment Stack
 
 ```bash
-# Uses docker-compose.deployment.yml which excludes local postgres/redis
-docker compose -f docker-compose.deployment.yml up -d --build
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
 ### Step 3: Apply Migrations & Verify
 
 ```bash
-docker compose -f docker-compose.deployment.yml exec server pnpm db:push
-docker compose -f docker-compose.deployment.yml exec server pnpm db:seed
+docker compose -f docker-compose.prod.yml exec server pnpm db:push
+docker compose -f docker-compose.prod.yml exec server pnpm db:seed
 curl -f http://localhost/health
 ```
 

@@ -7,7 +7,7 @@ services:
     container_name: bharatmarket_postgres
     restart: unless-stopped
     env_file:
-      - ./infrastructure/secrets/database.dev.env
+      - .env.development
     ports:
       - "${DB_PORT:-5433}:5432"
     volumes:
@@ -28,7 +28,7 @@ services:
     container_name: bharatmarket_redis
     restart: unless-stopped
     env_file:
-      - ./infrastructure/secrets/redis.env
+      - .env.development
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
@@ -56,13 +56,7 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - ./infrastructure/.env.dev
-      - ./infrastructure/secrets/database.dev.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/jwt.env
-      - ./infrastructure/secrets/payment.env
-      - ./infrastructure/secrets/firebase.env
-      - ./infrastructure/secrets/media.env
+      - .env.development
     environment:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
@@ -95,11 +89,7 @@ services:
       redis:
         condition: service_healthy
     env_file:
-      - ./infrastructure/.env.dev
-      - ./infrastructure/secrets/database.dev.env
-      - ./infrastructure/secrets/redis.env
-      - ./infrastructure/secrets/media.env
-      - ./infrastructure/secrets/firebase.env
+      - .env.development
     environment:
       DATABASE_URL: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public"
       REDIS_URL: "redis://redis:6379"
@@ -124,9 +114,10 @@ services:
     restart: unless-stopped
     depends_on:
       - server
+    env_file:
+      - .env.development
     environment:
       - VITE_API_TARGET=http://server:5000
-      - VITE_FIREBASE_VAPID_KEY=BP3j_WxEhVpyjY4_cnup4YUqWevdNUr2Dxhzu3_aG8X06ceM5xS7MX9OtJRFjYWLmY-B2X6zS97ccdssaS5uy8s
     ports:
       - "5173:5173"
     volumes:
@@ -154,9 +145,10 @@ services:
     restart: unless-stopped
     depends_on:
       - server
+    env_file:
+      - .env.development
     environment:
       - VITE_API_TARGET=http://server:5000
-      - VITE_FIREBASE_VAPID_KEY=BP3j_WxEhVpyjY4_cnup4YUqWevdNUr2Dxhzu3_aG8X06ceM5xS7MX9OtJRFjYWLmY-B2X6zS97ccdssaS5uy8s
     ports:
       - "5174:5174"
     volumes:
@@ -174,7 +166,7 @@ services:
           - admin
 
   # ========================================================
-  # Centralized Nginx Gateway with Full WebSocket / HMR Proxy
+  # Centralized Nginx Gateway with WebSocket / HMR Proxy
   # ========================================================
   nginx:
     build:
@@ -189,7 +181,7 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./infrastructure/nginx/api.dev.conf:/etc/nginx/conf.d/api.conf:ro
+      - ./infrastructure/nginx/nginx.dev.conf:/etc/nginx/conf.d/default.conf:ro
       - ./data/olx-media:/data/olx-media:ro
     networks:
       - bharatmarket_net

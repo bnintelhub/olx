@@ -49,14 +49,16 @@ olx/
 ├── infrastructure/
 │   ├── docker/dev/          # Development container Dockerfiles
 │   ├── docker/prod/         # Production container Dockerfiles
-│   ├── nginx/               # Nginx reverse proxy gateway configurations
-│   └── secrets/             # Environment variable templates and secret examples
+│   ├── nginx/               # Nginx reverse proxy gateway configurations (nginx.conf, nginx.prod.conf, nginx.dev.conf)
+│   └── monitoring/          # Prometheus & Grafana monitoring
 ├── docs/                    # In-depth architectural & deployment documentation
 │   ├── DEPLOYMENT_STRATEGY.md # Comprehensive deployment & operations manual
 │   └── media.md             # Media upload, storage, and Sharp processing pipeline
-├── docker-compose.prod.yml  # Production Docker Compose stack (Self-hosted DB + Redis)
-├── docker-compose.deployment.yml # Production Docker Compose stack (External / Cloud DB)
+├── DEPLOYMENT.md            # Quickstart deployment manual for engineers
+├── .env.development         # Local development configuration (Postgres, Redis, Mock SMS)
+├── .env.production          # Production environment configuration (Cloud DB, Redis, PayU, FCM)
 ├── docker-compose.dev.yml   # Development Docker Compose stack
+├── docker-compose.prod.yml  # Production Docker Compose stack
 ├── pnpm-workspace.yaml      # Monorepo packages mapping
 └── package.json             # Root monorepo orchestration scripts
 ```
@@ -378,17 +380,16 @@ flowchart TD
 
 This section provides clear, end-to-end instructions for deployment engineers.
 
-> 📖 **Full Operations Manual**: For extensive configurations, SSL setup, and multi-server topologies, see [DEPLOYMENT_STRATEGY.md](docs/DEPLOYMENT_STRATEGY.md).
+> 📖 **Full Operations Manual**: For extensive configurations, SSL setup, and multi-server topologies, see [DEPLOYMENT.md](DEPLOYMENT.md) and [docs/DEPLOYMENT_STRATEGY.md](docs/DEPLOYMENT_STRATEGY.md).
 
 ### Where to Place `.env` Files
 
 | Mode | Location | Purpose |
 |:---|:---|:---|
-| **Docker Deployment** | `olx/.env` (Root) | **Single source of truth**. Docker Compose automatically injects this into all containers (`postgres`, `redis`, `server`, `workers`, `client`, `admin`, `nginx`). |
-| **Without Docker (Native Node/PM2)** | `olx/.env` (Root) | Read by all monorepo commands (`pnpm dev`, `pnpm build`, `pnpm db:*`) and PM2. |
-| **Individual App Overrides** *(optional)* | `apps/server/.env`<br/>`apps/workers/.env`<br/>`packages/database/.env` | Individual environment files if you choose not to use the root `.env`. |
-| **Vite Client Bundle** | `apps/client/.env.production` | Build-time variables (`VITE_FIREBASE_VAPID_KEY`) embedded into the client SPA bundle. |
-| **Vite Admin Bundle** | `apps/admin/.env.production` | Build-time variables embedded into the admin SPA bundle. |
+| **Production Docker Deployment** | `olx/.env.production` | **Single source of truth for Production**. Injected into all production containers via `docker-compose.prod.yml`. |
+| **Development Docker Deployment** | `olx/.env.development` | **Single source of truth for Development**. Injected into dev containers via `docker-compose.dev.yml`. |
+| **Native Development (No Docker)** | `olx/.env` (or `.env.development`) | Read automatically by all local monorepo commands (`pnpm dev`, `pnpm build`, `pnpm db:*`). |
+| **Templates** | `.env.production.example`<br/>`.env.development.example` | Version-controlled configuration templates with variable descriptions. |
 
 ---
 
@@ -396,30 +397,25 @@ This section provides clear, end-to-end instructions for deployment engineers.
 
 Docker Compose provides a complete, containerized environment in a single command.
 
-#### Step 1: Clone & Configure `.env`
+#### Step 1: Clone & Configure `.env.production`
 ```bash
 git clone https://github.com/your-org/olx-marketplace.git /var/www/olx
 cd /var/www/olx
 
-# Copy example environment configuration
-cp .env.example .env
-nano .env
+# Copy example production environment configuration
+cp .env.production.example .env.production
+nano .env.production
 ```
 
-Set your production database password, domain names (`CLIENT_URL=https://yourdomain.com`), and generate secure JWT secrets:
+Set your production database connection (`DATABASE_URL`), public domain names (`CLIENT_URL=https://yourdomain.com`), and generate secure JWT secrets:
 ```bash
 openssl rand -hex 32  # Run twice: once for JWT_ACCESS_SECRET, once for JWT_REFRESH_SECRET
 ```
 
 #### Step 2: Start Container Stack
-- **Option A: Self-hosted PostgreSQL & Redis containers (Standard)**:
-  ```bash
-  docker compose -f docker-compose.prod.yml up -d --build
-  ```
-- **Option B: Managed Cloud Database (Neon / Supabase / AWS RDS)**:
-  ```bash
-  docker compose -f docker-compose.deployment.yml up -d --build
-  ```
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
 
 #### Step 3: Run Database Migrations & Initial Seed
 ```bash
@@ -433,6 +429,8 @@ docker compose -f docker-compose.prod.yml exec server pnpm db:seed
 #### Step 4: Verify Health
 ```bash
 curl -f http://localhost/health
+# Expected: {"status":"ok","timestamp":"..."}
+```
 # Expected: {"status":"ok","timestamp":"..."}
 ```
 

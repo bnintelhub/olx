@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   DollarSign,
   User,
+  Flag,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +24,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { formatCurrency, formatPostingDate } from '@/lib/utils';
 import { adsService } from '../service/ads.service';
+import { useUIStore } from '@/stores/useUIStore';
 import { toast } from 'sonner';
 
 interface AdSellerCardProps {
@@ -213,6 +215,18 @@ export const AdSellerCard: React.FC<AdSellerCardProps> = ({
             <li>Pay only after inspecting and taking possession.</li>
             <li>Never transfer advance money via UPI/QR codes to unknown sellers.</li>
           </ul>
+
+          <div className="pt-2 border-t border-amber-200/60 flex items-center justify-between">
+            <span className="text-[11px] text-amber-800/80">See something suspicious?</span>
+            <button
+              type="button"
+              onClick={() => useUIStore.getState().openReportAd({ id: ad.id, title: ad.title })}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-rose-600 hover:text-rose-700 hover:underline transition"
+            >
+              <Flag className="w-3.5 h-3.5" />
+              <span>Report this ad</span>
+            </button>
+          </div>
         </CardContent>
       </Card>
 

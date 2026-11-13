@@ -4,7 +4,7 @@ import { ReportReason } from '@prisma/client';
 export const reportAdSchema = z.object({
   adId: z.string().uuid('Valid Ad ID required'),
   reason: z.nativeEnum(ReportReason),
-  details: z.string().min(5, 'Please provide more details for this report'),
+  details: z.string().optional().default(''),
 });
 
 export const blockUserSchema = z.object({

@@ -20,19 +20,20 @@ data/*
 # Environment and Secret files
 .env
 .env.local
-.env.*.local
-!.env.example
+.env.*
+env.*
 *.env
 *.env.*
-infrastructure/.env.production
-infrastructure/.env.dev
-infrastructure/secrets/*.env
-!infrastructure/.env.production.example
-!infrastructure/.env.dev.example
-!infrastructure/secrets/*.example
+*-firebase-adminsdk-*.json
+
+# Allow only template/example files to be tracked
+!.env.example
+!.env*.example
+!.env.*.example
+!env*.example
+!env.*.example
 !*.example
 !*.example.*
-*-firebase-adminsdk-*.json
 
 # Logs and system artifacts
 *.log

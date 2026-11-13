@@ -3,41 +3,36 @@ import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
 
-// Load default root .env if present
-dotenv.config();
+// Load environment variables from root environment files (.env.development / .env.production / .env)
+const isProd = process.env.NODE_ENV === 'production';
+const envFileNames = isProd
+  ? ['.env.production', 'env.production', '.env']
+  : ['.env.development', 'env.development', '.env'];
 
-// Auto-discover centralized infrastructure secrets when running outside Docker
-const candidateRoots = [
-  path.resolve(process.cwd(), 'infrastructure'),
-  path.resolve(process.cwd(), '../../infrastructure'),
-  path.resolve(__dirname, '../../../../infrastructure'),
+const candidateDirs = [
+  process.cwd(),
+  path.resolve(process.cwd(), '..'),
+  path.resolve(process.cwd(), '../..'),
+  path.resolve(__dirname, '../../..'),
+  path.resolve(__dirname, '../../../..'),
 ];
 
-for (const root of candidateRoots) {
-  if (fs.existsSync(root)) {
-    const isProd = process.env.NODE_ENV === 'production';
-    const mainEnv = isProd ? path.join(root, '.env.production') : path.join(root, '.env.dev');
-    if (fs.existsSync(mainEnv)) dotenv.config({ path: mainEnv });
-
-    const secretsDir = path.join(root, 'secrets');
-    if (fs.existsSync(secretsDir)) {
-      const dbEnv = isProd ? 'database.env' : 'database.dev.env';
-      [dbEnv, 'redis.env', 'jwt.env', 'payment.env', 'firebase.env', 'media.env'].forEach((file) => {
-        const fullPath = path.join(secretsDir, file);
-        if (fs.existsSync(fullPath)) {
-          dotenv.config({ path: fullPath });
-        }
-      });
+for (const dir of candidateDirs) {
+  for (const envName of envFileNames) {
+    const fullPath = path.join(dir, envName);
+    if (fs.existsSync(fullPath)) {
+      dotenv.config({ path: fullPath });
     }
-    break;
   }
 }
+dotenv.config();
 
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
     PORT: z.string().transform(Number).default('5000'),
     CLIENT_URL: z.string().default('http://localhost:5173'),
+    ADMIN_URL: z.string().optional(),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
     REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
     JWT_ACCESS_SECRET: z.string().min(10, 'JWT_ACCESS_SECRET must be at least 10 chars'),

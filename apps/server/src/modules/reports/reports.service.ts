@@ -3,9 +3,10 @@ import { AppError } from '../../shared/errors/app-error';
 import { AdStatus, ReportReason, ReportStatus } from '@prisma/client';
 import { SETTING_DEFAULTS } from '../../config/constants';
 import { dispatchNotificationJob } from '../../jobs/notification.job';
+import { formatAdImages } from '../listings/listings.service';
 
 export class ReportsService {
-  static async reportAd(reporterId: string, adId: string, reason: ReportReason, details: string) {
+  static async reportAd(reporterId: string, adId: string, reason: ReportReason, details?: string) {
     const ad = await prisma.ad.findUnique({ where: { id: adId } });
     if (!ad) throw new AppError(404, 'AD_NOT_FOUND', 'Listing not found');
 
@@ -20,13 +21,15 @@ export class ReportsService {
       throw new AppError(409, 'ALREADY_REPORTED', 'You have already submitted a report for this listing');
     }
 
+    const finalDetails = details?.trim() || `Reported for ${reason.replace(/_/g, ' ').toLowerCase()}`;
+
     const report = await prisma.report.create({
       data: {
         reporterId,
         reportedId: ad.userId,
         adId,
         reason,
-        details,
+        details: finalDetails,
         status: ReportStatus.PENDING,
       },
     });
@@ -133,15 +136,33 @@ export class ReportsService {
   }
 
   static async getReports(status?: ReportStatus) {
-    return prisma.report.findMany({
+    const reports = await prisma.report.findMany({
       where: status ? { status } : undefined,
       orderBy: { createdAt: 'desc' },
       include: {
-        ad: { select: { id: true, title: true, status: true, price: true } },
+        ad: {
+          select: {
+            id: true,
+            title: true,
+            slug: true,
+            status: true,
+            price: true,
+            images: {
+              include: { mediaAsset: true },
+              orderBy: { sortOrder: 'asc' },
+              take: 1,
+            },
+          },
+        },
         reporter: { select: { id: true, phoneNumber: true, profile: { select: { name: true } } } },
         reported: { select: { id: true, phoneNumber: true, status: true, profile: { select: { name: true } } } },
       },
     });
+
+    return reports.map((r) => ({
+      ...r,
+      ad: r.ad ? { ...r.ad, images: formatAdImages(r.ad.images) } : null,
+    }));
   }
 
   static async resolveReport(id: string, body: any) {

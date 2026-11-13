@@ -46,10 +46,11 @@ export const ReportAdModal: React.FC<ReportAdModalProps> = ({
     setErrorMsg('');
 
     try {
+      const finalDetails = details.trim() || `Reported for ${selectedReason.replace(/_/g, ' ').toLowerCase()}`;
       const res = await apiClient.post('/moderation/reports', {
         adId,
         reason: selectedReason,
-        details: details.trim(),
+        details: finalDetails,
       });
 
       if (res.data?.success) {
@@ -59,10 +60,10 @@ export const ReportAdModal: React.FC<ReportAdModalProps> = ({
           onClose();
         }, 2200);
       } else {
-        setErrorMsg(res.data?.error?.message || 'Failed to submit report');
+        setErrorMsg(res.data?.error?.message || res.data?.message || 'Failed to submit report');
       }
     } catch (err: any) {
-      setErrorMsg(err.response?.data?.message || 'Network error. Please try again.');
+      setErrorMsg(err.response?.data?.error?.message || err.response?.data?.message || 'Network error. Please try again.');
     } finally {
       setSubmitting(false);
     }

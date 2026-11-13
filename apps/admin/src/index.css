@@ -96,7 +96,8 @@
     height: 0px !important;
   }
   html, body {
-    @apply bg-background text-foreground transition-colors duration-200 antialiased overflow-x-hidden;
+    @apply bg-background text-foreground transition-colors duration-200 antialiased;
+    overflow-x: clip;
     -ms-overflow-style: none;
     scrollbar-width: none;
     background-color: hsl(var(--background));
