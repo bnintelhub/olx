@@ -1,38 +1,43 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-const apiTarget = process.env.VITE_API_TARGET || 'http://127.0.0.1:5000';
+export default defineConfig(({ command, mode }) => {
+  const rootDir = path.resolve(import.meta.dirname || path.resolve(), '../../');
+  const env = loadEnv(mode, rootDir, '');
+  const apiTarget = env.VITE_API_TARGET || process.env.VITE_API_TARGET || 'http://127.0.0.1:5000';
+  const baseUrl = env.VITE_BASE_URL || process.env.VITE_BASE_URL || '/admin/';
 
-export default defineConfig(({ command }) => ({
-  base: process.env.VITE_BASE_URL || (command === 'build' ? '/admin/' : '/'),
-  plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve(import.meta.dirname || path.resolve(), './src'),
+  return {
+    envDir: rootDir,
+    base: baseUrl,
+    plugins: [react()],
+    resolve: {
+      alias: {
+        '@': path.resolve(import.meta.dirname || path.resolve(), './src'),
+      },
     },
-  },
-  server: {
-    host: true,
-    port: 5174,
-    allowedHosts: true,
-    watch: {
-      usePolling: true,
-    },
-    proxy: {
-      '/api': {
-        target: apiTarget,
-        changeOrigin: true,
+    server: {
+      host: true,
+      port: 5174,
+      allowedHosts: true,
+      watch: {
+        usePolling: true,
       },
-      '/uploads': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-      '/media': {
-        target: apiTarget,
-        changeOrigin: true,
-      },
-      '/socket.io': {
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/media': {
+          target: apiTarget,
+          changeOrigin: true,
+        },
+        '/socket.io': {
         target: apiTarget,
         ws: true,
         changeOrigin: true,
@@ -57,4 +62,5 @@ export default defineConfig(({ command }) => ({
       },
     },
   },
-}));
+};
+});
