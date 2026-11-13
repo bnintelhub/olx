@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -80,11 +80,36 @@ async function main() {
     },
   ];
 
-  for (const img of galleryImages) {
+  for (let idx = 0; idx < galleryImages.length; idx++) {
+    const img = galleryImages[idx];
+    const media = await prisma.mediaAsset.upsert({
+      where: { storageKey: `seed/prop/whitefield/img_${idx}.jpg` },
+      create: {
+        ownerId: ad.userId,
+        entityType: MediaEntityType.LISTING,
+        storageProvider: 'LOCAL',
+        storageKey: `seed/prop/whitefield/img_${idx}.jpg`,
+        originalName: `gallery_${idx}.jpg`,
+        mimeType: 'image/jpeg',
+        extension: 'jpg',
+        status: MediaAssetStatus.READY,
+        variants: {
+          thumbnail: img.thumbnailUrl,
+          card: img.displayUrl,
+          medium: img.displayUrl,
+          large: img.originalUrl,
+          original: img.originalUrl,
+        },
+      },
+      update: {},
+    });
+
     await prisma.adImage.create({
       data: {
         adId: ad.id,
-        ...img,
+        mediaAssetId: media.id,
+        sortOrder: img.sortOrder,
+        isCover: img.isCover,
       },
     });
   }

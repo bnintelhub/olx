@@ -1,4 +1,4 @@
-import { PrismaClient, AdStatus, ReportReason, ReportStatus } from '@prisma/client';
+import { PrismaClient, AdStatus, ReportReason, ReportStatus, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -24,6 +24,27 @@ async function main() {
 
     let pendingAd;
     if (!existing) {
+      const media = await prisma.mediaAsset.upsert({
+        where: { storageKey: `seed/mod/${pendingSlug}/cover.jpg` },
+        create: {
+          ownerId: user.id,
+          entityType: MediaEntityType.LISTING,
+          storageProvider: 'LOCAL',
+          storageKey: `seed/mod/${pendingSlug}/cover.jpg`,
+          originalName: 'ps5.jpg',
+          mimeType: 'image/jpeg',
+          extension: 'jpg',
+          status: MediaAssetStatus.READY,
+          variants: {
+            thumbnail: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
+            card: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
+            medium: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
+            large: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
+          },
+        },
+        update: {},
+      });
+
       pendingAd = await prisma.ad.create({
         data: {
           userId: user.id,
@@ -42,9 +63,7 @@ async function main() {
           images: {
             create: [
               {
-                originalUrl: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
-                displayUrl: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
-                thumbnailUrl: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',
+                mediaAssetId: media.id,
                 sortOrder: 0,
                 isCover: true,
               },

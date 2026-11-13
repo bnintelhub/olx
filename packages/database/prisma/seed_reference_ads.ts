@@ -1,4 +1,4 @@
-import { PrismaClient, AdStatus } from '@prisma/client';
+import { PrismaClient, AdStatus, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -140,19 +140,59 @@ async function main() {
           attributesCache: ad.attributesCache,
         },
       });
+      const media = await prisma.mediaAsset.upsert({
+        where: { storageKey: `seed/ads/ref/${ad.slug}/cover.jpg` },
+        create: {
+          ownerId: user.id,
+          entityType: MediaEntityType.LISTING,
+          storageProvider: 'LOCAL',
+          storageKey: `seed/ads/ref/${ad.slug}/cover.jpg`,
+          originalName: 'cover.jpg',
+          mimeType: 'image/jpeg',
+          extension: 'jpg',
+          status: MediaAssetStatus.READY,
+          variants: {
+            thumbnail: ad.imageUrl,
+            card: ad.imageUrl,
+            medium: ad.imageUrl,
+            large: ad.imageUrl,
+          },
+        },
+        update: {},
+      });
+
       await prisma.adImage.deleteMany({ where: { adId: existing.id } });
       await prisma.adImage.create({
         data: {
           adId: existing.id,
-          originalUrl: ad.imageUrl,
-          displayUrl: ad.imageUrl,
-          thumbnailUrl: ad.imageUrl,
+          mediaAssetId: media.id,
           sortOrder: 0,
           isCover: true,
         },
       });
       console.log(`Updated ad: ${ad.title}`);
     } else {
+      const media = await prisma.mediaAsset.upsert({
+        where: { storageKey: `seed/ads/ref/${ad.slug}/cover.jpg` },
+        create: {
+          ownerId: user.id,
+          entityType: MediaEntityType.LISTING,
+          storageProvider: 'LOCAL',
+          storageKey: `seed/ads/ref/${ad.slug}/cover.jpg`,
+          originalName: 'cover.jpg',
+          mimeType: 'image/jpeg',
+          extension: 'jpg',
+          status: MediaAssetStatus.READY,
+          variants: {
+            thumbnail: ad.imageUrl,
+            card: ad.imageUrl,
+            medium: ad.imageUrl,
+            large: ad.imageUrl,
+          },
+        },
+        update: {},
+      });
+
       await prisma.ad.create({
         data: {
           userId: user.id,
@@ -173,9 +213,7 @@ async function main() {
           images: {
             create: [
               {
-                originalUrl: ad.imageUrl,
-                displayUrl: ad.imageUrl,
-                thumbnailUrl: ad.imageUrl,
+                mediaAssetId: media.id,
                 sortOrder: 0,
                 isCover: true,
               },

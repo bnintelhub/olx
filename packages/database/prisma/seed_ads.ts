@@ -1,4 +1,4 @@
-import { PrismaClient, AdStatus } from '@prisma/client';
+import { PrismaClient, AdStatus, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -169,6 +169,27 @@ async function main() {
       continue;
     }
 
+    const media = await prisma.mediaAsset.upsert({
+      where: { storageKey: `seed/ads/${adData.slug}/cover.jpg` },
+      create: {
+        ownerId: user!.id,
+        entityType: MediaEntityType.LISTING,
+        storageProvider: 'LOCAL',
+        storageKey: `seed/ads/${adData.slug}/cover.jpg`,
+        originalName: 'cover.jpg',
+        mimeType: 'image/jpeg',
+        extension: 'jpg',
+        status: MediaAssetStatus.READY,
+        variants: {
+          thumbnail: adData.imageUrl,
+          card: adData.imageUrl,
+          medium: adData.imageUrl,
+          large: adData.imageUrl,
+        },
+      },
+      update: {},
+    });
+
     await prisma.ad.create({
       data: {
         userId: user!.id,
@@ -188,9 +209,7 @@ async function main() {
         images: {
           create: [
             {
-              originalUrl: adData.imageUrl,
-              displayUrl: adData.imageUrl,
-              thumbnailUrl: adData.imageUrl,
+              mediaAssetId: media.id,
               sortOrder: 0,
               isCover: true,
             },

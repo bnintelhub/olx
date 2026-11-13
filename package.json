@@ -5,6 +5,9 @@
   "private": true,
   "packageManager": "pnpm@11.25.0",
   "scripts": {
+    "start": "pnpm --filter @olx/database db:generate && pnpm run build && turbo run dev",
+    "start:dev": "pnpm --filter @olx/database db:generate && pnpm run build && turbo run dev",
+    "start:dev:backend": "pnpm --filter @olx/database db:generate && pnpm --filter @olx/shared build && pnpm --parallel --filter @olx/server --filter @olx/workers run dev",
     "dev": "turbo run dev",
     "dev:ui": "pnpm --parallel --filter @olx/client --filter @olx/admin run dev",
     "dev:frontend": "pnpm --parallel --filter @olx/client --filter @olx/admin run dev",

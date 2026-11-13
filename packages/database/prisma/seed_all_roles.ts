@@ -4,6 +4,9 @@ import dotenv from 'dotenv';
 // Explicitly load server .env which contains DATABASE_URL
 dotenv.config({ path: path.resolve(__dirname, '../../apps/server/.env') });
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config({ path: path.resolve(__dirname, '../../infrastructure/.env.production') });
+dotenv.config({ path: path.resolve(__dirname, '../../../infrastructure/.env.production') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 import {
   PrismaClient,
@@ -14,6 +17,8 @@ import {
   ReportStatus,
   TicketPriority,
   TicketStatus,
+  MediaEntityType,
+  MediaAssetStatus,
 } from '@prisma/client';
 import { HashUtil } from '@olx/shared';
 
@@ -237,6 +242,37 @@ async function main() {
   for (const item of pendingAdsData) {
     const existing = await prisma.ad.findUnique({ where: { slug: item.slug } });
     if (!existing) {
+      // Create or reuse MediaAsset for listing image
+      const media = await prisma.mediaAsset.upsert({
+        where: { storageKey: `seed/mod/${item.slug}/cover.jpg` },
+        create: {
+          ownerId: sellerIds[0],
+          entityType: MediaEntityType.LISTING,
+          storageProvider: 'LOCAL',
+          storageKey: `seed/mod/${item.slug}/cover.jpg`,
+          originalName: 'cover.jpg',
+          mimeType: 'image/jpeg',
+          extension: 'jpg',
+          status: MediaAssetStatus.READY,
+          variants: {
+            thumbnail: item.image,
+            card: item.image,
+            medium: item.image,
+            large: item.image,
+            original: item.image,
+          },
+        },
+        update: {
+          variants: {
+            thumbnail: item.image,
+            card: item.image,
+            medium: item.image,
+            large: item.image,
+            original: item.image,
+          },
+        },
+      });
+
       await prisma.ad.create({
         data: {
           userId: sellerIds[0],
@@ -254,9 +290,7 @@ async function main() {
           images: {
             create: [
               {
-                originalUrl: item.image,
-                displayUrl: item.image,
-                thumbnailUrl: item.image,
+                mediaAssetId: media.id,
                 isCover: true,
                 sortOrder: 0,
               },
@@ -343,7 +377,8 @@ async function main() {
       await prisma.banner.create({
         data: {
           title: b.title,
-          imageUrl: b.imageUrl,
+          desktopMediaUrl: b.imageUrl,
+          mobileMediaUrl: b.imageUrl,
           position: b.position,
           isActive: true,
           startsAt: new Date(),
