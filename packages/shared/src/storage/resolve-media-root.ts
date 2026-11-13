@@ -9,6 +9,11 @@ import path from 'path';
  * 2. Host development environments (Windows/macOS monorepo paths like olx/data/olx-media)
  */
 export function resolveMediaRoot(customPath?: string): string {
+  // 0. Primary Docker persistent volume mount (/data/olx-media)
+  if (fs.existsSync('/data/olx-media')) {
+    return '/data/olx-media';
+  }
+
   // 1. Explicit path given and exists
   if (customPath) {
     const resolvedCustom = path.resolve(customPath);

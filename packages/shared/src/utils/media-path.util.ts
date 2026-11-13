@@ -105,6 +105,19 @@ export function buildMediaPath(params: MediaPathParams): string {
   return `${resource}/${resourceId}/${mediaType}/${mediaId}/${variant}.${format}`;
 }
 
+export function isExternalUrl(val: string | null | undefined): boolean {
+  if (!val || typeof val !== 'string') return false;
+  const trimmed = val.trim();
+  if (/^https?:\/\//i.test(trimmed)) {
+    // If it points to local development hosts or container services, it's NOT an external URL
+    if (/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client)(?::\d+)?(?:[/?#]|$)/i.test(trimmed)) {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
 /**
  * Normalizes any storage or full HTTP URL into a pure relative media key
  * e.g. "http://localhost:9000/olx-media/ads/drafts/images/med_123/card.webp" -> "ads/drafts/images/med_123/card.webp"
@@ -114,7 +127,12 @@ export function buildMediaPath(params: MediaPathParams): string {
  */
 export function normalizeMediaKey(val: string | null | undefined): string {
   if (!val || typeof val !== 'string') return '';
-  let clean = val
+  const trimmed = val.trim();
+  if (isExternalUrl(trimmed)) {
+    return trimmed;
+  }
+
+  let clean = trimmed
     .replace(/^https?:\/\/[^/]+/, '')
     .replace(/^s3:\/\/[^/]+/, '')
     .replace(/^[/\\]+/, '')
@@ -183,7 +201,12 @@ export function buildAssetStorageKey(
  */
 export function toPublicMediaUrl(pathOrUrl: string | null | undefined, baseUrl?: string): string {
   if (!pathOrUrl || typeof pathOrUrl !== 'string') return '';
-  const cleanKey = normalizeMediaKey(pathOrUrl);
+  const trimmed = pathOrUrl.trim();
+  if (isExternalUrl(trimmed)) {
+    return trimmed;
+  }
+
+  const cleanKey = normalizeMediaKey(trimmed);
   if (!cleanKey) return '';
   // Avoid leaking Docker internal service hostnames like http://server:5000 or http://backend:5000 to public clients
   const isInternalHost = baseUrl && (baseUrl.includes('server:') || baseUrl.includes('backend:'));
@@ -191,7 +214,7 @@ export function toPublicMediaUrl(pathOrUrl: string | null | undefined, baseUrl?:
     (!isInternalHost && baseUrl) ||
     process.env.MEDIA_PUBLIC_BASE_URL ||
     process.env.MEDIA_CDN_URL ||
-    'http://localhost:5000/media'
+    '/media'
   ).replace(/\/+$/, '');
   const prefix = base.endsWith('/media') || base.endsWith('/uploads') ? base : `${base}/media`;
   return `${prefix}/${cleanKey}`;
