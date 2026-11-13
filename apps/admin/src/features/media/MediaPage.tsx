@@ -63,6 +63,21 @@ import {
 } from './hook/useMediaMutation';
 import { MediaItem, MediaEntityScope } from './service/media.service';
 
+// Helper to resolve media URLs through current origin proxy if needed
+function formatMediaUrl(url?: string | null): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  // If external URL (e.g. Unsplash, Cloudinary, AWS S3), preserve it completely
+  if (/^https?:\/\//i.test(trimmed)) {
+    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend/i.test(trimmed)) {
+      return trimmed;
+    }
+    // If local with :5000/media or /media, convert to relative /media/
+    return trimmed.replace(/^https?:\/\/[^/]+(?::5000)?\/media\//, '/media/');
+  }
+  return trimmed.startsWith('/') ? trimmed : `/media/${trimmed}`;
+}
+
 export function MediaPage() {
   // Query parameters state
   const [page, setPage] = useState(1);
@@ -88,6 +103,8 @@ export function MediaPage() {
 
   // Modals state
   const [previewMediaId, setPreviewMediaId] = useState<string | null>(null);
+  const [previewVariant, setPreviewVariant] = useState<string>('large');
+  const [previewImgError, setPreviewImgError] = useState(false);
   const [editMedia, setEditMedia] = useState<MediaItem | null>(null);
   const [deleteConfirmMedia, setDeleteConfirmMedia] = useState<MediaItem | null>(null);
   const [showCleanupDialog, setShowCleanupDialog] = useState(false);
@@ -646,7 +663,14 @@ export function MediaPage() {
               key={item.id}
               className="group overflow-hidden rounded-xl border bg-card hover:shadow-md transition-all duration-200 flex flex-col justify-between"
             >
-              <div className="relative aspect-4/3 w-full bg-muted/40 overflow-hidden cursor-pointer" onClick={() => setPreviewMediaId(item.id)}>
+              <div
+                className="relative aspect-[4/3] w-full bg-muted/40 overflow-hidden cursor-pointer"
+                onClick={() => {
+                  setPreviewMediaId(item.id);
+                  setPreviewVariant('large');
+                  setPreviewImgError(false);
+                }}
+              >
                 {item.status === 'PROCESSING' ? (
                   <div className="h-full w-full flex flex-col items-center justify-center gap-1.5 bg-muted/60 text-muted-foreground p-2 text-center">
                     <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -658,15 +682,25 @@ export function MediaPage() {
                     <span className="text-[10px] font-medium">Failed</span>
                   </div>
                 ) : item.thumbnailUrl || item.displayUrl ? (
-                  <img
-                    src={item.thumbnailUrl || item.displayUrl!}
-                    alt={item.originalName}
-                    className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.target as HTMLElement).style.display = 'none';
-                    }}
-                  />
+                  <>
+                    <img
+                      src={formatMediaUrl(item.thumbnailUrl || item.displayUrl!)}
+                      alt={item.originalName}
+                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = 'none';
+                        const parent = (e.target as HTMLElement).parentElement;
+                        if (parent) {
+                          const fb = parent.querySelector('.fallback-placeholder') as HTMLElement;
+                          if (fb) fb.style.display = 'flex';
+                        }
+                      }}
+                    />
+                    <div className="fallback-placeholder hidden h-full w-full items-center justify-center text-muted-foreground flex-col gap-1 bg-muted/30">
+                      <ImageIcon className="h-8 w-8 opacity-40" />
+                    </div>
+                  </>
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-muted-foreground">
                     <ImageIcon className="h-8 w-8 opacity-40" />
@@ -713,7 +747,11 @@ export function MediaPage() {
                     size="sm"
                     variant="outline"
                     className="h-7 text-xs flex-1 gap-1"
-                    onClick={() => setPreviewMediaId(item.id)}
+                    onClick={() => {
+                      setPreviewMediaId(item.id);
+                      setPreviewVariant('large');
+                      setPreviewImgError(false);
+                    }}
                   >
                     <Eye className="h-3 w-3" />
                     <span>View</span>
@@ -840,7 +878,16 @@ export function MediaPage() {
                   {visibleColumns.actions && (
                     <td className="p-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setPreviewMediaId(item.id)}>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          onClick={() => {
+                            setPreviewMediaId(item.id);
+                            setPreviewVariant('large');
+                            setPreviewImgError(false);
+                          }}
+                        >
                           <Eye className="h-3.5 w-3.5" />
                         </Button>
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleOpenEdit(item)}>
@@ -919,11 +966,27 @@ export function MediaPage() {
             <div className="h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
             <div className="text-xs text-muted-foreground mt-2">Loading asset details...</div>
           </div>
-        ) : (
+        ) : (() => {
+          const selectedVariantUrl = previewVariant ? detailData.variants?.[previewVariant] : null;
+          const fallbackVariantUrl =
+            detailData.variants?.large ||
+            detailData.largeUrl ||
+            detailData.variants?.medium ||
+            detailData.variants?.card ||
+            detailData.displayUrl ||
+            detailData.variants?.thumbnail ||
+            detailData.variants?.thumb ||
+            detailData.thumbnailUrl ||
+            (detailData.variants ? Object.values(detailData.variants).find((v) => Boolean(v)) : null) ||
+            '';
+
+          const activePreviewUrl = formatMediaUrl(selectedVariantUrl || fallbackVariantUrl);
+
+          return (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-3 text-xs">
             {/* Left Side: Image Preview & Variant Links */}
             <div className="flex flex-col gap-3">
-              <div className="relative aspect-4/3 w-full bg-black/95 rounded-xl overflow-hidden flex items-center justify-center border border-border/40 shadow-inner">
+              <div className="relative aspect-[4/3] min-h-[260px] sm:min-h-[320px] w-full bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-border/40 shadow-inner">
                 {detailData.status === 'PROCESSING' ? (
                   <div className="flex flex-col items-center justify-center p-6 text-center text-muted-foreground gap-3">
                     <div className="relative">
@@ -948,18 +1011,50 @@ export function MediaPage() {
                       {detailData.errorMessage || 'Sharp failed to process image variants. Check dead-letter queue.'}
                     </p>
                   </div>
+                ) : previewImgError || !activePreviewUrl ? (
+                  <div className="flex flex-col items-center justify-center p-6 text-center text-muted-foreground gap-2">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 shadow-inner">
+                      <ImageIcon className="h-7 w-7 opacity-60" />
+                    </div>
+                    <p className="text-xs font-semibold text-slate-200 mt-1">{detailData.originalName}</p>
+                    <p className="text-[11px] text-slate-400 max-w-xs">
+                      Physical image file not found on local disk.
+                    </p>
+                    <Badge variant="outline" className="text-[10px] font-mono text-slate-400 bg-slate-900/60 border-slate-800">
+                      {detailData.diskPath}
+                    </Badge>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2 text-xs h-7 border-slate-700 bg-slate-900 hover:bg-slate-800 text-slate-200"
+                      onClick={() => handleOpenEdit(detailData as any)}
+                    >
+                      <Upload className="h-3 w-3 mr-1" />
+                      <span>Upload Physical File</span>
+                    </Button>
+                  </div>
                 ) : (
                   <>
                     <img
-                      src={detailData.largeUrl || detailData.displayUrl || detailData.thumbnailUrl || ''}
+                      key={activePreviewUrl}
+                      src={activePreviewUrl}
                       alt={detailData.originalName}
                       className="max-h-full max-w-full object-contain"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
+                      onError={() => {
+                        // Fall back to lower tiers if requested variant is missing
+                        if (previewVariant === 'large' && (detailData.variants?.medium || detailData.variants?.card || detailData.variants?.thumbnail)) {
+                          setPreviewVariant(detailData.variants?.medium ? 'medium' : detailData.variants?.card ? 'card' : 'thumbnail');
+                        } else if (previewVariant === 'medium' && (detailData.variants?.card || detailData.variants?.thumbnail)) {
+                          setPreviewVariant(detailData.variants?.card ? 'card' : 'thumbnail');
+                        } else if (previewVariant === 'card' && (detailData.variants?.thumbnail || detailData.thumbnailUrl)) {
+                          setPreviewVariant('thumbnail');
+                        } else {
+                          setPreviewImgError(true);
+                        }
                       }}
                     />
                     <a
-                      href={detailData.largeUrl || detailData.displayUrl || '#'}
+                      href={activePreviewUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="absolute top-2.5 right-2.5 bg-black/70 hover:bg-black/90 text-white px-2.5 py-1 rounded-md text-xs flex items-center gap-1.5 transition backdrop-blur-xs font-medium"
@@ -995,8 +1090,10 @@ export function MediaPage() {
                   <span className="text-[10px] text-muted-foreground">Direct Media Links</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(detailData.variants || {}).map(([key, url]) => (
-                    detailData.status === 'PROCESSING' ? (
+                  {Object.entries(detailData.variants || {}).map(([key, url]) => {
+                    const isSelected = previewVariant === key;
+                    const formattedUrl = formatMediaUrl(url);
+                    return detailData.status === 'PROCESSING' ? (
                       <div
                         key={key}
                         className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-muted/40 border text-muted-foreground opacity-60 cursor-not-allowed"
@@ -1005,18 +1102,35 @@ export function MediaPage() {
                         <span className="text-[10px] italic">generating...</span>
                       </div>
                     ) : (
-                      <a
+                      <div
                         key={key}
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md bg-background border hover:border-primary text-foreground transition group"
+                        onClick={() => {
+                          setPreviewVariant(key);
+                          setPreviewImgError(false);
+                        }}
+                        className={`flex items-center justify-between text-xs px-2.5 py-1.5 rounded-md border transition cursor-pointer ${
+                          isSelected
+                            ? 'bg-primary text-primary-foreground border-primary font-bold shadow-xs'
+                            : 'bg-background hover:border-primary text-foreground'
+                        }`}
                       >
                         <span className="capitalize font-medium">{key}</span>
-                        <ExternalLink className="h-3 w-3 text-muted-foreground group-hover:text-primary transition" />
-                      </a>
-                    )
-                  ))}
+                        <div className="flex items-center gap-1">
+                          {isSelected && <span className="text-[9px] bg-primary-foreground/20 px-1 rounded">Active</span>}
+                          <a
+                            href={formattedUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="p-0.5 hover:text-primary transition"
+                            title="Open direct link in new tab"
+                          >
+                            <ExternalLink className="h-3 w-3 opacity-70 hover:opacity-100" />
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1126,7 +1240,8 @@ export function MediaPage() {
               </div>
             </div>
           </div>
-        )}
+        );
+      })()}
 
         <DialogFooter className="pt-2">
           <Button variant="outline" size="sm" onClick={() => setPreviewMediaId(null)}>
