@@ -87,7 +87,7 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
 
   const handlePay = async (paymentType: 'UPI' | 'CARD') => {
     if (paymentType === 'UPI' && upiMethod === 'UPI_ID' && upiId.trim() && !upiId.includes('@')) {
-      setErrorMessage('Please enter a valid UPI ID (e.g. mobile@upi or name@okhdfcbank)');
+      setErrorMessage('Please enter a valid UPI ID (e.g. 9999999999@payu or name@okhdfcbank)');
       return;
     }
     if (paymentType === 'CARD') {
@@ -102,37 +102,30 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
     setErrorMessage(null);
 
     try {
-      // 1. Create order on backend
+      // 1. Create order on backend configured with safe browser return URL
+      const returnUrl = `${window.location.origin}/sell?planning`;
       const order = await paymentsService.createOrder({
         productId: selectedPlan.id,
         purpose: selectedPlan.purpose || 'OTHER',
+        returnUrl,
       });
 
-      // 2. Verify payment with backend PayU service
-      const verifyRes = await paymentsService.verifyPayment(order.paymentOrderId);
-
-      if (verifyRes.status === 'SUCCESS') {
-        // 3. Fetch refreshed quota immediately
-        const quotaRes = await apiClient.get('/revenue/quota');
-        const updatedQuota = quotaRes.data?.data;
-
-        setCompletedOrder({
-          txnId: verifyRes.transactionId,
-          amount: verifyRes.amount,
-          planName: selectedPlan.name,
-          adsCount: selectedPlan.adsCount,
-          method: paymentType === 'CARD' ? 'Card (Debit/Credit)' : 'PayU UPI',
-        });
-
-        if (updatedQuota) {
-          onSuccess(updatedQuota);
+      // 2. Prepare PayU hosted checkout parameters for official sandbox simulator
+      const checkoutParams: Record<string, string> = { ...order.checkoutParams };
+      if (paymentType === 'UPI') {
+        checkoutParams.pg = 'UPI';
+        checkoutParams.bankcode = 'UPI';
+        if (upiMethod === 'UPI_ID' && upiId.trim()) {
+          checkoutParams.vpa = upiId.trim();
         }
-      } else {
-        setErrorMessage(verifyRes.message || 'Payment could not be completed. Please try again.');
+      } else if (paymentType === 'CARD') {
+        checkoutParams.pg = 'CC';
       }
+
+      // 3. Launch PayU official test simulation checkout
+      paymentsService.submitPayUForm(order.checkoutUrl, checkoutParams);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || err.message || 'Payment initiation failed.');
-    } finally {
       setIsProcessing(false);
     }
   };
@@ -141,9 +134,11 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
     setIsProcessing(true);
     setErrorMessage(null);
     try {
+      const returnUrl = `${window.location.origin}/sell?planning`;
       const order = await paymentsService.createOrder({
         productId: selectedPlan.id,
         purpose: selectedPlan.purpose || 'OTHER',
+        returnUrl,
       });
       paymentsService.submitPayUForm(order.checkoutUrl, order.checkoutParams);
     } catch (err: any) {
@@ -315,8 +310,23 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
-                  <span>Quick Handles:</span>
-                  {['@okhdfcbank', '@paytm', '@ybl', '@okaxis', '@ibl'].map((handle) => (
+                  <span className="font-semibold text-slate-700">PayU Test VPA:</span>
+                  <button
+                    type="button"
+                    onClick={() => { setUpiId('9999999999@payu'); setErrorMessage(null); }}
+                    className="px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold transition cursor-pointer"
+                  >
+                    9999999999@payu
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setUpiId('success@payu'); setErrorMessage(null); }}
+                    className="px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-800 font-bold transition cursor-pointer"
+                  >
+                    success@payu
+                  </button>
+                  <span className="ml-1">Handles:</span>
+                  {['@payu', '@okhdfcbank', '@paytm', '@ybl', '@okaxis'].map((handle) => (
                     <button
                       key={handle}
                       type="button"
@@ -332,7 +342,7 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
                 </div>
 
                 <div className="text-[11px] text-slate-400">
-                  Compatible with Google Pay, PhonePe, Paytm, BHIM, Cred, and all UPI applications.
+                  Powered by PayU Sandbox Simulator. Accepts PayU test VPAs or live handles.
                 </div>
               </div>
             ) : (
@@ -387,6 +397,23 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         {/* Tab 2: Credit / Debit Card Option */}
         {mainTab === 'CARD' && (
           <div className="space-y-3.5 pt-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-semibold text-slate-500">PayU Test Sandbox:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCardNumber('4012 0010 3714 1112');
+                  setCardName('Rahul Kumar');
+                  setExpiry('05/30');
+                  setCvv('123');
+                  setErrorMessage(null);
+                }}
+                className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2 py-0.5 rounded-md border border-emerald-200 transition cursor-pointer"
+              >
+                Autofill Test Visa (4012...1112)
+              </button>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">Card Number</label>
               <div className="relative">
@@ -466,13 +493,13 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
           {isProcessing ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
-              <span>Verifying Payment...</span>
+              <span>Redirecting to PayU Test Gateway...</span>
             </>
           ) : (
             <span>
               {mainTab === 'UPI' && upiMethod === 'QR'
-                ? `I Have Sent ₹${selectedPlan.priceInr} (Confirm & Activate)`
-                : `Pay ₹${selectedPlan.priceInr} with ${mainTab === 'CARD' ? 'Card' : 'UPI'}`}
+                ? `Proceed to Pay ₹${selectedPlan.priceInr} with PayU UPI`
+                : `Pay ₹${selectedPlan.priceInr} with PayU (${mainTab === 'CARD' ? 'Card' : 'UPI'})`}
             </span>
           )}
         </Button>

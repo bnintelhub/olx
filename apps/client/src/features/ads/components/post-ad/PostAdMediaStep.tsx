@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Camera, Trash2, Upload, Star } from 'lucide-react';
+import { Camera, Trash2, Upload, Star, Crop } from 'lucide-react';
 
 export interface ImageUploadItem {
   file: File;
@@ -12,6 +12,7 @@ interface PostAdMediaStepProps {
   onAddFiles: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
   onSetCoverImage: (index: number) => void;
+  onCropImage?: (index: number) => void;
   isDragOver: boolean;
   setIsDragOver: (over: boolean) => void;
 }
@@ -21,6 +22,7 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
   onAddFiles,
   onRemoveImage,
   onSetCoverImage,
+  onCropImage,
   isDragOver,
   setIsDragOver,
 }) => {
@@ -114,6 +116,18 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
                   className="absolute top-1.5 left-1.5 bg-black/60 hover:bg-black/80 text-white text-[9px] font-medium px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition cursor-pointer"
                 >
                   Set Cover
+                </button>
+              )}
+
+              {/* Crop & Focal Point Button */}
+              {onCropImage && (
+                <button
+                  type="button"
+                  onClick={() => onCropImage(idx)}
+                  className="absolute top-1.5 right-8 bg-black/60 hover:bg-[#002f34] text-white p-1 rounded-full transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                  title="Crop & Set Focal Point"
+                >
+                  <Crop className="w-3.5 h-3.5" />
                 </button>
               )}
 

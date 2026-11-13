@@ -24,6 +24,8 @@ import { ADS_QUERY_KEYS } from '@/features/ads/hook/useAdsQuery';
 import { SellCategoryStep } from '../components/SellCategoryStep';
 import { SellDetailsStep } from '../components/SellDetailsStep';
 import { SellMediaStep, SellImageItem } from '../components/SellMediaStep';
+import { ImageCropModal } from '@/components/ImageCropModal';
+import { getImageDimensions } from '@/lib/image-utils';
 import { SellPreviewStep } from '../components/SellPreviewStep';
 import { SellSuccessStep } from '../components/SellSuccessStep';
 import { PricingUpgradeModal } from '../components/PricingUpgradeModal';
@@ -38,6 +40,45 @@ export const SellPage: React.FC = () => {
 
   const isPlanningParam = searchParams.has('planning') || searchParams.has('plans');
   const [showPricingModal, setShowPricingModal] = useState(isPlanningParam);
+  const [paymentBanner, setPaymentBanner] = useState<{ type: 'success' | 'error'; message: string; txnId?: string } | null>(null);
+
+  const paymentStatus = searchParams.get('status');
+
+  useEffect(() => {
+    if (paymentStatus === 'success') {
+      const txnId = searchParams.get('txnId') || undefined;
+      setPaymentBanner({
+        type: 'success',
+        message: 'Payment completed successfully via PayU! Your listing credits have been activated.',
+        txnId,
+      });
+      setShowPricingModal(false);
+      // Immediately refresh quota from backend
+      apiClient.get('/revenue/quota').then((res) => {
+        if (res.data?.success) setQuota(res.data.data);
+      }).catch(() => {});
+      // Clean query params
+      const next = new URLSearchParams(searchParams);
+      next.delete('status');
+      next.delete('txnId');
+      next.delete('orderId');
+      next.delete('planning');
+      next.delete('plans');
+      const rest = next.toString();
+      navigate({ pathname: '/sell', search: rest ? `?${rest}` : '' }, { replace: true });
+    } else if (paymentStatus === 'failed') {
+      setPaymentBanner({
+        type: 'error',
+        message: 'Payment was cancelled or failed with PayU. Please try again.',
+      });
+      const next = new URLSearchParams(searchParams);
+      next.delete('status');
+      next.delete('txnId');
+      next.delete('orderId');
+      const rest = next.toString();
+      navigate({ pathname: '/sell', search: rest ? `?${rest}` : '' }, { replace: true });
+    }
+  }, [paymentStatus]);
 
   useEffect(() => {
     if (isPlanningParam) {
@@ -89,6 +130,11 @@ export const SellPage: React.FC = () => {
 
   // Media
   const [images, setImages] = useState<SellImageItem[]>([]);
+  const [cropModalState, setCropModalState] = useState<{
+    isOpen: boolean;
+    file: File | null;
+    imageIndex?: number;
+  }>({ isOpen: false, file: null });
 
   // Submission state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -187,27 +233,80 @@ export const SellPage: React.FC = () => {
   };
 
   // Step 3: Photos Management
-  const handleAddFiles = (filesList: FileList | File[]) => {
+  const handleAddFiles = async (filesList: FileList | File[]) => {
     const valid = Array.from(filesList).filter((f) => ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(f.type));
     if (!valid.length) return toast.error('Invalid image format (use JPEG, PNG, or WebP)');
     if (images.length + valid.length > 8) return toast.error('Maximum 8 photos allowed');
     setStagedImages([]); // Reset staged uploads when images change
 
-    const newItems: SellImageItem[] = valid.map((file, idx) => ({
-      file,
-      previewUrl: URL.createObjectURL(file),
-      isCover: images.length === 0 && idx === 0,
-    }));
-    setImages((prev) => [...prev, ...newItems]);
+    // Check for images exceeding 5000px limit
+    const oversizedFiles: File[] = [];
+    const normalFiles: File[] = [];
 
-    // Asynchronously update to base64 Data URLs so preview never breaks across re-renders
-    valid.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) setImages((prev) => prev.map((item) => (item.file === file ? { ...item, previewUrl: reader.result as string } : item)));
-      };
-      reader.readAsDataURL(file);
-    });
+    for (const file of valid) {
+      try {
+        const dims = await getImageDimensions(file);
+        if (dims.width > 5000 || dims.height > 5000) {
+          oversizedFiles.push(file);
+        } else {
+          normalFiles.push(file);
+        }
+      } catch {
+        normalFiles.push(file);
+      }
+    }
+
+    if (normalFiles.length > 0) {
+      const newItems: SellImageItem[] = normalFiles.map((file, idx) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        isCover: images.length === 0 && idx === 0,
+      }));
+      setImages((prev) => [...prev, ...newItems]);
+
+      normalFiles.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          if (reader.result) setImages((prev) => prev.map((item) => (item.file === file ? { ...item, previewUrl: reader.result as string } : item)));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    // Automatically trigger crop and focal point selector for oversized image
+    if (oversizedFiles.length > 0) {
+      const firstOversized = oversizedFiles[0];
+      toast.info(`Image "${firstOversized.name}" exceeds 5000px. Adjust crop and focal point to fit.`);
+      setCropModalState({
+        isOpen: true,
+        file: firstOversized,
+      });
+    }
+  };
+
+  const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
+    if (cropModalState.imageIndex !== undefined) {
+      // Editing an existing image
+      setImages((prev) =>
+        prev.map((item, idx) =>
+          idx === cropModalState.imageIndex
+            ? { ...item, file: croppedFile, previewUrl: newPreviewUrl }
+            : item
+        )
+      );
+    } else {
+      // Cropped a newly added oversized image
+      setImages((prev) => [
+        ...prev,
+        {
+          file: croppedFile,
+          previewUrl: newPreviewUrl,
+          isCover: prev.length === 0,
+        },
+      ]);
+    }
+    setStagedImages([]);
+    toast.success('Crop and focal point applied successfully!');
   };
 
   const handleRemoveImage = (index: number) => {
@@ -364,6 +463,40 @@ export const SellPage: React.FC = () => {
           </div>
         )}
 
+        {/* Payment Result Notification */}
+        {paymentBanner && (
+          <div
+            className={`flex items-center justify-between p-4 rounded-xl border text-xs animate-in fade-in duration-200 ${
+              paymentBanner.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {paymentBanner.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+              ) : (
+                <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+              )}
+              <div>
+                <p className="font-bold">{paymentBanner.message}</p>
+                {paymentBanner.txnId && (
+                  <p className="text-[11px] text-emerald-700/80 mt-0.5 font-mono">
+                    Transaction ID: {paymentBanner.txnId}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPaymentBanner(null)}
+              className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 text-sm cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         {/* Error Notification */}
         {formError && (
           <div className="flex items-center gap-2 p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">
@@ -424,7 +557,19 @@ export const SellPage: React.FC = () => {
 
           {step === 3 && (
             <div className="space-y-6">
-              <SellMediaStep images={images} onAddFiles={handleAddFiles} onRemoveImage={handleRemoveImage} onSetCoverImage={handleSetCoverImage} />
+              <SellMediaStep
+                images={images}
+                onAddFiles={handleAddFiles}
+                onRemoveImage={handleRemoveImage}
+                onSetCoverImage={handleSetCoverImage}
+                onCropImage={(idx) =>
+                  setCropModalState({
+                    isOpen: true,
+                    file: images[idx].file,
+                    imageIndex: idx,
+                  })
+                }
+              />
               <div className="flex items-center justify-between pt-4 border-t border-gray-100">
                 <Button type="button" variant="outline" onClick={() => setStep(2)} className="text-xs font-bold h-10 px-5 gap-1.5 cursor-pointer rounded-xl">
                   <ArrowLeft className="w-3.5 h-3.5" /><span>Back to Details</span>
@@ -470,6 +615,14 @@ export const SellPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Image Crop & Focal Point Modal */}
+      <ImageCropModal
+        isOpen={cropModalState.isOpen}
+        file={cropModalState.file}
+        onClose={() => setCropModalState({ isOpen: false, file: null })}
+        onApply={handleApplyCrop}
+      />
 
       {/* Monetization / Extra Listings Upgrade Dialog */}
       <PricingUpgradeModal

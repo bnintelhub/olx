@@ -16,6 +16,8 @@ import { PostAdDynamicFields, AttributeItem } from '@/features/ads/components/po
 import { PostAdMediaStep, ImageUploadItem } from '@/features/ads/components/post-ad/PostAdMediaStep';
 import { PostAdSuccessStep } from '@/features/ads/components/post-ad/PostAdSuccessStep';
 import { LocationPickerModal } from '../features/locations/components/LocationPickerModal';
+import { ImageCropModal } from '@/components/ImageCropModal';
+import { getImageDimensions } from '@/lib/image-utils';
 
 function numberToIndianWords(num: number): string {
   if (!num || isNaN(num) || num <= 0) return '';
@@ -58,6 +60,11 @@ export const PostAdModal: React.FC<{
   // Media
   const [images, setImages] = useState<ImageUploadItem[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [cropModalState, setCropModalState] = useState<{
+    isOpen: boolean;
+    file: File | null;
+    imageIndex?: number;
+  }>({ isOpen: false, file: null });
 
   // Submission state
   const [isUploading, setIsUploading] = useState(false);
@@ -125,7 +132,7 @@ export const PostAdModal: React.FC<{
     }
   };
 
-  const handleAddFiles = (filesList: FileList | File[]) => {
+  const handleAddFiles = async (filesList: FileList | File[]) => {
     const rawFiles = Array.from(filesList);
     const validFiles = rawFiles.filter((f) =>
       ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(f.type)
@@ -141,13 +148,61 @@ export const PostAdModal: React.FC<{
       return;
     }
 
-    const newItems: ImageUploadItem[] = validFiles.map((file, idx) => ({
-      file,
-      previewUrl: URL.createObjectURL(file),
-      isCover: images.length === 0 && idx === 0,
-    }));
+    const oversizedFiles: File[] = [];
+    const normalFiles: File[] = [];
 
-    setImages((prev) => [...prev, ...newItems]);
+    for (const file of validFiles) {
+      try {
+        const dims = await getImageDimensions(file);
+        if (dims.width > 5000 || dims.height > 5000) {
+          oversizedFiles.push(file);
+        } else {
+          normalFiles.push(file);
+        }
+      } catch {
+        normalFiles.push(file);
+      }
+    }
+
+    if (normalFiles.length > 0) {
+      const newItems: ImageUploadItem[] = normalFiles.map((file, idx) => ({
+        file,
+        previewUrl: URL.createObjectURL(file),
+        isCover: images.length === 0 && idx === 0,
+      }));
+      setImages((prev) => [...prev, ...newItems]);
+    }
+
+    if (oversizedFiles.length > 0) {
+      const first = oversizedFiles[0];
+      toast.info(`Image "${first.name}" exceeds 5000px. Adjust crop and focal point to fit.`);
+      setCropModalState({
+        isOpen: true,
+        file: first,
+      });
+    }
+  };
+
+  const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
+    if (cropModalState.imageIndex !== undefined) {
+      setImages((prev) =>
+        prev.map((item, idx) =>
+          idx === cropModalState.imageIndex
+            ? { ...item, file: croppedFile, previewUrl: newPreviewUrl }
+            : item
+        )
+      );
+    } else {
+      setImages((prev) => [
+        ...prev,
+        {
+          file: croppedFile,
+          previewUrl: newPreviewUrl,
+          isCover: prev.length === 0,
+        },
+      ]);
+    }
+    toast.success('Crop and focal point applied successfully!');
   };
 
   const handleRemoveImage = (index: number) => {
@@ -409,6 +464,13 @@ export const PostAdModal: React.FC<{
                 onAddFiles={handleAddFiles}
                 onRemoveImage={handleRemoveImage}
                 onSetCoverImage={handleSetCoverImage}
+                onCropImage={(idx) =>
+                  setCropModalState({
+                    isOpen: true,
+                    file: images[idx].file,
+                    imageIndex: idx,
+                  })
+                }
                 isDragOver={isDragOver}
                 setIsDragOver={setIsDragOver}
               />
@@ -492,6 +554,14 @@ export const PostAdModal: React.FC<{
           )}
         </div>
       </div>
+
+      {/* Image Crop & Focal Point Selector Modal */}
+      <ImageCropModal
+        isOpen={cropModalState.isOpen}
+        file={cropModalState.file}
+        onClose={() => setCropModalState({ isOpen: false, file: null })}
+        onApply={handleApplyCrop}
+      />
     </div>
   );
 };

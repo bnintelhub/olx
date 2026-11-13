@@ -10,6 +10,7 @@ import {
   HelpCircle,
   ArrowRight,
   Check,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
@@ -32,6 +33,41 @@ export const PlansPage: React.FC = () => {
   const [selectedPlanId, setSelectedPlanId] = useState<string>('extra_15');
   const [quota, setQuota] = useState<any | null>(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [paymentBanner, setPaymentBanner] = useState<{ type: 'success' | 'error'; message: string; txnId?: string } | null>(null);
+
+  const paymentStatus = searchParams.get('status');
+
+  useEffect(() => {
+    if (paymentStatus === 'success') {
+      const txnId = searchParams.get('txnId') || undefined;
+      setPaymentBanner({
+        type: 'success',
+        message: 'Payment completed successfully via PayU! Your listing credits have been activated.',
+        txnId,
+      });
+      setIsCheckingOut(false);
+      apiClient.get('/revenue/quota').then((res) => {
+        if (res.data?.success) setQuota(res.data.data);
+      }).catch(() => {});
+      const next = new URLSearchParams(searchParams);
+      next.delete('status');
+      next.delete('txnId');
+      next.delete('orderId');
+      const rest = next.toString();
+      navigate({ pathname: '/plans', search: rest ? `?${rest}` : '' }, { replace: true });
+    } else if (paymentStatus === 'failed') {
+      setPaymentBanner({
+        type: 'error',
+        message: 'Payment was cancelled or failed with PayU. Please try again.',
+      });
+      const next = new URLSearchParams(searchParams);
+      next.delete('status');
+      next.delete('txnId');
+      next.delete('orderId');
+      const rest = next.toString();
+      navigate({ pathname: '/plans', search: rest ? `?${rest}` : '' }, { replace: true });
+    }
+  }, [paymentStatus]);
 
   useEffect(() => {
     if (user) {
@@ -187,6 +223,39 @@ export const PlansPage: React.FC = () => {
             </div>
           )}
         </div>
+
+        {paymentBanner && (
+          <div
+            className={`flex items-center justify-between p-4 rounded-2xl border text-xs animate-in fade-in duration-200 ${
+              paymentBanner.type === 'success'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                : 'bg-rose-50 border-rose-200 text-rose-900'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              {paymentBanner.type === 'success' ? (
+                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
+              ) : (
+                <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
+              )}
+              <div>
+                <p className="font-bold">{paymentBanner.message}</p>
+                {paymentBanner.txnId && (
+                  <p className="text-[11px] text-emerald-700/80 mt-0.5 font-mono">
+                    Transaction ID: {paymentBanner.txnId}
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPaymentBanner(null)}
+              className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 text-sm cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Checkout View or Plans Grid */}
         {isCheckingOut ? (

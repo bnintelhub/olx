@@ -462,6 +462,16 @@ export class PaymentService {
               paidAt: new Date(),
             });
 
+            order.status = PaymentStatus.SUCCESS;
+
+            // Immediate inline fulfillment for instant balance update
+            try {
+              const { PaymentFulfillmentService } = await import('./payment.fulfillment');
+              await PaymentFulfillmentService.fulfillOrder(order.id);
+            } catch (err: any) {
+              console.warn('[PaymentService] Direct fulfillment warning, queued fallback:', err.message);
+            }
+
             await queuePaymentFulfillmentJob({
               paymentOrderId: order.id,
               merchantTransactionId: transaction.merchantTransactionId,

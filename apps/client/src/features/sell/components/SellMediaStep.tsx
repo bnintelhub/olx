@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { UploadCloud, Image as ImageIcon, Star, Trash2, AlertCircle } from 'lucide-react';
+import { UploadCloud, Image as ImageIcon, Star, Trash2, AlertCircle, Crop } from 'lucide-react';
 import { toast } from 'sonner';
 
 export interface SellImageItem {
@@ -13,6 +13,7 @@ interface SellMediaStepProps {
   onAddFiles: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
   onSetCoverImage: (index: number) => void;
+  onCropImage?: (index: number) => void;
 }
 
 export const SellMediaStep: React.FC<SellMediaStepProps> = ({
@@ -20,6 +21,7 @@ export const SellMediaStep: React.FC<SellMediaStepProps> = ({
   onAddFiles,
   onRemoveImage,
   onSetCoverImage,
+  onCropImage,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -129,7 +131,20 @@ export const SellMediaStep: React.FC<SellMediaStepProps> = ({
                 )}
 
                 {/* Action Overlays */}
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
+                  {onCropImage && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCropImage(index);
+                      }}
+                      className="p-1.5 rounded-lg bg-white/95 text-[#002f34] hover:bg-white text-xs font-semibold shadow cursor-pointer"
+                      title="Crop & Set Focal Point"
+                    >
+                      <Crop className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   {!item.isCover && (
                     <button
                       type="button"
@@ -137,7 +152,7 @@ export const SellMediaStep: React.FC<SellMediaStepProps> = ({
                         e.stopPropagation();
                         onSetCoverImage(index);
                       }}
-                      className="p-1.5 rounded-lg bg-white/90 text-gray-800 hover:bg-white text-xs font-semibold flex items-center gap-1 shadow cursor-pointer"
+                      className="p-1.5 rounded-lg bg-white/95 text-gray-800 hover:bg-white text-xs font-semibold flex items-center gap-1 shadow cursor-pointer"
                       title="Set as Cover Photo"
                     >
                       <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />

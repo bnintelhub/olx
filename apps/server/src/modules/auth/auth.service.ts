@@ -62,12 +62,12 @@ export class AuthService {
   }
 
   // Generates a 6-digit numeric OTP code for identity verification workflows.
-  // In development and test with mock SMS provider, returns the deterministic mock code.
+  // When mock SMS provider is configured, returns the deterministic mock code.
   private static generateOtpCode(): string {
-    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
-    return isDevOrTest && env.SMS_PROVIDER === 'MOCK'
-      ? env.MOCK_OTP_CODE
-      : Math.floor(100000 + Math.random() * 900000).toString();
+    if (env.SMS_PROVIDER === 'MOCK' && env.MOCK_OTP_CODE) {
+      return env.MOCK_OTP_CODE;
+    }
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   // Registers a new user with email and hashed password, then sends verification OTP.
@@ -113,7 +113,7 @@ export class AuthService {
       purpose: 'EMAIL_VERIFICATION',
     });
 
-    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test' || env.SMS_PROVIDER === 'MOCK';
 
     return {
       message: 'Registration successful. A verification OTP has been sent to your email.',
@@ -237,7 +237,7 @@ export class AuthService {
       throw new AppError(404, 'USER_NOT_FOUND', 'No account found with this email address.');
     }
 
-    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test' || env.SMS_PROVIDER === 'MOCK';
     const cooldownKey = `otp_cooldown:${cleanEmail}`;
     const inCooldown = await getCache<boolean>(cooldownKey);
 
@@ -320,7 +320,7 @@ export class AuthService {
   // Dispatches a fresh OTP code to either email or mobile number after cooldown checks.
   // Stores the new session in the database and updates rate-limit cache.
   static async resendOtp(data: ResendOtpInput) {
-    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test' || env.SMS_PROVIDER === 'MOCK';
     const otpCode = this.generateOtpCode();
     const otpHash = HashUtil.sha256(otpCode);
     const expiresAt = new Date(Date.now() + env.OTP_EXPIRY_SECONDS * 1000);
@@ -395,7 +395,7 @@ export class AuthService {
   // Persists an OTP session hash with a 5-minute expiration window.
   static async sendOtp(rawPhone: string, purpose = OtpPurpose.LOGIN): Promise<SendOtpResult> {
     const phoneNumber = this.sanitizePhoneNumber(rawPhone);
-    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test';
+    const isDevOrTest = env.NODE_ENV === 'development' || env.NODE_ENV === 'test' || env.SMS_PROVIDER === 'MOCK';
 
     const cooldownKey = `otp_cooldown:${phoneNumber}`;
     const inCooldown = await getCache<boolean>(cooldownKey);

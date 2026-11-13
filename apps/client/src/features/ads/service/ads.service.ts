@@ -1,5 +1,6 @@
 import { apiClient } from '@/lib/api-client';
 import { AdItem } from '@/types';
+import { autoSafeScaleImage } from '@/lib/image-utils';
 
 export interface AdsQueryParams {
   q?: string;
@@ -107,8 +108,13 @@ export const adsService = {
     thumbnailUrl?: string;
     variants?: any;
   }>> {
+    // Failsafe: Ensure no file exceeds server 5000x5000px limit
+    const safeFiles = await Promise.all(
+      files.map((file) => autoSafeScaleImage(file, 4000))
+    );
+
     const formData = new FormData();
-    files.forEach((file) => {
+    safeFiles.forEach((file) => {
       formData.append('images', file);
     });
 
