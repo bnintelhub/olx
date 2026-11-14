@@ -8,6 +8,7 @@
     "build": "tsc",
     "db:generate": "node scripts/prisma-cli.js generate",
     "db:push": "node scripts/prisma-cli.js db push",
+    "db:reset": "node scripts/prisma-cli.js db push --force-reset",
     "db:studio": "node scripts/prisma-cli.js studio",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:roles": "tsx prisma/seed_all_roles.ts"

@@ -29,6 +29,7 @@
     "loadtest": "pnpm --filter @olx/server loadtest",
     "db:generate": "pnpm --filter @olx/database db:generate",
     "db:push": "pnpm --filter @olx/database db:push",
+    "db:reset": "pnpm --filter @olx/database db:reset",
     "db:studio": "pnpm --filter @olx/database db:studio",
     "db:seed": "pnpm --filter @olx/database db:seed",
     "db:seed:roles": "pnpm --filter @olx/database run db:seed:roles",
