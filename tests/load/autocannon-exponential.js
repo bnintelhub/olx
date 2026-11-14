@@ -159,3 +159,4 @@ console.log('- If Latency p99 stays < 200ms up to 25k, your Fastify event loop i
 console.log('- If errors appear at 50k or 100k on 1 server container, scale horizontally:');
 console.log('    docker compose -f docker-compose.prod.yml up -d --scale server=3');
 console.log('================================================================\n');
+

@@ -61,6 +61,10 @@ async function startServer() {
     const port = env.PORT || 5000;
     await app.listen({ port, host: '0.0.0.0' });
 
+    // Optimize keep-alive timeouts behind Nginx reverse proxy to prevent connection resets
+    app.server.keepAliveTimeout = 65000;
+    app.server.headersTimeout = 66000;
+
     const dbStatus = await checkDatabaseConnection();
 
     console.log(`\n======================================================`);

@@ -50,3 +50,4 @@ fi
 echo ""
 # 4. Run Autocannon Exponential Suite
 node "$(dirname "$0")/autocannon-exponential.js" "${TARGET_URL}"
+
