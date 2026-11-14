@@ -17,13 +17,14 @@ import { THRESHOLDS } from './config.js';
  * Stage 7: Cooldown     (Back to baseline)
  */
 export const options = {
+  discardResponseBodies: true, // Prevents OOM in 8GB RAM environments by not buffering response bodies
   scenarios: {
     exponential_100k: {
       executor: 'ramping-arrival-rate',
       startRate: 100,
       timeUnit: '1s',
       preAllocatedVUs: 1000,
-      maxVUs: 20000,
+      maxVUs: 6000, // Memory-safe VU limit for Codespaces (8GB RAM)
       stages: [
         { duration: '30s', target: 500 },     // Stage 1: 500 req/s
         { duration: '45s', target: 2500 },    // Stage 2: 2,500 req/s
