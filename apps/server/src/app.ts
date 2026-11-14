@@ -16,6 +16,7 @@ import { rateLimitPlugin } from './plugins/rate-limit.plugin';
 import { swaggerPlugin } from './plugins/swagger.plugin';
 import { errorHandlerPlugin } from './plugins/error-handler.plugin';
 import { authPlugin } from './plugins/auth.plugin';
+import { responseMetricsPlugin } from './plugins/response-metrics.plugin';
 import { env } from './config/env';
 import { checkDatabaseConnection } from './config/prisma';
 import { isRedisHealthy } from './config/redis';
@@ -73,6 +74,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(corsPlugin);
   await app.register(rateLimitPlugin);
   await app.register(swaggerPlugin);
+  await app.register(responseMetricsPlugin);
 
   // File Uploads & Static files
   await app.register(fastifyMultipart, {
