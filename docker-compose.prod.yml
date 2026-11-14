@@ -41,12 +41,12 @@ services:
 
   # ========================================================
   # Backend API Server (Fastify 5 + Clustered Socket.IO + Direct Media Engine)
+  # Scalable service (supports --scale server=N)
   # ========================================================
   server:
     build:
       context: .
       dockerfile: ./infrastructure/docker/prod/Dockerfile.server
-    container_name: bharatmarket_server
     restart: always
     depends_on:
       postgres:
@@ -58,8 +58,8 @@ services:
     environment:
       DATABASE_URL: "${DATABASE_URL:-postgresql://${DB_USER:-postgres}:${DB_PASSWORD:-postgres}@postgres:5432/${DB_NAME:-olx_marketplace}?schema=public}"
       REDIS_URL: "redis://redis:6379"
-    ports:
-      - "5000:5000"
+    expose:
+      - "5000"
     volumes:
       - media_data:/data/olx-media
     networks:
