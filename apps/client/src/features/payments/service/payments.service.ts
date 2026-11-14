@@ -51,17 +51,29 @@ export const paymentsService = {
 
   // Submits PayU Hosted Checkout form directly to PayU gateway
   submitPayUForm(checkoutUrl: string, checkoutParams: Record<string, string>) {
+    if (!checkoutUrl) {
+      throw new Error('PayU Checkout URL is missing. Please try again.');
+    }
+
+    // Clean up any stale form
+    const existing = document.getElementById('payu-checkout-form');
+    if (existing) existing.remove();
+
     const form = document.createElement('form');
+    form.id = 'payu-checkout-form';
     form.method = 'POST';
     form.action = checkoutUrl;
+    form.target = '_self';
     form.style.display = 'none';
 
-    Object.entries(checkoutParams).forEach(([key, value]) => {
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = key;
-      input.value = value;
-      form.appendChild(input);
+    Object.entries(checkoutParams || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = key;
+        input.value = String(value);
+        form.appendChild(input);
+      }
     });
 
     document.body.appendChild(form);

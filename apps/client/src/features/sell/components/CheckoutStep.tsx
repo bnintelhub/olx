@@ -124,6 +124,11 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
 
       // 3. Launch PayU official test simulation checkout
       paymentsService.submitPayUForm(order.checkoutUrl, checkoutParams);
+
+      // Safety timeout: reset processing state if browser navigation is cancelled or delayed
+      setTimeout(() => {
+        setIsProcessing(false);
+      }, 7000);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || err.message || 'Payment initiation failed.');
       setIsProcessing(false);
@@ -141,6 +146,11 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         returnUrl,
       });
       paymentsService.submitPayUForm(order.checkoutUrl, order.checkoutParams);
+
+      // Safety timeout: reset processing state if browser navigation is cancelled or delayed
+      setTimeout(() => {
+        setIsProcessing(false);
+      }, 7000);
     } catch (err: any) {
       setErrorMessage(err.response?.data?.message || err.message || 'Failed to redirect to PayU gateway.');
       setIsProcessing(false);

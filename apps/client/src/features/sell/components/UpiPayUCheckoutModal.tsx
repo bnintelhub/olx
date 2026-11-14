@@ -119,6 +119,9 @@ export const UpiPayUCheckoutModal: React.FC<UpiPayUCheckoutModalProps> = ({
         purpose: selectedPlan.purpose || 'OTHER',
       });
       paymentsService.submitPayUForm(order.checkoutUrl, order.checkoutParams);
+      setTimeout(() => {
+        setIsProcessing(false);
+      }, 7000);
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to redirect to PayU gateway.');
       setIsProcessing(false);
