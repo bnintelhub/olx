@@ -1,3 +1,4 @@
+import './config/env';
 import { startOtpWorker } from './workers/otp.worker';
 import { startMediaWorker } from './workers/media.worker';
 import { startPaymentFulfillmentWorker } from './workers/payment-fulfillment.worker';

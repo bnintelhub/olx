@@ -3,11 +3,15 @@ import path from 'path';
 import fs from 'fs';
 import { z } from 'zod';
 
-// Load environment variables from root environment files (.env.development / .env.production / .env)
+// Load environment variables from root environment files (.env.production / .env.development / .env)
 const isProd = process.env.NODE_ENV === 'production';
-const envFileNames = isProd
-  ? ['.env.production', 'env.production', '.env']
-  : ['.env.development', 'env.development', '.env'];
+const envFileNames = [
+  ...(isProd ? ['.env.production', 'env.production'] : ['.env.development', 'env.development']),
+  '.env',
+  '.env.production',
+  '.env.development',
+  '.env.local',
+];
 
 const candidateDirs = [
   process.cwd(),
@@ -26,6 +30,11 @@ for (const dir of candidateDirs) {
   }
 }
 dotenv.config();
+
+// Automatically sanitize accidental duplicate variable assignment like REDIS_URL="rediss://...
+if (process.env.REDIS_URL) {
+  process.env.REDIS_URL = process.env.REDIS_URL.replace(/^REDIS_URL\s*=\s*/i, '').replace(/^['"]|['"]$/g, '').trim();
+}
 
 const envSchema = z
   .object({
