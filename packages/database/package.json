@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsc --noEmit -p prisma/tsconfig.json",
     "db:generate": "node scripts/prisma-cli.js generate",
     "db:push": "node scripts/prisma-cli.js db push",
     "db:reset": "node scripts/prisma-cli.js db push --force-reset",

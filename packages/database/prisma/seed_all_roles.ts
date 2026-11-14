@@ -1,12 +1,4 @@
-import path from 'path';
-import dotenv from 'dotenv';
-
-// Explicitly load server .env which contains DATABASE_URL
-dotenv.config({ path: path.resolve(__dirname, '../../apps/server/.env') });
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-dotenv.config({ path: path.resolve(__dirname, '../../infrastructure/.env.production') });
-dotenv.config({ path: path.resolve(__dirname, '../../../infrastructure/.env.production') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+import './load_env';
 
 import {
   PrismaClient,
@@ -20,14 +12,13 @@ import {
   MediaEntityType,
   MediaAssetStatus,
 } from '@prisma/client';
-import { HashUtil } from '@olx/shared';
-
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('🚀 Seeding comprehensive admin accounts, roles, and operational data...');
 
-  const passwordHash = await HashUtil.hashPassword('rahul@123');
+  // Pre-computed bcrypt hash for password "rahul@123" (cost factor 10)
+  const passwordHash = '$2b$10$hk18I7xBFXegISR746tmhOyfC3oYPajVk/UnetyuMObIVd17RE7mu';
 
   // 1. Seed All Staff Accounts with credentials: password rahul@123
   const staffAccounts = [
@@ -196,7 +187,7 @@ async function main() {
         name: 'Mobiles',
         slug: 'mobiles',
         iconUrl: 'smartphone',
-        displayOrder: 1,
+        sortOrder: 1,
       },
     });
   }

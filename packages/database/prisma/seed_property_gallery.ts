@@ -1,3 +1,4 @@
+import './load_env';
 import { PrismaClient, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();

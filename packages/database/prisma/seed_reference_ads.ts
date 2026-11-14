@@ -1,3 +1,4 @@
+import './load_env';
 import { PrismaClient, AdStatus, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -21,10 +22,10 @@ async function main() {
 
 
   // 2. Ensure Categories
-  const bikesCat = await prisma.category.findUnique({ where: { slug: 'bikes' } });
-  const mobilesCat = await prisma.category.findUnique({ where: { slug: 'mobiles' } });
-  const propCat = await prisma.category.findUnique({ where: { slug: 'properties' } });
-  const furnCat = await prisma.category.findUnique({ where: { slug: 'furniture' } });
+  const bikesCat = await prisma.category.findFirst({ where: { slug: 'bikes' } });
+  const mobilesCat = await prisma.category.findFirst({ where: { slug: 'mobiles' } });
+  const propCat = await prisma.category.findFirst({ where: { slug: 'properties' } });
+  const furnCat = await prisma.category.findFirst({ where: { slug: 'furniture' } });
 
   // 3. User
   let user = await prisma.user.findFirst({

@@ -1,3 +1,4 @@
+import './load_env';
 import { PrismaClient, AdStatus, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -33,12 +34,12 @@ async function main() {
   }
 
   // 2. Fetch categories
-  const carsCat = await prisma.category.findUnique({ where: { slug: 'cars' } });
-  const mobilesCat = await prisma.category.findUnique({ where: { slug: 'mobiles' } });
-  const bikesCat = await prisma.category.findUnique({ where: { slug: 'bikes' } });
-  const propCat = await prisma.category.findUnique({ where: { slug: 'properties' } });
-  const elecCat = await prisma.category.findUnique({ where: { slug: 'electronics' } });
-  const furnCat = await prisma.category.findUnique({ where: { slug: 'furniture' } });
+  const carsCat = await prisma.category.findFirst({ where: { slug: 'cars' } });
+  const mobilesCat = await prisma.category.findFirst({ where: { slug: 'mobiles' } });
+  const bikesCat = await prisma.category.findFirst({ where: { slug: 'bikes' } });
+  const propCat = await prisma.category.findFirst({ where: { slug: 'properties' } });
+  const elecCat = await prisma.category.findFirst({ where: { slug: 'electronics' } });
+  const furnCat = await prisma.category.findFirst({ where: { slug: 'furniture' } });
 
   // 3. Fetch cities
   const blr = await prisma.location.findFirst({ where: { slug: 'bengaluru' } });

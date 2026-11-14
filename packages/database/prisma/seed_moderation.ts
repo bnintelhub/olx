@@ -1,3 +1,4 @@
+import './load_env';
 import { PrismaClient, AdStatus, ReportReason, ReportStatus, MediaEntityType, MediaAssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
@@ -14,7 +15,7 @@ async function main() {
     where: { phoneNumber: '+919833445566' },
   });
 
-  const cat = await prisma.category.findUnique({ where: { slug: 'electronics' } });
+  const cat = await prisma.category.findFirst({ where: { slug: 'electronics' } });
   const loc = await prisma.location.findFirst({ where: { slug: 'delhi' } });
 
   if (user && cat && loc) {
