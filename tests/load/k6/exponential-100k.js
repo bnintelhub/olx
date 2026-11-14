@@ -24,7 +24,7 @@ export const options = {
       startRate: 100,
       timeUnit: '1s',
       preAllocatedVUs: 1000,
-      maxVUs: 6000, // Memory-safe VU limit for Codespaces (8GB RAM)
+      maxVUs: 20000, // Controlled 20k VU baseline
       stages: [
         { duration: '30s', target: 500 },     // Stage 1: 500 req/s
         { duration: '45s', target: 2500 },    // Stage 2: 2,500 req/s
