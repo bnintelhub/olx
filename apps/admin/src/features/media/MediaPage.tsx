@@ -67,15 +67,28 @@ import { MediaItem, MediaEntityScope } from './service/media.service';
 function formatMediaUrl(url?: string | null): string {
   if (!url) return '';
   const trimmed = url.trim();
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+
   // If external URL (e.g. Unsplash, Cloudinary, AWS S3), preserve it completely
   if (/^https?:\/\//i.test(trimmed)) {
-    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend/i.test(trimmed)) {
+    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client/i.test(trimmed)) {
       return trimmed;
     }
-    // If local with :5000/media or /media, convert to relative /media/
-    return trimmed.replace(/^https?:\/\/[^/]+(?::5000)?\/media\//, '/media/');
   }
-  return trimmed.startsWith('/') ? trimmed : `/media/${trimmed}`;
+
+  let clean = trimmed
+    .replace(/^https?:\/\/[^/]+/, '')
+    .replace(/^s3:\/\/[^/]+/, '')
+    .replace(/^[/\\]+/, '')
+    .trim();
+
+  while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
+    clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
+  }
+
+  clean = clean.replace(/(\/image\.webp)+$/i, '/image.webp');
+
+  return clean ? `/media/${clean}` : '';
 }
 
 export function MediaPage() {
@@ -681,31 +694,34 @@ export function MediaPage() {
                     <AlertTriangle className="h-5 w-5" />
                     <span className="text-[10px] font-medium">Failed</span>
                   </div>
-                ) : item.thumbnailUrl || item.displayUrl ? (
-                  <>
-                    <img
-                      src={formatMediaUrl(item.thumbnailUrl || item.displayUrl!)}
-                      alt={item.originalName}
-                      className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                      onError={(e) => {
-                        (e.target as HTMLElement).style.display = 'none';
-                        const parent = (e.target as HTMLElement).parentElement;
-                        if (parent) {
-                          const fb = parent.querySelector('.fallback-placeholder') as HTMLElement;
-                          if (fb) fb.style.display = 'flex';
-                        }
-                      }}
-                    />
-                    <div className="fallback-placeholder hidden h-full w-full items-center justify-center text-muted-foreground flex-col gap-1 bg-muted/30">
+                ) : (() => {
+                  const itemUrl = item.url || item.thumbnailUrl || item.displayUrl || (item.variants && (item.variants.url || Object.values(item.variants)[0])) || item.diskPath;
+                  return itemUrl ? (
+                    <>
+                      <img
+                        src={formatMediaUrl(itemUrl)}
+                        alt={item.originalName}
+                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                          const parent = (e.target as HTMLElement).parentElement;
+                          if (parent) {
+                            const fb = parent.querySelector('.fallback-placeholder') as HTMLElement;
+                            if (fb) fb.style.display = 'flex';
+                          }
+                        }}
+                      />
+                      <div className="fallback-placeholder hidden h-full w-full items-center justify-center text-muted-foreground flex-col gap-1 bg-muted/30">
+                        <ImageIcon className="h-8 w-8 opacity-40" />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="h-full w-full flex items-center justify-center text-muted-foreground">
                       <ImageIcon className="h-8 w-8 opacity-40" />
                     </div>
-                  </>
-                ) : (
-                  <div className="h-full w-full flex items-center justify-center text-muted-foreground">
-                    <ImageIcon className="h-8 w-8 opacity-40" />
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Status Badge */}
                 <div className="absolute top-2 left-2">
@@ -813,20 +829,23 @@ export function MediaPage() {
                           <div className="h-full w-full flex items-center justify-center bg-destructive/10 text-destructive">
                             <AlertTriangle className="h-4 w-4" />
                           </div>
-                        ) : item.thumbnailUrl || item.displayUrl ? (
-                          <img
-                            src={item.thumbnailUrl || item.displayUrl!}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLElement).style.display = 'none';
-                            }}
-                          />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                          </div>
-                        )}
+                        ) : (() => {
+                          const itemUrl = item.url || item.thumbnailUrl || item.displayUrl || (item.variants && (item.variants.url || Object.values(item.variants)[0])) || item.diskPath;
+                          return itemUrl ? (
+                            <img
+                              src={formatMediaUrl(itemUrl)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : (
+                            <div className="h-full w-full flex items-center justify-center">
+                              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                            </div>
+                          );
+                        })()}
                       </div>
                     </td>
                   )}
@@ -957,7 +976,7 @@ export function MediaPage() {
             )}
           </div>
           <DialogDescription className="text-xs">
-            Inspect optimized WebP multi-tier variants, uploader details, and physical storage metadata.
+            Inspect single source of truth WebP image, uploader details, and physical storage metadata.
           </DialogDescription>
         </DialogHeader>
 
@@ -968,6 +987,7 @@ export function MediaPage() {
           </div>
         ) : (() => {
           const activePreviewUrl = formatMediaUrl(
+            detailData.url ||
             detailData.displayUrl ||
             detailData.thumbnailUrl ||
             detailData.largeUrl ||

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, Trash2, Eye, MapPin } from 'lucide-react';
+import { X, Heart, Trash2, Eye, MapPin, Image as ImageIcon } from 'lucide-react';
 import { AdItem } from '../types';
 import { getWishlistItems, removeFromWishlist, WISHLIST_EVENT } from '../utils/wishlist';
 import { apiClient, getInMemoryAccessToken } from '@/lib/api-client';
+import { formatMediaUrl } from '@/lib/utils';
 
 interface WishlistModalProps {
   isOpen: boolean;
@@ -126,9 +127,8 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
           ) : (
             <div className="space-y-3">
               {favouriteAds.map((ad) => {
-                const coverImage =
-                  ad.images?.[0]?.displayUrl ||
-                  'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=300&auto=format&fit=crop&q=80';
+                const rawCover = ad.images?.[0]?.url || ad.images?.[0]?.displayUrl;
+                const coverImage = rawCover ? formatMediaUrl(rawCover) : null;
 
                 return (
                   <div
@@ -142,11 +142,26 @@ export const WishlistModal: React.FC<WishlistModalProps> = ({
                       }}
                       className="flex items-center gap-3 cursor-pointer flex-grow min-w-0"
                     >
-                      <img
-                        src={coverImage}
-                        alt=""
-                        className="w-16 h-16 rounded object-cover flex-shrink-0 border border-gray-100"
-                      />
+                      <div className="w-16 h-16 rounded bg-gray-100 flex-shrink-0 border border-gray-200 overflow-hidden flex items-center justify-center">
+                        {coverImage ? (
+                          <img
+                            src={coverImage}
+                            alt=""
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                              const parent = (e.currentTarget as HTMLElement).parentElement;
+                              if (parent) {
+                                const fallback = parent.querySelector('.wishlist-thumb-fallback') as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <div className={`wishlist-thumb-fallback ${coverImage ? 'hidden' : 'flex'} items-center justify-center text-gray-400`}>
+                          <ImageIcon className="h-5 w-5 opacity-40" />
+                        </div>
+                      </div>
                       <div className="min-w-0">
                         <span className="text-sm font-extrabold text-[#002f34] block">
                           {formatPrice(ad.price)}

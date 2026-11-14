@@ -200,12 +200,6 @@ export function startMediaWorker() {
           await storage.save({ destinationKey: imageKey, streamOrBuffer: webpBuffer });
 
           const variants = {
-            original: imageKey,
-            large: imageKey,
-            medium: imageKey,
-            card: imageKey,
-            thumbnail: imageKey,
-            thumb: imageKey,
             url: imageKey,
           };
 
@@ -327,12 +321,6 @@ export function startMediaWorker() {
         await storage.save({ destinationKey: imagePath, streamOrBuffer: webpBuffer });
 
         const variants = {
-          original: imagePath,
-          large: imagePath,
-          medium: imagePath,
-          card: imagePath,
-          thumbnail: imagePath,
-          thumb: imagePath,
           url: imagePath,
         };
 

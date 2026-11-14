@@ -18,11 +18,13 @@ import {
   ExternalLink,
   Clock,
   Sparkles,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { adsService } from '../service/ads.service';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { ADS_QUERY_KEYS } from '../hook/useAdsQuery';
+import { formatMediaUrl } from '@/lib/utils';
 
 interface MyAdItem {
   id: string;
@@ -38,6 +40,7 @@ interface MyAdItem {
   location?: { name: string };
   images?: Array<{
     id?: string;
+    url?: string;
     thumbnailUrl?: string;
     displayUrl?: string;
     originalUrl?: string;
@@ -286,12 +289,14 @@ export const MyAdsPage: React.FC = () => {
       {!isLoading && ads.length > 0 && (
         <div className="space-y-4">
           {ads.map((ad) => {
-            const coverImage =
+            const rawCover =
+              ad.images?.find((img) => img.isCover)?.url ||
               ad.images?.find((img) => img.isCover)?.thumbnailUrl ||
               ad.images?.find((img) => img.isCover)?.displayUrl ||
+              ad.images?.[0]?.url ||
               ad.images?.[0]?.thumbnailUrl ||
-              ad.images?.[0]?.displayUrl ||
-              '/placeholder-ad.png';
+              ad.images?.[0]?.displayUrl;
+            const coverImage = rawCover ? formatMediaUrl(rawCover) : null;
 
             const isUpdating = updatingId === ad.id;
 
@@ -302,16 +307,25 @@ export const MyAdsPage: React.FC = () => {
               >
                 {/* Left: Thumbnail & Meta */}
                 <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-gray-100 shrink-0 border border-gray-100 relative">
-                    <img
-                      src={coverImage}
-                      alt={ad.title}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src =
-                          'https://images.unsplash.com/photo-1584438784894-089d6a62b8fa?w=400&auto=format&fit=crop&q=80';
-                      }}
-                    />
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl overflow-hidden bg-gray-100 shrink-0 border border-gray-100 relative flex items-center justify-center">
+                    {coverImage ? (
+                      <img
+                        src={coverImage}
+                        alt={ad.title}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                          const parent = (e.currentTarget as HTMLElement).parentElement;
+                          if (parent) {
+                            const fallback = parent.querySelector('.myad-row-fallback') as HTMLElement;
+                            if (fallback) fallback.style.display = 'flex';
+                          }
+                        }}
+                      />
+                    ) : null}
+                    <div className={`myad-row-fallback ${coverImage ? 'hidden' : 'flex'} items-center justify-center text-gray-400`}>
+                      <ImageIcon className="h-8 w-8 opacity-40" />
+                    </div>
                     {ad.status === 'SOLD' && (
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                         <span className="text-[10px] font-black uppercase text-white bg-blue-600 px-2 py-0.5 rounded shadow">

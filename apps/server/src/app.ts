@@ -135,7 +135,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
   });
 
-  // Single Source of Truth Image Fallback: Ensure 100% availability from local disk
+  // Single Source of Truth Image: Serve image.webp directly from local disk
   app.addHook('onRequest', async (req, reply) => {
     if (req.url.startsWith('/media/')) {
       const cleanPath = req.url.replace(/^\/media\//, '').split('?')[0];
@@ -146,12 +146,6 @@ export async function buildApp(): Promise<FastifyInstance> {
           const singleTruth = path.join(dir, 'image.webp');
           if (fs.existsSync(singleTruth)) {
             return reply.sendFile(path.relative(mediaRoot, singleTruth), mediaRoot);
-          }
-          const altVariant = ['large.webp', 'card.webp', 'medium.webp', 'thumbnail.webp', 'original.webp'].find((v) =>
-            fs.existsSync(path.join(dir, v))
-          );
-          if (altVariant) {
-            return reply.sendFile(path.relative(mediaRoot, path.join(dir, altVariant)), mediaRoot);
           }
         }
       }

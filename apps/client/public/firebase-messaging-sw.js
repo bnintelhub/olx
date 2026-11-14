@@ -14,7 +14,7 @@ const swConfig = {
 };
 
 const setupMessaging = (config) => {
-  if (!config || !config.apiKey || !config.projectId) return;
+  if (!config || !config.apiKey || !config.projectId || !config.appId) return;
   try {
     if (!firebase.apps.length) {
       firebase.initializeApp(config);
@@ -54,7 +54,7 @@ const setupMessaging = (config) => {
   }
 };
 
-if (swConfig.apiKey && swConfig.projectId) {
+if (swConfig.apiKey && swConfig.projectId && swConfig.appId) {
   setupMessaging(swConfig);
 } else {
   fetch('/api/v1/notifications/firebase-client-config')

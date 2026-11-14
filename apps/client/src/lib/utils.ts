@@ -51,3 +51,30 @@ export function formatPostingDate(dateString?: string): string {
   return `${day}-${month}-${year}`;
 }
 
+// Format relative/backend media URLs for browser consumption
+export function formatMediaUrl(url?: string | null): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  let clean = trimmed
+    .replace(/^https?:\/\/[^/]+/, '')
+    .replace(/^s3:\/\/[^/]+/, '')
+    .replace(/^[/\\]+/, '')
+    .trim();
+
+  while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
+    clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
+  }
+
+  clean = clean.replace(/(\/image\.webp)+$/i, '/image.webp');
+
+  return clean ? `/media/${clean}` : '';
+}
+

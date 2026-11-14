@@ -11,9 +11,11 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Maximize2, X, ChevronLeft, ChevronRight, ImageIcon } from 'lucide-react';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { formatMediaUrl } from '@/lib/utils';
 
 export interface GalleryImage {
-  id: string;
+  id?: string;
+  url?: string | null;
   originalUrl?: string | null;
   displayUrl?: string | null;
   thumbnailUrl?: string | null;
@@ -33,17 +35,8 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
   const [firstImageLoaded, setFirstImageLoaded] = useState(false);
   const preloadedUrls = useRef<Set<string>>(new Set());
 
-  // Safe fallback if listing has zero photos
-  const fallbackList: GalleryImage[] = images && images.length > 0 ? images : [
-    {
-      id: 'fallback',
-      originalUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=1200&auto=format&fit=crop&q=80',
-      displayUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=1200&auto=format&fit=crop&q=80',
-      thumbnailUrl: 'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=300&auto=format&fit=crop&q=80',
-      isCover: true,
-      sortOrder: 0,
-    },
-  ];
+  const hasImages = images && images.length > 0;
+  const imageList = hasImages ? images : [];
 
   // Sync active slide index when user drags or clicks navigation
   useEffect(() => {
@@ -64,17 +57,17 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
   // Preload all remaining gallery images in advance once the first image is loaded
   // This ensures subsequent slide transitions are instant and buttery-smooth
   useEffect(() => {
-    if (!firstImageLoaded || fallbackList.length <= 1) return;
+    if (!firstImageLoaded || imageList.length <= 1) return;
 
-    fallbackList.slice(1).forEach((img) => {
-      const targetUrl = img.displayUrl || img.originalUrl;
+    imageList.slice(1).forEach((img: GalleryImage) => {
+      const targetUrl = img.url || img.displayUrl || img.originalUrl;
       if (targetUrl && !preloadedUrls.current.has(targetUrl)) {
         preloadedUrls.current.add(targetUrl);
         const preloadImg = new Image();
         preloadImg.src = targetUrl;
       }
     });
-  }, [firstImageLoaded, fallbackList]);
+  }, [firstImageLoaded, imageList]);
 
   // Handle thumbnail navigation click
   const handleThumbnailClick = useCallback(
@@ -86,6 +79,15 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
     [api]
   );
 
+  if (!hasImages) {
+    return (
+      <div className="relative rounded-2xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-md aspect-[16/10] sm:aspect-[16/9] md:aspect-[2.1/1] max-h-[520px] w-full flex flex-col items-center justify-center text-zinc-500 gap-2 p-8">
+        <ImageIcon className="h-14 w-14 opacity-30 text-zinc-500" />
+        <span className="text-xs font-medium text-zinc-500">No Photos Attached</span>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {/* 1. Main Shadcn Carousel Viewport */}
@@ -93,15 +95,16 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
         <Carousel
           setApi={setApi}
           opts={{
-            loop: fallbackList.length > 1,
+            loop: imageList.length > 1,
             duration: 25,
             align: 'start',
           }}
           className="w-full"
         >
           <CarouselContent className="-ml-0">
-            {fallbackList.map((image, index) => {
-              const imageUrl = image.displayUrl || image.originalUrl || '';
+            {imageList.map((image, index) => {
+              const rawUrl = image.url || image.displayUrl || image.originalUrl || '';
+              const imageUrl = formatMediaUrl(rawUrl);
               return (
                 <CarouselItem key={image.id || index} className="pl-0">
                   <div className="relative aspect-[16/10] sm:aspect-[16/9] md:aspect-[2.1/1] max-h-[520px] w-full flex items-center justify-center bg-zinc-950 overflow-hidden">
@@ -124,7 +127,7 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
           </CarouselContent>
 
           {/* Navigation Controls (Visible only when multiple photos exist) */}
-          {fallbackList.length > 1 && (
+          {imageList.length > 1 && (
             <>
               <CarouselPrevious className="left-3 border-0 bg-black/50 hover:bg-black/80 text-white shadow-lg transition-transform hover:scale-105" />
               <CarouselNext className="right-3 border-0 bg-black/50 hover:bg-black/80 text-white shadow-lg transition-transform hover:scale-105" />
@@ -135,7 +138,7 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
         {/* Top Badges: Cover Photo & Fullscreen Trigger */}
         <div className="absolute top-3 left-3 right-3 flex items-center justify-between pointer-events-none z-10">
           <div>
-            {fallbackList[currentIndex]?.isCover && (
+            {imageList[currentIndex]?.isCover && (
               <Badge className="bg-amber-500/90 text-zinc-950 font-bold border-0 shadow-sm pointer-events-auto text-[10px]">
                 Cover Photo
               </Badge>
@@ -158,18 +161,19 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/70 text-white text-xs font-semibold backdrop-blur-xs shadow-md">
             <ImageIcon className="h-3 w-3 text-amber-400" />
             <span>
-              {currentIndex + 1} / {fallbackList.length}
+              {currentIndex + 1} / {imageList.length}
             </span>
           </span>
         </div>
       </div>
 
       {/* 2. Synchronized Thumbnails Strip (Shown when > 1 photos) */}
-      {fallbackList.length > 1 && (
+      {imageList.length > 1 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin">
-          {fallbackList.map((img, idx) => {
+          {imageList.map((img, idx) => {
             const isSelected = idx === currentIndex;
-            const thumbUrl = img.thumbnailUrl || img.displayUrl || img.originalUrl || '';
+            const rawThumb = img.url || img.thumbnailUrl || img.displayUrl || img.originalUrl || '';
+            const thumbUrl = formatMediaUrl(rawThumb);
             return (
               <button
                 key={img.id || idx}
@@ -200,19 +204,19 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
           <DialogContent className="max-w-[95vw] h-[92vh] p-0 bg-black/95 border-zinc-800 flex flex-col justify-center items-center overflow-hidden">
             <div className="relative w-full h-full flex items-center justify-center p-4">
               <img
-                src={fallbackList[currentIndex]?.originalUrl || fallbackList[currentIndex]?.displayUrl || ''}
+                src={formatMediaUrl(imageList[currentIndex]?.url || imageList[currentIndex]?.originalUrl || imageList[currentIndex]?.displayUrl || '')}
                 alt={`${title} - Fullscreen`}
                 className="max-h-[85vh] max-w-[90vw] object-contain rounded-lg"
               />
 
               {/* Lightbox Navigation Buttons */}
-              {fallbackList.length > 1 && (
+              {imageList.length > 1 && (
                 <>
                   <Button
                     size="icon"
                     variant="ghost"
                     onClick={() => {
-                      const prev = currentIndex === 0 ? fallbackList.length - 1 : currentIndex - 1;
+                      const prev = currentIndex === 0 ? imageList.length - 1 : currentIndex - 1;
                       setCurrentIndex(prev);
                       api?.scrollTo(prev);
                     }}
@@ -224,7 +228,7 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
                     size="icon"
                     variant="ghost"
                     onClick={() => {
-                      const next = currentIndex === fallbackList.length - 1 ? 0 : currentIndex + 1;
+                      const next = currentIndex === imageList.length - 1 ? 0 : currentIndex + 1;
                       setCurrentIndex(next);
                       api?.scrollTo(next);
                     }}
@@ -238,7 +242,7 @@ export const AdImageGallery: React.FC<AdImageGalleryProps> = ({ images, title })
               {/* Lightbox Header Bar */}
               <div className="absolute top-4 left-4 right-4 flex items-center justify-between text-white">
                 <span className="text-xs font-semibold px-3 py-1 rounded-full bg-white/20">
-                  {currentIndex + 1} / {fallbackList.length}
+                  {currentIndex + 1} / {imageList.length}
                 </span>
                 <Button
                   size="icon"

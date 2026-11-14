@@ -5,6 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/api-client';
 import { playNewMessageSound } from '@/features/chat/utils/chatSound';
 import {
+  isFirebaseConfigured,
   requestAndRegisterPushToken,
   setupForegroundPushListener,
 } from './firebaseMessaging';
@@ -27,13 +28,15 @@ export function usePushNotifications() {
 
   // Auto-sync token if permission is already granted for logged-in user
   useEffect(() => {
-    if (!user || permission !== 'granted') return;
-    void requestAndRegisterPushToken();
+    if (!user || permission !== 'granted' || !isFirebaseConfigured()) return;
+    void requestAndRegisterPushToken().catch((err) => {
+      console.warn('[FCM] Token auto-sync skipped:', err);
+    });
   }, [user, permission]);
 
   // Handle foreground notifications with WhatsApp-like toast banner & chime
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isFirebaseConfigured()) return;
 
     let unsubscribe: (() => void) | null = null;
     void setupForegroundPushListener((payload) => {
@@ -57,6 +60,8 @@ export function usePushNotifications() {
       });
     }).then((unsub) => {
       unsubscribe = unsub;
+    }).catch((err) => {
+      console.warn('[Push] Foreground listener setup skipped:', err);
     });
 
     return () => {

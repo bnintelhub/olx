@@ -6,9 +6,10 @@ export interface AdImageItem {
   id: string;
   adId?: string;
   mediaId?: string | null;
-  originalUrl: string;
-  displayUrl: string;
-  thumbnailUrl: string;
+  url?: string;
+  originalUrl?: string;
+  displayUrl?: string;
+  thumbnailUrl?: string;
   isCover: boolean;
   sortOrder: number;
 }

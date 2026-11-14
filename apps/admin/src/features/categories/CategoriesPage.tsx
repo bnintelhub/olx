@@ -684,7 +684,7 @@ export function CategoriesPage() {
               title="Click to view details"
             >
               <CategoryThumbnail
-                src={cat.image?.thumbnailUrl || cat.image?.url}
+                src={cat.image?.url}
                 alt={cat.name}
               />
             </div>
@@ -1081,7 +1081,7 @@ export function CategoriesPage() {
             label="Category Icon / Image"
             previewUrl={previewUrl}
             selectedFile={selectedFile}
-            currentImageUrl={(editingCategory?.image?.thumbnailUrl || editingCategory?.image?.url) ?? undefined}
+            currentImageUrl={(editingCategory?.image?.url ?? undefined)}
             removeExistingImage={removeExistingImage}
             onFileSelect={handleFileSelect}
             onClearSelectedFile={handleClearSelectedFile}
@@ -1246,12 +1246,12 @@ export function CategoriesPage() {
                 Category Icon & Media Service Delivery
               </h4>
 
-              {detailsCategory.image?.url || detailsCategory.image?.thumbnailUrl ? (
+              {detailsCategory.image?.url ? (
                 <div className="flex flex-col sm:flex-row items-start gap-4">
                   <DetailModalImage
-                    src={detailsCategory.image.url || detailsCategory.image.thumbnailUrl}
+                    src={detailsCategory.image.url}
                     alt={detailsCategory.name}
-                    href={detailsCategory.image.url || detailsCategory.image.thumbnailUrl}
+                    href={detailsCategory.image.url}
                   />
 
                   <div className="space-y-2 flex-1 min-w-0">
@@ -1262,55 +1262,18 @@ export function CategoriesPage() {
                       </span>
                     </div>
 
-                    {/* Available CDN Variants */}
+                    {/* Single Master WebP File Link */}
                     <div>
-                      <span className="text-muted-foreground block text-[11px] mb-1">Generated CDN Variants:</span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {detailsCategory.image.variants?.thumbnail && (
-                          <a
-                            href={detailsCategory.image.variants.thumbnail}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-muted/40 hover:bg-muted text-[11px] font-mono transition text-foreground"
-                          >
-                            thumbnail (300px)
-                            <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-                          </a>
-                        )}
-                        {detailsCategory.image.variants?.card && (
-                          <a
-                            href={detailsCategory.image.variants.card}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-muted/40 hover:bg-muted text-[11px] font-mono transition text-foreground"
-                          >
-                            card (600px)
-                            <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-                          </a>
-                        )}
-                        {detailsCategory.image.variants?.medium && (
-                          <a
-                            href={detailsCategory.image.variants.medium}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-muted/40 hover:bg-muted text-[11px] font-mono transition text-foreground"
-                          >
-                            medium (1200px)
-                            <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-                          </a>
-                        )}
-                        {detailsCategory.image.variants?.large && (
-                          <a
-                            href={detailsCategory.image.variants.large}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border bg-muted/40 hover:bg-muted text-[11px] font-mono transition text-foreground"
-                          >
-                            large (1920px)
-                            <ExternalLink className="h-2.5 w-2.5 text-muted-foreground" />
-                          </a>
-                        )}
-                      </div>
+                      <span className="text-muted-foreground block text-[11px] mb-1">Single Master File (100% Quality WebP):</span>
+                      <a
+                        href={detailsCategory.image.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-muted/40 hover:bg-muted text-xs font-mono transition text-foreground"
+                      >
+                        <span>View Master Image</span>
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                      </a>
                     </div>
                   </div>
                 </div>
@@ -1419,7 +1382,7 @@ export function CategoriesPage() {
                       onClick={() => setDetailsCategory(child)}
                       className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border bg-muted/30 hover:bg-muted text-xs transition cursor-pointer text-foreground"
                     >
-                      <CategoryThumbnail src={child.image?.thumbnailUrl || child.image?.url} alt={child.name} />
+                      <CategoryThumbnail src={child.image?.url} alt={child.name} />
                       <span className="font-medium">{child.name}</span>
                       <span className="text-[10px] text-muted-foreground font-mono">/{child.slug}</span>
                     </button>

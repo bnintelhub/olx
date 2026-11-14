@@ -11,8 +11,10 @@ import {
   AlertCircle,
   RefreshCw,
   Plus,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
+import { formatMediaUrl } from '@/lib/utils';
 
 interface MyAdItem {
   id: string;
@@ -25,7 +27,7 @@ interface MyAdItem {
   createdAt: string;
   category: { name: string; slug: string };
   location: { name: string };
-  images: { thumbnailUrl: string; isCover: boolean }[];
+  images: { url?: string; thumbnailUrl?: string; displayUrl?: string; isCover: boolean }[];
 }
 
 export const MyAdsModal: React.FC<{
@@ -196,8 +198,9 @@ export const MyAdsModal: React.FC<{
             <div className="space-y-4">
               {filteredAds.map((ad) => {
                 const coverImage =
+                  ad.images?.[0]?.url ||
                   ad.images?.[0]?.thumbnailUrl ||
-                  'https://images.unsplash.com/photo-1549399542-7e3f8b79c341?w=400&auto=format&fit=crop&q=80';
+                  null;
                 const isItemUpdating = updatingId === ad.id;
 
                 return (
@@ -207,8 +210,25 @@ export const MyAdsModal: React.FC<{
                   >
                     {/* Left: Thumbnail & Details */}
                     <div className="flex items-center gap-4">
-                      <div className="h-20 w-24 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200">
-                        <img src={coverImage} alt={ad.title} className="h-full w-full object-cover" />
+                      <div className="h-20 w-24 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0 border border-gray-200 flex items-center justify-center">
+                        {coverImage ? (
+                          <img
+                            src={formatMediaUrl(coverImage)}
+                            alt={ad.title}
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              (e.currentTarget as HTMLElement).style.display = 'none';
+                              const parent = (e.currentTarget as HTMLElement).parentElement;
+                              if (parent) {
+                                const fallback = parent.querySelector('.myads-thumb-fallback') as HTMLElement;
+                                if (fallback) fallback.style.display = 'flex';
+                              }
+                            }}
+                          />
+                        ) : null}
+                        <div className={`myads-thumb-fallback ${coverImage ? 'hidden' : 'flex'} items-center justify-center text-gray-400`}>
+                          <ImageIcon className="h-6 w-6 opacity-40" />
+                        </div>
                       </div>
 
                       <div>

@@ -286,6 +286,7 @@ export class AdminMediaService {
     const formattedItems = items.map((m) => {
       const publicVariants = toPublicMediaVariants(m.variants);
 
+      const singleUrl = publicVariants.url || publicVariants.image || (m.storageKey ? toPublicMediaUrl(m.storageKey) : null);
       return {
         id: m.id,
         originalName: m.originalName,
@@ -300,10 +301,11 @@ export class AdminMediaService {
         attachedToId: m.entityId,
         diskPath: m.storageKey,
         storageLocation: 'Local Disk',
-        variants: publicVariants,
-        thumbnailUrl: publicVariants.thumbnail || publicVariants.card || publicVariants.large || null,
-        displayUrl: publicVariants.card || publicVariants.large || null,
-        largeUrl: publicVariants.large || null,
+        url: singleUrl,
+        variants: { url: singleUrl },
+        thumbnailUrl: singleUrl,
+        displayUrl: singleUrl,
+        largeUrl: singleUrl,
         uploader: {
           id: m.owner.id,
           email: m.owner.email,
@@ -366,6 +368,8 @@ export class AdminMediaService {
 
     const publicVariants = toPublicMediaVariants(media.variants);
 
+    const singleUrl = publicVariants.url || publicVariants.image || (media.storageKey ? toPublicMediaUrl(media.storageKey) : null);
+
     return {
       id: media.id,
       originalName: media.originalName,
@@ -383,10 +387,11 @@ export class AdminMediaService {
       focalPoint: (media.metadata as any)?.focalPoint || { x: 0.5, y: 0.5 },
       blurhash: null,
       errorMessage: media.failureReason,
-      variants: publicVariants,
-      thumbnailUrl: publicVariants.thumbnail || publicVariants.card || publicVariants.large || null,
-      displayUrl: publicVariants.card || publicVariants.large || null,
-      largeUrl: publicVariants.large || null,
+      url: singleUrl,
+      variants: { url: singleUrl },
+      thumbnailUrl: singleUrl,
+      displayUrl: singleUrl,
+      largeUrl: singleUrl,
       uploader: {
         id: media.owner.id,
         email: media.owner.email,
@@ -511,16 +516,11 @@ export class AdminMediaService {
       resourceId = existing.entityId || 'drafts';
     }
 
-    const largePath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'large', format: 'webp' });
-    const mediumPath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'medium', format: 'webp' });
-    const thumbPath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'thumbnail', format: 'webp' });
-    const cardPath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'card', format: 'webp' });
+    const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId: id, variant: 'image', format: 'webp' });
 
     const relativeVariants = {
-      thumbnail: thumbPath,
-      card: cardPath,
-      medium: mediumPath,
-      large: largePath,
+      url: imagePath,
+      image: imagePath,
     };
     const relativeDir = buildMediaDirectory({ resource, resourceId, mediaType, mediaId: id });
     const newDiskPath = relativeDir;
@@ -536,7 +536,7 @@ export class AdminMediaService {
         mimeType: validated.mimeType,
         sizeBytes: BigInt(size),
         status: 'PROCESSING',
-        storageKey: relativeVariants.large || `images/${id}/original.webp`,
+        storageKey: imagePath,
         variants: relativeVariants,
         width: dimensions?.width || null,
         height: dimensions?.height || null,

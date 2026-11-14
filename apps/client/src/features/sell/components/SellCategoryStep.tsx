@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Search, ChevronRight, ArrowLeft, Layers, Check, X } from 'lucide-react';
+import { Search, ChevronRight, ArrowLeft, Layers, Check, X, FolderTree } from 'lucide-react';
 import { Category } from '@/types';
 
 interface SellCategoryStepProps {
@@ -13,27 +13,9 @@ interface SellCategoryStepProps {
   isLoading: boolean;
 }
 
-// Curated high-resolution professional photography for marketplace categories
-const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
-  mobiles: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=600&q=80',
-  vehicles: 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=600&q=80',
-  properties: 'https://images.unsplash.com/photo-1560518883-ce09059eeffa?auto=format&fit=crop&w=600&q=80',
-  electronics: 'https://images.unsplash.com/photo-1498049794561-7780e7231661?auto=format&fit=crop&w=600&q=80',
-  furniture: 'https://images.unsplash.com/photo-1555041469-a586c61ea9bc?auto=format&fit=crop&w=600&q=80',
-  fashion: 'https://images.unsplash.com/photo-1445205170230-053b83016050?auto=format&fit=crop&w=600&q=80',
-  commercial: 'https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=600&q=80',
-  books: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=600&q=80',
-  pets: 'https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=600&q=80',
-  services: 'https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=600&q=80',
-  jobs: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=600&q=80',
-};
-
-function resolveCategoryPhoto(cat: Category, parent?: Category | null): string {
+function resolveCategoryPhoto(cat: Category, parent?: Category | null): string | null {
   // 1. Direct category image
   const direct =
-    cat.image?.thumbnailUrl ||
-    (cat.image?.variants as any)?.card ||
-    cat.image?.displayUrl ||
     cat.image?.url ||
     (cat.iconUrl && (cat.iconUrl.startsWith('http') || cat.iconUrl.startsWith('/')) ? cat.iconUrl : null);
 
@@ -42,21 +24,12 @@ function resolveCategoryPhoto(cat: Category, parent?: Category | null): string {
   // 2. Inherit parent category image if available
   if (parent) {
     const parentDirect =
-      parent.image?.thumbnailUrl ||
-      (parent.image?.variants as any)?.card ||
-      parent.image?.displayUrl ||
       parent.image?.url ||
       (parent.iconUrl && (parent.iconUrl.startsWith('http') || parent.iconUrl.startsWith('/')) ? parent.iconUrl : null);
     if (parentDirect) return parentDirect;
   }
 
-  // 3. Match keyword in fallback dictionary
-  const key = `${cat.slug || ''} ${cat.name || ''} ${parent?.slug || ''} ${parent?.name || ''}`.toLowerCase();
-  for (const [k, url] of Object.entries(CATEGORY_FALLBACK_IMAGES)) {
-    if (key.includes(k)) return url;
-  }
-
-  return 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80';
+  return null;
 }
 
 export const SellCategoryStep: React.FC<SellCategoryStepProps> = ({
@@ -175,13 +148,19 @@ export const SellCategoryStep: React.FC<SellCategoryStepProps> = ({
                   isSelected ? 'ring-3 ring-emerald-500 shadow-lg shadow-emerald-950/20' : ''
                 }`}
               >
-                {/* Full Bleed Image (Fills Entire Card, No Border) */}
-                <img
-                  src={imgUrl}
-                  alt={cat.name}
-                  className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-108"
-                  loading="lazy"
-                />
+                {/* Full Bleed Image or Clean Icon Fallback */}
+                {imgUrl ? (
+                  <img
+                    src={imgUrl}
+                    alt={cat.name}
+                    className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-108"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400">
+                    <FolderTree className="w-9 h-9 opacity-40 text-slate-400" />
+                  </div>
+                )}
 
                 {/* Dark Blur Overlay at Bottom */}
                 <div className="absolute inset-x-0 bottom-0 pt-8 pb-3 px-3.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent backdrop-blur-md flex flex-col justify-end text-left transition-all">
@@ -224,13 +203,19 @@ export const SellCategoryStep: React.FC<SellCategoryStepProps> = ({
                   isSelected ? 'ring-3 ring-emerald-500 shadow-lg shadow-emerald-950/20' : ''
                 }`}
               >
-                {/* Full Bleed Image */}
-                <img
-                  src={subImgUrl}
-                  alt={sub.name}
-                  className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-108"
-                  loading="lazy"
-                />
+                {/* Full Bleed Image or Clean Icon Fallback */}
+                {subImgUrl ? (
+                  <img
+                    src={subImgUrl}
+                    alt={sub.name}
+                    className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-108"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-slate-800 text-slate-400">
+                    <FolderTree className="w-9 h-9 opacity-40 text-slate-400" />
+                  </div>
+                )}
 
                 {/* Dark Blur Overlay at Bottom */}
                 <div className="absolute inset-x-0 bottom-0 pt-8 pb-3 px-3.5 bg-gradient-to-t from-black/90 via-black/60 to-transparent backdrop-blur-md flex flex-col justify-end text-left transition-all">

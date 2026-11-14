@@ -70,20 +70,21 @@ export class MediaController {
     }
 
     // Pure asynchronous response: worker processes variants concurrently in the background
-    const results = stagedUploads.map((item) => ({
-      mediaId: item.mediaId,
-      status: 'processing',
-      originalName: item.originalName,
-      mimeType: item.mimeType,
-      fileSize: item.fileSize,
-      width: null,
-      height: null,
-      focalPoint: { x: 0.5, y: 0.5 },
-      variants: toPublicMediaVariants(item.variants, baseUrl),
-      url: toPublicMediaUrl(item.variants.large, baseUrl),
-      thumbnailUrl: toPublicMediaUrl(item.variants.thumbnail, baseUrl),
-      displayUrl: toPublicMediaUrl(resource === 'chats' ? item.variants.large : item.variants.card, baseUrl),
-    }));
+    const results = stagedUploads.map((item) => {
+      const singleUrl = toPublicMediaUrl(item.variants.url || item.variants.image || item.variants.large, baseUrl);
+      return {
+        mediaId: item.mediaId,
+        status: 'processing',
+        originalName: item.originalName,
+        mimeType: item.mimeType,
+        fileSize: item.fileSize,
+        width: null,
+        height: null,
+        focalPoint: { x: 0.5, y: 0.5 },
+        variants: { url: singleUrl },
+        url: singleUrl,
+      };
+    });
 
     return reply.status(201).send({
       success: true,

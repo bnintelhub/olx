@@ -71,11 +71,12 @@ export interface LocationItem {
 
 export interface AdImageItem {
   id: string;
-  originalUrl: string;
-  displayUrl: string;
-  thumbnailUrl: string;
-  isCover: boolean;
-  sortOrder: number;
+  url?: string;
+  originalUrl?: string;
+  displayUrl?: string;
+  thumbnailUrl?: string;
+  isCover?: boolean;
+  sortOrder?: number;
 }
 
 export interface AdItem {

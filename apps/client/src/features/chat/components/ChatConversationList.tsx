@@ -1,5 +1,6 @@
-import React from 'react';
-import { MessageCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { MessageCircle, Image as ImageIcon } from 'lucide-react';
+import { formatMediaUrl } from '@/lib/utils';
 
 export interface ConversationItem {
   id: string;
@@ -9,7 +10,7 @@ export interface ConversationItem {
     title: string;
     price: number | string;
     imageUrl?: string | null;
-    images?: { displayUrl?: string; thumbnailUrl?: string }[];
+    images?: { url?: string; displayUrl?: string; thumbnailUrl?: string }[];
   };
   otherParty: {
     id: string;
@@ -45,11 +46,14 @@ const ConversationRow: React.FC<ConversationRowProps> = React.memo(({
   isFirst,
   onSelect,
 }) => {
-  const adThumb =
+  const [imgError, setImgError] = useState(false);
+  const rawThumb =
     conv.ad?.imageUrl ||
-    conv.ad?.images?.[0]?.thumbnailUrl ||
+    (conv.ad?.images?.[0] as any)?.url ||
     conv.ad?.images?.[0]?.displayUrl ||
-    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=100&auto=format&fit=crop&q=80';
+    conv.ad?.images?.[0]?.thumbnailUrl;
+
+  const adThumb = rawThumb ? formatMediaUrl(rawThumb) : null;
 
   const formattedTime = React.useMemo(() => {
     if (!conv.lastMessageAt) return '';
@@ -72,16 +76,21 @@ const ConversationRow: React.FC<ConversationRowProps> = React.memo(({
           : 'hover:bg-gray-100 bg-white'
       }`}
     >
-      <div className="relative flex-shrink-0 w-12 h-12">
-        <img
-          src={adThumb}
-          alt=""
-          className="w-12 h-12 rounded object-cover border border-gray-200"
-          loading={isFirst ? 'eager' : 'lazy'}
-          {...({ fetchpriority: isFirst ? 'high' : 'auto' } as any)}
-        />
+      <div className="relative flex-shrink-0 w-12 h-12 rounded bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
+        {adThumb && !imgError ? (
+          <img
+            src={adThumb}
+            alt=""
+            className="w-full h-full object-cover"
+            loading={isFirst ? 'eager' : 'lazy'}
+            {...({ fetchpriority: isFirst ? 'high' : 'auto' } as any)}
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <ImageIcon className="w-5 h-5 text-gray-400" />
+        )}
         {conv.otherParty?.isOnline && (
-          <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full" title="Online" />
+          <span className="absolute -bottom-1 -right-1 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full z-10" title="Online" />
         )}
       </div>
 

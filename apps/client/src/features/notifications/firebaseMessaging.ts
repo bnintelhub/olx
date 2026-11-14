@@ -21,33 +21,52 @@ export function getPublicVapidKey(): string | undefined {
 }
 
 export function isFirebaseConfigured(): boolean {
-  const vapid = getPublicVapidKey();
-  return Boolean(firebaseConfig.projectId && (firebaseConfig.apiKey || vapid));
+  const apiKey = (firebaseConfig.apiKey || '').trim();
+  const projectId = (firebaseConfig.projectId || '').trim();
+  const appId = (firebaseConfig.appId || '').trim();
+  // Firebase SDK & Installations strictly require non-empty apiKey, projectId, and appId
+  if (!apiKey || !projectId || !appId) {
+    return false;
+  }
+  if (apiKey === 'YOUR_API_KEY' || apiKey.includes('placeholder')) {
+    return false;
+  }
+  return true;
 }
 
 // Safe Firebase App Initialization
 export function getFirebaseApp() {
   if (!isFirebaseConfigured()) return null;
-  if (getApps().length > 0) {
-    return getApp();
+  try {
+    if (getApps().length > 0) {
+      return getApp();
+    }
+    return initializeApp(firebaseConfig);
+  } catch (err) {
+    console.warn('[Firebase] App initialization skipped:', err);
+    return null;
   }
-  return initializeApp(firebaseConfig);
 }
 
 let messagingInstance: Messaging | null = null;
 
 export async function getFirebaseMessaging(): Promise<Messaging | null> {
   if (typeof window === 'undefined' || !isFirebaseConfigured()) return null;
-  const supported = await isSupported().catch(() => false);
-  if (!supported) return null;
+  try {
+    const supported = await isSupported().catch(() => false);
+    if (!supported) return null;
 
-  if (!messagingInstance) {
-    const app = getFirebaseApp();
-    if (app) {
-      messagingInstance = getMessaging(app);
+    if (!messagingInstance) {
+      const app = getFirebaseApp();
+      if (app) {
+        messagingInstance = getMessaging(app);
+      }
     }
+    return messagingInstance;
+  } catch (err) {
+    console.warn('[Firebase] Messaging initialization skipped:', err);
+    return null;
   }
-  return messagingInstance;
 }
 
 /**
@@ -132,12 +151,17 @@ export async function requestAndRegisterPushToken(): Promise<string | null> {
 export async function setupForegroundPushListener(
   onForegroundMessage: (payload: any) => void
 ): Promise<(() => void) | null> {
-  const messaging = await getFirebaseMessaging();
-  if (!messaging) return null;
+  try {
+    const messaging = await getFirebaseMessaging();
+    if (!messaging) return null;
 
-  return onMessage(messaging, (payload) => {
-    console.log('[FCM] Foreground push message received:', payload);
-    onForegroundMessage(payload);
-  });
+    return onMessage(messaging, (payload) => {
+      console.log('[FCM] Foreground push message received:', payload);
+      onForegroundMessage(payload);
+    });
+  } catch (err) {
+    console.warn('[FCM] Foreground push listener skipped:', err);
+    return null;
+  }
 }
 

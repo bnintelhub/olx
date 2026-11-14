@@ -143,6 +143,9 @@ export function normalizeMediaKey(val: string | null | undefined): string {
     clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
   }
 
+  // Deduplicate any repeated /image.webp suffixes
+  clean = clean.replace(/(\/image\.webp)+$/i, '/image.webp');
+
   return clean.trim();
 }
 

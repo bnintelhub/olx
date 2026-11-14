@@ -28,9 +28,7 @@ function formatAdCount(count: number): string {
 
 function getServerImageUrl(category: Category): string | null {
   return (
-    category.image?.displayUrl ||
     category.image?.url ||
-    category.image?.thumbnailUrl ||
     (category.iconUrl && (category.iconUrl.startsWith('http') || category.iconUrl.startsWith('/'))
       ? category.iconUrl
       : null)

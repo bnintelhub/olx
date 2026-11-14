@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Send,
   ShieldAlert,
@@ -17,6 +17,7 @@ import {
 import { ConversationItem } from './ChatConversationList';
 import { apiClient } from '@/lib/api-client';
 import { formatAttachmentUrl } from '../utils/chatMedia';
+import { formatMediaUrl } from '@/lib/utils';
 
 export interface MessageItem {
   id: string;
@@ -183,6 +184,12 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = React.memo(({
   const handleImageError = React.useCallback((msgId: string) => {
     setFailedImages((prev) => ({ ...prev, [msgId]: true }));
   }, []);
+  const [headerImgError, setHeaderImgError] = useState(false);
+
+  useEffect(() => {
+    setHeaderImgError(false);
+  }, [conversation?.id]);
+
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -233,11 +240,13 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = React.memo(({
     }
   };
 
-  const adThumb =
+  const rawThumb =
     conversation.ad?.imageUrl ||
-    conversation.ad?.images?.[0]?.thumbnailUrl ||
+    (conversation.ad?.images?.[0] as any)?.url ||
     conversation.ad?.images?.[0]?.displayUrl ||
-    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=100&auto=format&fit=crop&q=80';
+    conversation.ad?.images?.[0]?.thumbnailUrl;
+
+  const adThumb = rawThumb ? formatMediaUrl(rawThumb) : null;
 
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -300,10 +309,19 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = React.memo(({
       {/* Active Chat Header */}
       <div className="p-3 border-b border-gray-200 bg-white flex items-center justify-between gap-3 shadow-xs flex-shrink-0">
         <div className="flex items-center gap-3 truncate">
-          <div className="relative flex-shrink-0">
-            <img src={adThumb} alt="" className="w-11 h-11 rounded object-cover border border-gray-200" />
+          <div className="relative flex-shrink-0 w-11 h-11 rounded bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
+            {adThumb && !headerImgError ? (
+              <img
+                src={adThumb}
+                alt=""
+                className="w-full h-full object-cover"
+                onError={() => setHeaderImgError(true)}
+              />
+            ) : (
+              <ImageIcon className="w-5 h-5 text-gray-400" />
+            )}
             {conversation.otherParty?.isOnline && (
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full z-10" />
             )}
           </div>
           <div className="truncate">

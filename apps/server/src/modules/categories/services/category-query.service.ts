@@ -2,7 +2,7 @@ import { prisma } from '../../../config/prisma';
 import { Prisma } from '@prisma/client';
 import { getCache, setCache } from '../../../config/redis';
 import { AppError } from '../../../shared/errors/app-error';
-import { formatCategoryImage } from './category-utils';
+import { formatCategoryImage, formatCategoryOutput } from './category-utils';
 
 export class CategoryQueryService {
   // Returns flat list of root categories with active subcategories for public navigation
@@ -37,12 +37,8 @@ export class CategoryQueryService {
     });
 
     const formatted = categories.map((cat) => ({
-      ...cat,
-      image: formatCategoryImage(cat),
-      children: cat.children.map((sub) => ({
-        ...sub,
-        image: formatCategoryImage(sub),
-      })),
+      ...formatCategoryOutput(cat),
+      children: cat.children.map((sub) => formatCategoryOutput(sub)),
     }));
 
     await setCache(cacheKey, formatted, 600);
@@ -160,13 +156,9 @@ export class CategoryQueryService {
     }
 
     return {
-      ...category,
-      image: formatCategoryImage(category),
+      ...formatCategoryOutput(category),
       breadcrumbs,
-      children: category.children.map((child) => ({
-        ...child,
-        image: formatCategoryImage(child),
-      })),
+      children: category.children.map((child) => formatCategoryOutput(child)),
     };
   }
 }

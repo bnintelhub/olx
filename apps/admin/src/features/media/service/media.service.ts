@@ -88,6 +88,7 @@ export interface MediaItem {
   attachedToId: string | null;
   diskPath: string;
   storageLocation: string;
+  url?: string | null;
   variants: {
     thumbnail?: string;
     card?: string;

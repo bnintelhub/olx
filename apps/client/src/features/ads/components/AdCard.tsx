@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Heart, MapPin, CheckCircle2 } from 'lucide-react';
+import { Heart, MapPin, CheckCircle2, Image as ImageIcon } from 'lucide-react';
 import { AdItem } from '@/types';
-import { formatCurrency, formatRelativeTime } from '@/lib/utils';
+import { formatCurrency, formatRelativeTime, formatMediaUrl } from '@/lib/utils';
 import { isAdWishlisted, toggleWishlist, WISHLIST_EVENT } from '@/utils/wishlist';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 
@@ -43,11 +43,15 @@ export const AdCard: React.FC<AdCardProps> = ({
     return () => window.removeEventListener(WISHLIST_EVENT, handleWishlistChange);
   }, [ad.id, ad.isFavourited, propWishlisted]);
 
+  const [imgError, setImgError] = useState(false);
+
   // Cover image with high quality fallback
-  const coverImage =
+  const rawCover =
+    ad.images?.find((img) => img.isCover)?.url ||
     ad.images?.find((img) => img.isCover)?.displayUrl ||
-    ad.images?.[0]?.displayUrl ||
-    'https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&auto=format&fit=crop&q=80';
+    ad.images?.[0]?.url ||
+    ad.images?.[0]?.displayUrl;
+  const coverImage = rawCover ? formatMediaUrl(rawCover) : null;
 
   const handleCardClick = () => {
     if (onClick) {
@@ -88,13 +92,21 @@ export const AdCard: React.FC<AdCardProps> = ({
       )}
 
       {/* Cover Image Container */}
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100">
-        <img
-          src={coverImage}
-          alt={ad.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
-          loading="lazy"
-        />
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-slate-100 flex items-center justify-center">
+        {coverImage && !imgError ? (
+          <img
+            src={coverImage}
+            alt={ad.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ease-out"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center text-slate-400 gap-1.5 p-4">
+            <ImageIcon className="w-10 h-10 opacity-40" />
+            <span className="text-[11px] font-medium text-slate-400">No Image</span>
+          </div>
+        )}
 
         {/* Wishlist Button */}
         <button

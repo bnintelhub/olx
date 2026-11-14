@@ -66,8 +66,16 @@ const STATUS_FILTERS: Array<{ label: string; value: string }> = [
 
 function formatMediaUrl(url?: string | null): string {
   if (!url) return '';
-  if (url.startsWith('blob:') || url.startsWith('data:')) return url;
-  let clean = url
+  const trimmed = url.trim();
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  let clean = trimmed
     .replace(/^https?:\/\/[^/]+/, '')
     .replace(/^s3:\/\/[^/]+/, '')
     .replace(/^[/\\]+/, '')
@@ -76,6 +84,8 @@ function formatMediaUrl(url?: string | null): string {
   while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
     clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
   }
+
+  clean = clean.replace(/(\/image\.webp)+$/i, '/image.webp');
 
   return clean ? `/media/${clean}` : '';
 }
@@ -317,7 +327,7 @@ export function ListingsPage() {
                 ) : (
                   ads.map((ad) => {
                     const coverImage = ad.images?.find((img) => img.isCover) || ad.images?.[0];
-                    const rawThumb = coverImage?.thumbnailUrl || coverImage?.displayUrl || coverImage?.originalUrl;
+                    const rawThumb = coverImage?.url || coverImage?.displayUrl || coverImage?.originalUrl;
                     const thumbnailUrl = formatMediaUrl(rawThumb);
 
                     return (
@@ -562,9 +572,9 @@ export function ListingsPage() {
                     <img
                       src={
                         formatMediaUrl(
+                          selectedAd.images[activeModalImageIdx]?.url ||
                           selectedAd.images[activeModalImageIdx]?.displayUrl ||
-                          selectedAd.images[activeModalImageIdx]?.originalUrl ||
-                          selectedAd.images[activeModalImageIdx]?.thumbnailUrl
+                          selectedAd.images[activeModalImageIdx]?.originalUrl
                         )
                       }
                       alt={selectedAd.title}
@@ -591,7 +601,7 @@ export function ListingsPage() {
                         }`}
                       >
                         <img
-                          src={formatMediaUrl(img.thumbnailUrl || img.displayUrl || img.originalUrl)}
+                          src={formatMediaUrl(img.url || img.displayUrl || img.originalUrl)}
                           alt="variant"
                           className="h-full w-full object-cover"
                         />

@@ -13,8 +13,8 @@ function getAdCoverUrl(adImg?: any): string | null {
   if (!asset) return null;
   const variants = (asset.variants as any) || {};
   const storageKey = asset.storageKey;
-  const thumb = variants.thumb || variants.thumbnail || variants.card || (storageKey ? `${storageKey}/thumb.webp` : null);
-  return thumb ? toPublicMediaUrl(thumb) : null;
+  const rawKey = variants.url || variants.image || storageKey || '';
+  return rawKey ? toPublicMediaUrl(rawKey) : null;
 }
 
 export class ChatService {

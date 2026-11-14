@@ -10,6 +10,7 @@ import {
   X,
   Loader2,
   RefreshCw,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { useDashboardStats, usePendingAds } from './hook/useDashboardQuery';
 import { useReviewAd } from './hook/useDashboardMutation';
@@ -143,8 +144,9 @@ export function ModeratorDashboard() {
           ) : (
             pendingAds.map((item) => {
               const imageSrc =
+                (item.images?.[0] as any)?.url ||
                 item.images?.[0]?.originalUrl ||
-                'https://images.unsplash.com/photo-1558981403-c5f9899a28bc?w=120&auto=format&fit=crop&q=60';
+                null;
               const seller =
                 item.user?.profile?.name || item.user?.phoneNumber || 'Marketplace Seller';
               const category = item.category?.name || 'General';
@@ -162,11 +164,26 @@ export function ModeratorDashboard() {
                 >
                   {/* Left: Thumbnail & Details */}
                   <div className="flex items-start gap-4">
-                    <img
-                      src={imageSrc}
-                      alt={item.title}
-                      className="h-16 w-16 rounded-lg object-cover border shrink-0 bg-muted"
-                    />
+                    <div className="h-16 w-16 rounded-lg border shrink-0 bg-muted overflow-hidden flex items-center justify-center">
+                      {imageSrc ? (
+                        <img
+                          src={imageSrc}
+                          alt={item.title}
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                            const parent = (e.currentTarget as HTMLElement).parentElement;
+                            if (parent) {
+                              const fallback = parent.querySelector('.mod-thumb-fallback') as HTMLElement;
+                              if (fallback) fallback.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <div className={`mod-thumb-fallback ${imageSrc ? 'hidden' : 'flex'} items-center justify-center text-muted-foreground`}>
+                        <ImageIcon className="h-5 w-5 opacity-40" />
+                      </div>
+                    </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-xs text-foreground">{item.title}</h4>

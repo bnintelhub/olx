@@ -97,10 +97,7 @@ export const CategoriesRibbon: React.FC = () => {
                   {categories.map((cat) => {
                     const subList = cat.subcategories || (cat as any).children || [];
                     const imgUrl =
-                      cat.image?.thumbnailUrl ||
-                      (cat.image?.variants as any)?.card ||
                       cat.image?.url ||
-                      cat.image?.displayUrl ||
                       (cat.iconUrl && (cat.iconUrl.startsWith('http') || cat.iconUrl.startsWith('/')) ? cat.iconUrl : null);
 
                     return (

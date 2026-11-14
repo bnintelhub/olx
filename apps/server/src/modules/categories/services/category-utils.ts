@@ -2,7 +2,7 @@ import crypto from 'crypto';
 import { prisma } from '../../../config/prisma';
 import { AppError } from '../../../shared/errors/app-error';
 import { Prisma } from '@prisma/client';
-import { toPublicMediaVariants, toPublicMediaUrl } from '../../../shared/utils/media-url.util';
+import { toPublicMediaVariants, toPublicMediaUrl, normalizeMediaKey } from '../../../shared/utils/media-url.util';
 
 // Maximum allowed nesting depth (0 = Root, 1 = Subcategory, 2 = Brand/Leaf, 3 = Model)
 export const MAX_CATEGORY_DEPTH = 4;
@@ -24,30 +24,45 @@ export function generateMediaId(): string {
   return `med_${timestamp}${randomHex}`;
 }
 
-// Maps database media relation to a unified clean image object
+// Maps database media relation to a unified clean image object (single image URL)
 export function formatCategoryImage(category: any) {
   const asset = category.imageMediaAsset || category.imageMedia;
   if (asset) {
     const publicVariants = toPublicMediaVariants(asset.variants);
+    const imageUrl =
+      publicVariants.url ||
+      publicVariants.image ||
+      (asset.storageKey ? toPublicMediaUrl(asset.storageKey) : null);
     return {
       mediaId: asset.id,
-      url: publicVariants.large || publicVariants.card || null,
-      thumbnailUrl: publicVariants.thumbnail || publicVariants.card || null,
-      displayUrl: publicVariants.card || publicVariants.large || null,
-      variants: publicVariants,
+      url: imageUrl,
     };
   }
   if (category.iconUrl) {
-    const publicIcon = toPublicMediaUrl(category.iconUrl);
     return {
       mediaId: null,
-      url: publicIcon,
-      thumbnailUrl: publicIcon,
-      displayUrl: publicIcon,
-      variants: {},
+      url: toPublicMediaUrl(category.iconUrl),
     };
   }
   return null;
+}
+
+// Formats entire category object ensuring single source-of-truth image display
+export function formatCategoryOutput(category: any): any {
+  if (!category) return category;
+  const image = formatCategoryImage(category);
+  const formatted = { ...category, image };
+  if (formatted.imageMediaAsset) {
+    const singleUrl = image?.url || toPublicMediaUrl(formatted.imageMediaAsset.storageKey);
+    formatted.imageMediaAsset = {
+      id: formatted.imageMediaAsset.id,
+      storageKey: normalizeMediaKey(formatted.imageMediaAsset.storageKey),
+      variants: {
+        url: singleUrl,
+      },
+    };
+  }
+  return formatted;
 }
 
 // Validates media entity existence, readiness, and image type

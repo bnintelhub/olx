@@ -92,11 +92,6 @@ export class MediaService {
     const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
     const relativeVariants = {
-      thumbnail: imagePath,
-      card: imagePath,
-      medium: imagePath,
-      large: imagePath,
-      original: imagePath,
       url: imagePath,
     };
 
@@ -167,6 +162,8 @@ export class MediaService {
     const staged = await this.prepareAndQueueImage(userId, part, baseUrl, context);
     const publicVariants = toPublicMediaVariants(staged.variants, baseUrl);
 
+    const singleUrl = publicVariants.url || publicVariants.image || publicVariants.large || '';
+
     return {
       mediaId: staged.mediaId,
       status: 'processing',
@@ -176,10 +173,8 @@ export class MediaService {
       width: null,
       height: null,
       focalPoint: { x: 0.5, y: 0.5 },
-      variants: publicVariants,
-      url: publicVariants.large,
-      thumbnailUrl: publicVariants.thumbnail,
-      displayUrl: publicVariants.card,
+      variants: { url: singleUrl },
+      url: singleUrl,
     };
   }
 
@@ -194,6 +189,7 @@ export class MediaService {
     }
 
     const publicVariants = toPublicMediaVariants(media.variants, baseUrl);
+    const singleUrl = publicVariants.url || publicVariants.image || (media.storageKey ? toPublicMediaUrl(media.storageKey, baseUrl) : '');
 
     return {
       mediaId: media.id,
@@ -204,10 +200,8 @@ export class MediaService {
       width: media.width,
       height: media.height,
       focalPoint: (media.metadata as any)?.focalPoint || { x: 0.5, y: 0.5 },
-      variants: publicVariants,
-      url: publicVariants.large,
-      thumbnailUrl: publicVariants.thumbnail,
-      displayUrl: publicVariants.card,
+      variants: { url: singleUrl },
+      url: singleUrl,
       isAttached: Boolean(media.entityId),
       attachedToId: media.entityId,
       createdAt: media.createdAt,

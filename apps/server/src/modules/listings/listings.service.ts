@@ -13,13 +13,10 @@ export function formatAdImages(images: any[]): any[] {
   if (!images || !Array.isArray(images)) return [];
   return images.map((img) => {
     const asset = img.mediaAsset;
-    const variants = (asset?.variants as any) || {};
+    const variants = (asset?.variants as any) || (asset?.variantsJson as any) || {};
     const storageKey = asset?.storageKey || '';
-    const original = variants.original || (storageKey ? `${storageKey}/original.webp` : '');
-    const large = variants.large || (storageKey ? `${storageKey}/large.webp` : '');
-    const medium = variants.medium || (storageKey ? `${storageKey}/medium.webp` : '');
-    const thumb = variants.thumb || variants.thumbnail || (storageKey ? `${storageKey}/thumb.webp` : '');
-    const card = variants.card || (storageKey ? `${storageKey}/card.webp` : '');
+    const rawKey = variants.url || variants.image || storageKey || img.url || img.originalUrl || '';
+    const singleUrl = toPublicMediaUrl(rawKey);
 
     const formattedAsset = asset
       ? {
@@ -32,9 +29,10 @@ export function formatAdImages(images: any[]): any[] {
       ...img,
       mediaAsset: formattedAsset,
       mediaId: img.mediaAssetId || img.mediaId || null,
-      originalUrl: toPublicMediaUrl(img.originalUrl || large || original),
-      displayUrl: toPublicMediaUrl(img.displayUrl || card || medium || large || original),
-      thumbnailUrl: toPublicMediaUrl(img.thumbnailUrl || thumb || card || medium || large || original),
+      url: singleUrl,
+      originalUrl: singleUrl,
+      displayUrl: singleUrl,
+      thumbnailUrl: singleUrl,
     };
   });
 }

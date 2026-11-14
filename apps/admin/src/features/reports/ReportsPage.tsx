@@ -50,6 +50,7 @@ interface ServerReport {
     status: string;
     price: number;
     images?: Array<{
+      url?: string;
       thumbnailUrl?: string;
       displayUrl?: string;
       originalUrl?: string;
@@ -288,7 +289,7 @@ export function ReportsPage() {
                       report.ad?.title ||
                       (report.reported ? `User: ${report.reported.profile?.name || report.reported.phoneNumber}` : 'Flagged Listing');
                     const image =
-                      report.ad?.images?.[0]?.thumbnailUrl ||
+                      report.ad?.images?.[0]?.url ||
                       report.ad?.images?.[0]?.displayUrl ||
                       report.ad?.images?.[0]?.originalUrl;
                     const reporterName =

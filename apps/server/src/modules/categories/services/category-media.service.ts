@@ -13,6 +13,7 @@ import {
   slugify,
   generateMediaId,
   formatCategoryImage,
+  formatCategoryOutput,
   checkCircularDependency,
   getSubtreeMaxDepth,
   updateSubtreeLevels,
@@ -95,20 +96,15 @@ export class CategoryMediaService {
       const host = baseUrl || process.env.MEDIA_CDN_URL || 'http://localhost:5000';
       const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
-      const largePath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'large', format: 'webp' });
-      const mediumPath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'medium', format: 'webp' });
-      const thumbnailPath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'thumbnail', format: 'webp' });
-      const cardPath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'card', format: 'webp' });
+      const imagePath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'image', format: 'webp' });
 
       const variants = {
-        thumbnail: defaultStorage.buildPublicUrl(thumbnailPath, cleanHost),
-        card: defaultStorage.buildPublicUrl(cardPath, cleanHost),
-        medium: defaultStorage.buildPublicUrl(mediumPath, cleanHost),
-        large: defaultStorage.buildPublicUrl(largePath, cleanHost),
+        url: imagePath,
+        image: imagePath,
       };
       const diskPath = buildMediaDirectory({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId });
 
-      mediaData = { mediaId, validated, variants, diskPath, cleanHost };
+      mediaData = { mediaId, validated, variants, diskPath, cleanHost, imagePath };
     }
 
     const category = await prisma.$transaction(async (tx) => {
@@ -120,10 +116,10 @@ export class CategoryMediaService {
             entityType: 'CATEGORY',
             originalName: path.basename(filePart.filename || 'category-icon.jpg'),
             mimeType: mediaData.validated.mimeType,
-            extension: path.extname(filePart.filename || '').replace('.', '') || 'jpg',
+            extension: 'webp',
             sizeBytes: BigInt(filePart.size),
             status: 'PROCESSING',
-            storageKey: mediaData.variants.large || `images/${mediaData.mediaId}/original.webp`,
+            storageKey: mediaData.imagePath,
             variants: mediaData.variants,
           },
         });
@@ -173,10 +169,7 @@ export class CategoryMediaService {
     }
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
-    return {
-      ...category,
-      image: formatCategoryImage(category),
-    };
+    return formatCategoryOutput(category);
   }
 
   // Atomic category update with direct image file upload / replacement
@@ -271,20 +264,15 @@ export class CategoryMediaService {
       const host = baseUrl || process.env.MEDIA_CDN_URL || 'http://localhost:5000';
       const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
-      const largePath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'large', format: 'webp' });
-      const mediumPath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'medium', format: 'webp' });
-      const thumbnailPath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'thumbnail', format: 'webp' });
-      const cardPath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'card', format: 'webp' });
+      const imagePath = buildMediaPath({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId, variant: 'image', format: 'webp' });
 
       const variants = {
-        thumbnail: defaultStorage.buildPublicUrl(thumbnailPath, cleanHost),
-        card: defaultStorage.buildPublicUrl(cardPath, cleanHost),
-        medium: defaultStorage.buildPublicUrl(mediumPath, cleanHost),
-        large: defaultStorage.buildPublicUrl(largePath, cleanHost),
+        url: imagePath,
+        image: imagePath,
       };
       const diskPath = buildMediaDirectory({ resource: 'categories', resourceId: mediaId, mediaType: 'icon', mediaId });
 
-      newMediaData = { mediaId, validated, variants, diskPath, cleanHost };
+      newMediaData = { mediaId, validated, variants, diskPath, cleanHost, imagePath };
     }
 
     const removeImage = fields.removeImage === 'true' || fields.removeImage === true;
@@ -302,10 +290,10 @@ export class CategoryMediaService {
             entityType: 'CATEGORY',
             originalName: path.basename(filePart.filename || 'category-icon.jpg'),
             mimeType: newMediaData.validated.mimeType,
-            extension: path.extname(filePart.filename || '').replace('.', '') || 'jpg',
+            extension: 'webp',
             sizeBytes: BigInt(filePart.size),
             status: 'PROCESSING',
-            storageKey: newMediaData.variants.large || `images/${newMediaData.mediaId}/original.webp`,
+            storageKey: newMediaData.imagePath,
             variants: newMediaData.variants,
           },
         });
@@ -355,10 +343,7 @@ export class CategoryMediaService {
     }
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
-    return {
-      ...updated,
-      image: formatCategoryImage(updated),
-    };
+    return formatCategoryOutput(updated);
   }
 }
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { toast } from 'sonner';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
@@ -29,6 +30,225 @@ import {
   X,
 } from 'lucide-react';
 import { apiClient } from '../../lib/api-client';
+
+// Helper to resolve media URLs through current origin proxy
+function formatMediaUrl(url?: string | null): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
+
+  if (/^https?:\/\//i.test(trimmed)) {
+    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client/i.test(trimmed)) {
+      return trimmed;
+    }
+  }
+
+  let clean = trimmed
+    .replace(/^https?:\/\/[^/]+/, '')
+    .replace(/^s3:\/\/[^/]+/, '')
+    .replace(/^[/\\]+/, '')
+    .trim();
+
+  while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
+    clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
+  }
+
+  clean = clean.replace(/(\/image\.webp)+$/i, '/image.webp');
+  return clean ? `/media/${clean}` : '';
+}
+
+interface BannerMediaDropzoneProps {
+  label: string;
+  mediaUrl: string;
+  mediaType: 'IMAGE' | 'VIDEO';
+  isUploading: boolean;
+  onFileSelect: (file: File) => void;
+  onRemove: () => void;
+  required?: boolean;
+  hint?: string;
+  aspectRatioClass?: string;
+}
+
+function BannerMediaDropzone({
+  label,
+  mediaUrl,
+  mediaType,
+  isUploading,
+  onFileSelect,
+  onRemove,
+  required,
+  hint,
+  aspectRatioClass = 'aspect-[21/9]',
+}: BannerMediaDropzoneProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      onFileSelect(file);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border p-3.5 bg-muted/20 space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+          <Upload className="h-3.5 w-3.5 text-primary" />
+          <span>
+            {label} {required && '*'}
+          </span>
+        </label>
+        {mediaUrl && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="text-[11px] text-destructive hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <X className="h-3 w-3" /> Remove
+          </button>
+        )}
+      </div>
+
+      {isUploading ? (
+        <div
+          className={`border-2 border-dashed rounded-lg p-6 flex flex-col items-center justify-center gap-2 bg-muted/40 ${aspectRatioClass}`}
+        >
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+          <span className="text-xs font-semibold text-primary">Uploading banner creative...</span>
+        </div>
+      ) : mediaUrl ? (
+        <div
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={`relative ${aspectRatioClass} rounded-lg overflow-hidden border transition ${
+            isDragging ? 'border-primary ring-2 ring-primary bg-primary/10' : 'bg-black/50'
+          }`}
+        >
+          {mediaType === 'VIDEO' ? (
+            <video
+              src={formatMediaUrl(mediaUrl)}
+              className="w-full h-full object-cover"
+              controls
+              muted
+            />
+          ) : (
+            <img
+              src={formatMediaUrl(mediaUrl)}
+              alt="Creative preview"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                (e.currentTarget as HTMLElement).style.display = 'none';
+              }}
+            />
+          )}
+
+          {isDragging ? (
+            <div className="absolute inset-0 bg-primary/40 backdrop-blur-xs flex flex-col items-center justify-center text-white">
+              <Upload className="h-8 w-8 animate-bounce mb-1" />
+              <span className="text-xs font-bold">Drop to replace creative!</span>
+            </div>
+          ) : (
+            <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex items-center justify-between">
+              <span className="rounded bg-black/75 px-2 py-0.5 text-[10px] text-white font-semibold">
+                {mediaType}
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => inputRef.current?.click()}
+                  className="h-6 px-2 text-[10px] cursor-pointer gap-1"
+                >
+                  <Upload className="h-3 w-3" /> Change
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="destructive"
+                  onClick={onRemove}
+                  className="h-6 px-2 text-[10px] cursor-pointer gap-1"
+                >
+                  <Trash2 className="h-3 w-3" /> Remove
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onFileSelect(f);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      ) : (
+        <div
+          onDragOver={handleDragOver}
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => inputRef.current?.click()}
+          className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors flex flex-col items-center justify-center gap-1.5 ${
+            isDragging
+              ? 'border-primary bg-primary/10 scale-[1.01]'
+              : 'border-muted-foreground/25 hover:border-primary/60 hover:bg-muted/40'
+          }`}
+        >
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onFileSelect(f);
+              e.target.value = '';
+            }}
+          />
+          <div className="p-2.5 rounded-full bg-primary/10 text-primary">
+            <Upload className="h-5 w-5" />
+          </div>
+          <span className="text-xs font-semibold text-foreground">
+            {isDragging ? 'Drop file to upload!' : 'Click to choose or drag & drop Image or Video'}
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {hint || 'PNG, JPG, WebP (up to 10MB) or MP4, WebM (up to 50MB)'}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface BannerData {
   id: string;
@@ -62,8 +282,6 @@ export function PromotionsPage() {
   // Direct upload states
   const [uploadingDesktop, setUploadingDesktop] = useState(false);
   const [uploadingMobile, setUploadingMobile] = useState(false);
-  const desktopInputRef = useRef<HTMLInputElement>(null);
-  const mobileInputRef = useRef<HTMLInputElement>(null);
 
   // Form State
   const [form, setForm] = useState({
@@ -85,7 +303,7 @@ export function PromotionsPage() {
   const fetchBanners = async () => {
     try {
       setLoading(true);
-      const res = await apiClient.get('/banners/admin');
+      const res = await apiClient.get('/banners/admin', { params: { _t: Date.now() } });
       if (res.data?.success) {
         setBanners(res.data.items || []);
       }
@@ -148,14 +366,14 @@ export function PromotionsPage() {
     const isImage = file.type.startsWith('image/');
 
     if (!isVideo && !isImage) {
-      alert('Only images (JPEG, PNG, WebP) or videos (MP4, WebM) are allowed.');
+      toast.error('Only images (JPEG, PNG, WebP) or videos (MP4, WebM) are allowed.');
       return;
     }
 
     // 50MB video limit & 10MB image limit
     const maxBytes = isVideo ? 50 * 1024 * 1024 : 10 * 1024 * 1024;
     if (file.size > maxBytes) {
-      alert(`${isVideo ? 'Video' : 'Image'} exceeds maximum size limit of ${isVideo ? '50MB' : '10MB'}.`);
+      toast.error(`${isVideo ? 'Video' : 'Image'} exceeds maximum size limit of ${isVideo ? '50MB' : '10MB'}.`);
       return;
     }
 
@@ -175,9 +393,10 @@ export function PromotionsPage() {
           mediaType: target === 'desktop' ? uploadedType : prev.mediaType,
           [target === 'desktop' ? 'desktopMediaUrl' : 'mobileMediaUrl']: uploadedUrl,
         }));
+        toast.success(`${target === 'desktop' ? 'Desktop' : 'Mobile'} creative uploaded!`);
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || 'File upload failed. Please try again.');
+      toast.error(err.response?.data?.message || 'File upload failed. Please try again.');
     } finally {
       setUploading(false);
     }
@@ -186,7 +405,7 @@ export function PromotionsPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.desktopMediaUrl) {
-      alert('Please upload a desktop media creative (Image or Video) for the banner.');
+      toast.error('Please upload a desktop media creative (Image or Video) for the banner.');
       return;
     }
 
@@ -199,13 +418,15 @@ export function PromotionsPage() {
 
       if (editingBanner) {
         await apiClient.put(`/banners/admin/${editingBanner.id}`, payload);
+        toast.success(`Banner "${form.title}" updated successfully!`);
       } else {
         await apiClient.post('/banners/admin', payload);
+        toast.success(`Banner "${form.title}" created successfully!`);
       }
       setDialogOpen(false);
-      fetchBanners();
+      await fetchBanners();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to save banner');
+      toast.error(err.response?.data?.message || 'Failed to save banner');
     }
   };
 
@@ -213,9 +434,10 @@ export function PromotionsPage() {
     try {
       const nextStatus = banner.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
       await apiClient.patch(`/banners/admin/${banner.id}/status`, { status: nextStatus });
-      fetchBanners();
+      toast.success(`Banner ${nextStatus === 'ACTIVE' ? 'resumed' : 'paused'} successfully!`);
+      await fetchBanners();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to update status');
+      toast.error(err.response?.data?.message || 'Failed to update status');
     }
   };
 
@@ -223,9 +445,10 @@ export function PromotionsPage() {
     if (!confirm('Are you sure you want to delete this promotional banner?')) return;
     try {
       await apiClient.delete(`/banners/admin/${id}`);
-      fetchBanners();
+      toast.success('Promotional banner deleted successfully');
+      await fetchBanners();
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Failed to delete banner');
+      toast.error(err.response?.data?.message || 'Failed to delete banner');
     }
   };
 
@@ -326,7 +549,7 @@ export function PromotionsPage() {
                     {banner.desktopMediaUrl ? (
                       isVideo ? (
                         <video
-                          src={banner.desktopMediaUrl}
+                          src={formatMediaUrl(banner.desktopMediaUrl)}
                           className="w-full h-full object-cover"
                           muted
                           loop
@@ -335,16 +558,24 @@ export function PromotionsPage() {
                         />
                       ) : (
                         <img
-                          src={banner.desktopMediaUrl}
+                          src={formatMediaUrl(banner.desktopMediaUrl)}
                           alt={banner.title}
                           className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                            const fallback = (e.currentTarget as HTMLElement).nextElementSibling;
+                            if (fallback) (fallback as HTMLElement).style.display = 'flex';
+                          }}
                         />
                       )
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
-                        No Creative Media Uploaded
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className="w-full h-full flex flex-col items-center justify-center text-xs text-muted-foreground bg-muted/40"
+                      style={{ display: banner.desktopMediaUrl ? 'none' : 'flex' }}
+                    >
+                      <ImageIcon className="h-8 w-8 text-muted-foreground/30 mb-1" />
+                      <span>No Creative Media</span>
+                    </div>
                     <Badge variant={statusVariant as any} className="absolute top-2.5 left-2.5 shadow-sm">
                       {banner.computedStatus}
                     </Badge>
@@ -466,134 +697,30 @@ export function PromotionsPage() {
         </DialogHeader>
 
         <form onSubmit={handleSave} className="space-y-4 pt-3 max-h-[75vh] overflow-y-auto pr-1">
-          {/* Direct Desktop Media Upload */}
-          <div className="rounded-xl border p-3.5 bg-muted/20 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Upload className="h-3.5 w-3.5 text-primary" />
-                <span>Desktop Creative (Max 50MB Video / 10MB Image) *</span>
-              </label>
-              {form.desktopMediaUrl && (
-                <button
-                  type="button"
-                  onClick={() => setForm((prev) => ({ ...prev, desktopMediaUrl: '' }))}
-                  className="text-[11px] text-destructive hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <X className="h-3 w-3" /> Remove
-                </button>
-              )}
-            </div>
+          {/* Direct Desktop Media Drag & Drop Selector */}
+          <BannerMediaDropzone
+            label="Desktop Creative"
+            required
+            mediaUrl={form.desktopMediaUrl}
+            mediaType={form.mediaType}
+            isUploading={uploadingDesktop}
+            onFileSelect={(file) => handleFileUpload(file, 'desktop')}
+            onRemove={() => setForm((prev) => ({ ...prev, desktopMediaUrl: '' }))}
+            aspectRatioClass="aspect-[21/9]"
+            hint="PNG, JPG, WebP (up to 10MB) or MP4, WebM (up to 50MB)"
+          />
 
-            {form.desktopMediaUrl ? (
-              <div className="relative aspect-[21/9] rounded-lg overflow-hidden border bg-black/50">
-                {form.mediaType === 'VIDEO' ? (
-                  <video
-                    src={form.desktopMediaUrl}
-                    className="w-full h-full object-cover"
-                    controls
-                    muted
-                  />
-                ) : (
-                  <img
-                    src={form.desktopMediaUrl}
-                    alt="Desktop preview"
-                    className="w-full h-full object-cover"
-                  />
-                )}
-                <span className="absolute bottom-2 right-2 rounded bg-black/75 px-2 py-0.5 text-[10px] text-white font-semibold">
-                  {form.mediaType}
-                </span>
-              </div>
-            ) : (
-              <div
-                onClick={() => desktopInputRef.current?.click()}
-                className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-muted/40 transition-colors flex flex-col items-center justify-center gap-1.5"
-              >
-                <input
-                  ref={desktopInputRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleFileUpload(f, 'desktop');
-                  }}
-                />
-                {uploadingDesktop ? (
-                  <div className="flex items-center gap-2 text-xs font-semibold text-primary">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Uploading media...</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="p-2.5 rounded-full bg-primary/10 text-primary">
-                      <Upload className="h-5 w-5" />
-                    </div>
-                    <span className="text-xs font-semibold text-foreground">
-                      Click to choose or drag & drop Image or Video
-                    </span>
-                    <span className="text-[11px] text-muted-foreground">
-                      PNG, JPG, WebP (up to 10MB) or MP4, WebM (up to 50MB)
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Optional Mobile Media Upload */}
-          <div className="rounded-xl border p-3.5 bg-muted/20 space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                <Upload className="h-3 w-3" />
-                <span>Mobile Creative (Optional override for mobile view)</span>
-              </label>
-              {form.mobileMediaUrl && (
-                <button
-                  type="button"
-                  onClick={() => setForm((prev) => ({ ...prev, mobileMediaUrl: '' }))}
-                  className="text-[11px] text-destructive hover:underline flex items-center gap-1 cursor-pointer"
-                >
-                  <X className="h-3 w-3" /> Remove
-                </button>
-              )}
-            </div>
-
-            {form.mobileMediaUrl ? (
-              <div className="relative aspect-[16/9] max-w-[200px] rounded-lg overflow-hidden border bg-black/50">
-                <img
-                  src={form.mobileMediaUrl}
-                  alt="Mobile preview"
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ) : (
-              <div
-                onClick={() => mobileInputRef.current?.click()}
-                className="border border-dashed rounded-lg p-3 text-center cursor-pointer hover:bg-muted/40 transition-colors"
-              >
-                <input
-                  ref={mobileInputRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) handleFileUpload(f, 'mobile');
-                  }}
-                />
-                {uploadingMobile ? (
-                  <span className="text-xs text-primary flex items-center justify-center gap-1">
-                    <Loader2 className="h-3 w-3 animate-spin" /> Uploading...
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    Upload mobile-optimized creative (Optional)
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+          {/* Optional Mobile Media Drag & Drop Selector */}
+          <BannerMediaDropzone
+            label="Mobile Creative (Optional override for mobile devices)"
+            mediaUrl={form.mobileMediaUrl}
+            mediaType={form.mediaType}
+            isUploading={uploadingMobile}
+            onFileSelect={(file) => handleFileUpload(file, 'mobile')}
+            onRemove={() => setForm((prev) => ({ ...prev, mobileMediaUrl: '' }))}
+            aspectRatioClass="aspect-[16/9]"
+            hint="Optimized vertical/compact banner (up to 10MB image / 50MB video)"
+          />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>

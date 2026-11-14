@@ -1,4 +1,4 @@
-// Polyfill BigInt serialization for Fastify / JSON.stringify
+// Polyfill BigInt serialization for Fastify / JSON.stringify (Media Single Master WebP)
 (BigInt.prototype as any).toJSON = function () {
   return Number(this);
 };

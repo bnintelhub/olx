@@ -10,6 +10,7 @@ import {
   MAX_CATEGORY_DEPTH,
   slugify,
   formatCategoryImage,
+  formatCategoryOutput,
   validateMediaImage,
   checkCircularDependency,
   getSubtreeMaxDepth,
@@ -104,10 +105,7 @@ export class CategoryMutationService {
     });
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
-    return {
-      ...category,
-      image: formatCategoryImage(category),
-    };
+    return formatCategoryOutput(category);
   }
 
   // Updates category attributes, prevents circular hierarchies, and cascades level shifts
@@ -217,10 +215,7 @@ export class CategoryMutationService {
     });
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
-    return {
-      ...updated,
-      image: formatCategoryImage(updated),
-    };
+    return formatCategoryOutput(updated);
   }
 
   // Atomically reorders sibling categories to avoid sort collisions
