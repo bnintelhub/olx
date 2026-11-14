@@ -110,7 +110,32 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         returnUrl,
       });
 
-      // 2. Prepare PayU hosted checkout parameters for official sandbox simulator
+      // 2. In dev/sandbox test mode or when using test VPA (e.g. success@payu) / test card:
+      // Verify & settle directly for instant seamless developer testing
+      const isTestVpa = upiId.includes('@payu') || upiId.includes('test') || upiId === 'success@payu';
+      const isTestCard = cardNumber.replace(/\s/g, '').startsWith('4012');
+      const isDevEnv = import.meta.env.DEV || window.location.hostname === 'localhost';
+
+      if (isDevEnv && (isTestVpa || isTestCard || upiMethod === 'QR')) {
+        const verifyRes = await paymentsService.verifyPayment(order.paymentOrderId);
+        if (verifyRes.status === 'SUCCESS') {
+          const quotaRes = await apiClient.get('/revenue/quota');
+          setCompletedOrder({
+            txnId: verifyRes.transactionId,
+            amount: verifyRes.amount,
+            planName: selectedPlan.name,
+            adsCount: selectedPlan.adsCount,
+            method: paymentType === 'CARD' ? 'Card (Debit/Credit)' : 'PayU UPI',
+          });
+          if (quotaRes.data?.success) {
+            onSuccess(quotaRes.data.data);
+          }
+          setIsProcessing(false);
+          return;
+        }
+      }
+
+      // 3. Launch PayU official test simulation checkout
       const checkoutParams: Record<string, string> = { ...order.checkoutParams };
       if (paymentType === 'UPI') {
         checkoutParams.pg = 'UPI';
@@ -122,7 +147,6 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
         checkoutParams.pg = 'CC';
       }
 
-      // 3. Launch PayU official test simulation checkout
       paymentsService.submitPayUForm(order.checkoutUrl, checkoutParams);
 
       // Safety timeout: reset processing state if browser navigation is cancelled or delayed

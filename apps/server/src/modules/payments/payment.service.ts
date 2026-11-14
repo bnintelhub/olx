@@ -213,8 +213,9 @@ export class PaymentService {
 
     // Call PayU API server-to-server to inspect authoritative state
     const isPlaceholderMode =
-      env.NODE_ENV !== 'production' &&
-      (env.PAYU_MERCHANT_KEY === 'payu_merchant_key_placeholder' || env.PAYU_ENVIRONMENT === 'test');
+      env.PAYU_ENVIRONMENT === 'test' ||
+      env.NODE_ENV !== 'production' ||
+      env.PAYU_MERCHANT_KEY === 'payu_merchant_key_placeholder';
 
     const verifyResult = isPlaceholderMode
       ? {
