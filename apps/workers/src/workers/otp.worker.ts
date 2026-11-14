@@ -24,8 +24,12 @@ export function startOtpWorker() {
       console.log(`Code: ${otp}`);
       console.log(`======================================================\n`);
     },
-    { connection }
+    { connection, skipVersionCheck: true }
   );
+
+  worker.on('error', (err) => {
+    console.warn('[Worker - otp-dispatch] Redis connection warning:', err.message);
+  });
 
   worker.on('completed', (job) => {
     console.log(`[Worker - otp-dispatch] Job #${job.id} completed successfully`);

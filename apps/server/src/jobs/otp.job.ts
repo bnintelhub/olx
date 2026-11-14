@@ -13,6 +13,7 @@ const connection = getRedisBullConnection();
 
 export const otpQueue = new Queue<OtpJobData>('otp-dispatch', {
   connection,
+  skipVersionCheck: true,
   defaultJobOptions: {
     attempts: 3,
     backoff: {
@@ -24,6 +25,10 @@ export const otpQueue = new Queue<OtpJobData>('otp-dispatch', {
   },
 });
 
+otpQueue.on('error', (err) => {
+  console.warn('[BullMQ OTP Queue] Redis connection warning:', err.message);
+});
+
 export const otpWorker = new Worker<OtpJobData>(
   'otp-dispatch',
   async (job: Job<OtpJobData>) => {
@@ -31,8 +36,12 @@ export const otpWorker = new Worker<OtpJobData>(
     console.log(`[BullMQ Worker] Processing OTP email job #${job.id} for: ${to} (${purpose})`);
     await EmailService.sendOtpEmail(to, otp, purpose);
   },
-  { connection }
+  { connection, skipVersionCheck: true }
 );
+
+otpWorker.on('error', (err) => {
+  console.warn('[BullMQ OTP Worker] Redis connection warning:', err.message);
+});
 
 otpWorker.on('completed', (job) => {
   console.log(`[BullMQ Worker] Job #${job.id} completed successfully`);

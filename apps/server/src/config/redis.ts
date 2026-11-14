@@ -13,6 +13,8 @@ export const redis = new Redis(env.REDIS_URL, {
     return Math.min(times * 100, 2000);
   },
   lazyConnect: true,
+  keepAlive: 10000,
+  enableReadyCheck: false,
 });
 
 let isConnected = false;
@@ -79,13 +81,20 @@ export async function delCache(...keys: string[]): Promise<void> {
 
 export function getRedisBullConnection() {
   try {
-    const parsed = new URL(env.REDIS_URL);
+    let rawUrl = (env.REDIS_URL || '').trim();
+    rawUrl = rawUrl.replace(/^REDIS_URL\s*=\s*/i, '').replace(/^['"]|['"]$/g, '');
+    const parsed = new URL(rawUrl);
+    const isTls = parsed.protocol === 'rediss:';
+
     return {
       host: parsed.hostname || '127.0.0.1',
       port: parsed.port ? Number(parsed.port) : 6379,
       password: parsed.password ? decodeURIComponent(parsed.password) : undefined,
       username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
+      tls: isTls ? { rejectUnauthorized: false } : undefined,
       maxRetriesPerRequest: null,
+      keepAlive: 10000,
+      enableReadyCheck: false,
     };
   } catch {
     return {

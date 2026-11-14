@@ -55,6 +55,8 @@ export function getRedisBullConnection() {
       username: parsed.username ? decodeURIComponent(parsed.username) : undefined,
       tls: isTls ? { rejectUnauthorized: false } : undefined,
       maxRetriesPerRequest: null,
+      keepAlive: 10000,
+      enableReadyCheck: false,
     };
   } catch {
     return {

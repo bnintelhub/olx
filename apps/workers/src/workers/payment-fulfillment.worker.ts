@@ -92,8 +92,13 @@ export function startPaymentFulfillmentWorker(): Worker<PaymentFulfillmentJobDat
     {
       connection,
       concurrency: 5,
+      skipVersionCheck: true,
     }
   );
+
+  worker.on('error', (err) => {
+    console.warn('[FulfillmentWorker] Redis connection warning:', err.message);
+  });
 
   worker.on('failed', (job, err) => {
     console.error(`[FulfillmentWorker] Job ${job?.id} failed with error:`, err);

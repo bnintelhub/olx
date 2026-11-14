@@ -126,10 +126,15 @@ export function startMediaWorker() {
   // Dead Letter Queue instance for poison jobs
   const mediaDeadLetterQueue = new Queue('media-dead-letter', {
     connection,
+    skipVersionCheck: true,
     defaultJobOptions: {
       removeOnComplete: false,
       removeOnFail: false,
     },
+  });
+
+  mediaDeadLetterQueue.on('error', (err) => {
+    console.warn('[Queue - media-dead-letter] Redis connection warning:', err.message);
   });
 
   // ---------------------------------------------------------------------------
@@ -276,8 +281,12 @@ export function startMediaWorker() {
         throw err;
       }
     },
-    { connection, concurrency }
+    { connection, concurrency, skipVersionCheck: true }
   );
+
+  assetWorker.on('error', (err) => {
+    console.warn('[Worker - media-processing] Redis connection warning:', err.message);
+  });
 
   // ---------------------------------------------------------------------------
   // Worker 2: Legacy Media Processor ('media-process' queue)
@@ -366,8 +375,12 @@ export function startMediaWorker() {
         throw err;
       }
     },
-    { connection, concurrency }
+    { connection, concurrency, skipVersionCheck: true }
   );
+
+  legacyWorker.on('error', (err) => {
+    console.warn('[Worker - media-process (legacy)] Redis connection warning:', err.message);
+  });
 
   return {
     close: async () => {
