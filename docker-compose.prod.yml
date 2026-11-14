@@ -160,4 +160,5 @@ volumes:
 
 networks:
   bharatmarket_net:
+    name: bharatmarket_net
     driver: bridge
