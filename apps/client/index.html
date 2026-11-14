@@ -18,12 +18,25 @@
     <script type="module" src="/src/main.tsx"></script>
     <script>
       if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-        // In local development, avoid registering the caching service worker to prevent Vite HMR & proxy issues
-        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+        const isDev = window.location.hostname === 'localhost' ||
+                      window.location.hostname === '127.0.0.1' ||
+                      window.location.hostname.includes('github.dev') ||
+                      window.location.hostname.includes('app.github.dev') ||
+                      window.location.port === '5173' ||
+                      window.location.port === '5174';
+
+        if (!isDev) {
           window.addEventListener('load', () => {
             navigator.serviceWorker.register('/sw.js')
               .then((reg) => console.log('[PWA] Service Worker registered:', reg.scope))
               .catch((err) => console.warn('[PWA] Service Worker registration failed:', err));
+          });
+        } else {
+          // In development/Codespaces, unregister any existing service workers to ensure Vite works cleanly
+          navigator.serviceWorker.getRegistrations().then((registrations) => {
+            for (const registration of registrations) {
+              registration.unregister();
+            }
           });
         }
       }

@@ -45,8 +45,15 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
   const url = new URL(request.url);
 
-  // In local development or Vite dev server, completely bypass service worker fetch caching
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+  // In local development, Codespaces, or Vite dev server, completely bypass service worker fetch caching
+  if (
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1' ||
+    url.hostname.includes('github.dev') ||
+    url.hostname.includes('app.github.dev') ||
+    url.port === '5173' ||
+    url.port === '5174'
+  ) {
     return;
   }
 

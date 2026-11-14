@@ -19,6 +19,11 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5173,
       allowedHosts: true,
+      hmr: process.env.CODESPACES
+        ? {
+            clientPort: 443,
+          }
+        : true,
       watch: {
         usePolling: true,
       },
