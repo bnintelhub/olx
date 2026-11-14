@@ -63,16 +63,23 @@ pnpm test:load:100k http://localhost:5000/api/v1/health
 
 ---
 
-### Method 3: Via k6 (Docker or Local)
+### Method 3: Via k6 (Docker in Codespaces / Linux)
+
+In GitHub Codespaces and Linux, containers do not use `host.docker.internal`. Use `--network host`:
 
 ```bash
-# Run with Docker
-docker run --rm -i -v "${PWD}/tests/load/k6:/k6" \
-  -e TARGET_URL=http://host.docker.internal:5000 \
+# Option A: Using host networking (Fastest in Codespaces)
+docker run --rm -i --network host -v "${PWD}/tests/load/k6:/k6" \
+  -e TARGET_URL=http://localhost:5000 \
   grafana/k6 run /k6/exponential-100k.js
 
-# If k6 is installed natively
-k6 run tests/load/k6/exponential-100k.js
+# Option B: Connecting directly to the Docker stack network
+docker run --rm -i --network bharatmarket_net -v "${PWD}/tests/load/k6:/k6" \
+  -e TARGET_URL=http://server:5000 \
+  grafana/k6 run /k6/exponential-100k.js
+
+# Option C: If k6 is installed natively
+k6 run -e TARGET_URL=http://localhost:5000 tests/load/k6/exponential-100k.js
 ```
 
 ---
