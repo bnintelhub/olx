@@ -248,7 +248,7 @@ olx-monorepo/
 | **AdsModule** | Ad lifecycle state machine (`DRAFT` -> `ACTIVE` -> `SOLD`), PostGIS location query execution, dynamic attribute values validation. | `PrismaModule`, `SearchModule`, `MediaModule` |
 | **SearchModule** | `SearchProvider` interface implementation with query sanitization, trigram index querying, facet aggregation. | `PrismaModule`, `RedisModule` |
 | **ChatModule** | Socket.io server gateway, Redis socket adapter, conversation creation, message persistence, read receipts. | `PrismaModule`, `RedisModule`, `NotificationModule` |
-| **MediaModule** | AWS S3 presigned PUT URL generation, Sharp image processing queue triggers, WebP multi-resolution rendering. | `BullModule`, `S3Client` |
+| **MediaModule** | High-performance local storage ingestion, Sharp Libvips WebP multi-resolution rendering (thumb, card, med, large), single-source-of-truth URL generation, Nginx direct kernel delivery with Fastify fallback. | `BullModule`, `Sharp`, `PrismaModule` |
 | **ModerationModule**| User reports, keyword blacklist filtering, duplicate ad detection (pHash matching), admin approval queue. | `PrismaModule`, `NotificationModule` |
 | **NotificationModule**| Push notifications (Firebase FCM), SMS delivery, in-app notification state. | `BullModule`, `FirebaseAdmin` |
 
@@ -257,15 +257,15 @@ olx-monorepo/
 ## 6. Scalability, Caching & Performance Plan
 
 1. **Stateless Web & API Tiers**:
-   - NestJS API nodes and Next.js SSR nodes maintain zero local state. Any node can handle any request behind an Nginx or AWS ALB round-robin load balancer.
+   - Fastify 5 API nodes and React 18 client containers maintain zero local application state. Any node can handle any request behind an Nginx gateway or cloud load balancer.
 2. **Socket.io Horizontal Scaling**:
-   - Real-time WebSockets connect through `socket.io-redis-adapter`. When Node A receives a message intended for a client connected to Node B, Redis Pub/Sub routes the payload seamlessly between processes.
+   - Real-time WebSockets connect through `@socket.io/redis-adapter`. When Node A receives a message intended for a client connected to Node B, Redis Pub/Sub routes the payload seamlessly between processes.
 3. **Multi-Tier Caching Strategy**:
-   - **L1 (HTTP Edge / CDN)**: Static assets, images, and public category listing pages cached at Cloudflare / CloudFront edge.
+   - **L1 (HTTP Edge / Nginx)**: Static assets, images (`/media/*`), and SPA bundles served directly with kernel-level zero-copy `sendfile` and 30-day immutable caching.
    - **L2 (Redis Memory Cache)**:
      - Categories and attribute schemas: Cached with a 24-hour TTL (`categories:all`). Invalidation triggered only on admin update.
      - Location list (States, Cities, Localities): Cached indefinitely (`locations:india`).
-     - Ad detail view counter: Stored in Redis HyperLogLog / Redis counter and batched to Postgres every 5 minutes to avoid write-locks.
+     - Ad search catalog feeds: Cached with short TTL to absorb traffic surges.
    - **L3 (Database Query Optimization)**:
      - Composite B-Tree indexes on `(status, category_id, created_at DESC)`.
      - Spatial GiST index on `location_coords` using PostGIS `ST_DWithin`.
@@ -281,6 +281,6 @@ olx-monorepo/
 ---
 
 ## 8. Open Questions & Assumptions
-- **Assumed**: Media storage will use AWS S3 (or MinIO for local development) with AWS CloudFront CDN.
-- **Assumed**: Maximum 12 images per ad, with a maximum file size of 10MB per original image before client compression.
-- **Question**: Should we support multilingual Indian language UI (Hindi, Tamil, Telugu, etc.) in v1? *(Current assumption: English primary with Hindi terms supported in search queries).*
+- **Media Storage**: High-efficiency persistent volume storage (`/data/olx-media`) with zero S3 / MinIO dependencies. Delivers through Nginx kernel `sendfile` with dynamic Fastify streaming fallback.
+- **Listing Limits**: Maximum 12 images per ad, with a maximum file size of 15MB per original image before background WebP compilation.
+- **Multilingual Support**: English primary with Hindi/regional terms supported in search queries.

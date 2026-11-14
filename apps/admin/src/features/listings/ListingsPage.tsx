@@ -69,15 +69,22 @@ function formatMediaUrl(url?: string | null): string {
   const trimmed = url.trim();
   if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
 
-  if (/^https?:\/\//i.test(trimmed)) {
-    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client/i.test(trimmed)) {
-      return trimmed;
+  const sanitized = trimmed.replace(/^(?:https?:\/*)+/i, 'https://');
+
+  if (/^https?:\/\//i.test(sanitized)) {
+    if (
+      !/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client|\.app\.github\.dev|\.github\.dev/i.test(
+        sanitized
+      )
+    ) {
+      return sanitized;
     }
   }
 
-  let clean = trimmed
-    .replace(/^https?:\/\/[^/]+/, '')
-    .replace(/^s3:\/\/[^/]+/, '')
+  let clean = sanitized
+    .replace(/^(?:https?:\/*)+/i, '')
+    .replace(/^[a-zA-Z0-9.-]+(?::\d+)?\//, '')
+    .replace(/^s3:\/\/[^/]+\//i, '')
     .replace(/^[/\\]+/, '')
     .trim();
 

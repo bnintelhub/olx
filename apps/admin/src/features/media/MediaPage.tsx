@@ -62,34 +62,7 @@ import {
   useCleanupOrphansMutation,
 } from './hook/useMediaMutation';
 import { MediaItem, MediaEntityScope } from './service/media.service';
-
-// Helper to resolve media URLs through current origin proxy if needed
-function formatMediaUrl(url?: string | null): string {
-  if (!url) return '';
-  const trimmed = url.trim();
-  if (trimmed.startsWith('blob:') || trimmed.startsWith('data:')) return trimmed;
-
-  // If external URL (e.g. Unsplash, Cloudinary, AWS S3), preserve it completely
-  if (/^https?:\/\//i.test(trimmed)) {
-    if (!/localhost|127\.0\.0\.1|0\.0\.0\.0|server|backend|admin|client/i.test(trimmed)) {
-      return trimmed;
-    }
-  }
-
-  let clean = trimmed
-    .replace(/^https?:\/\/[^/]+/, '')
-    .replace(/^s3:\/\/[^/]+/, '')
-    .replace(/^[/\\]+/, '')
-    .trim();
-
-  while (/^(?:media|olx-media|uploads)[/\\]/i.test(clean)) {
-    clean = clean.replace(/^(?:media|olx-media|uploads)[/\\]/i, '').replace(/^[/\\]+/, '');
-  }
-
-  clean = clean.replace(/(\/image\.webp)+$/i, '/image.webp');
-
-  return clean ? `/media/${clean}` : '';
-}
+import { formatMediaUrl } from '../../lib/utils';
 
 export function MediaPage() {
   // Query parameters state

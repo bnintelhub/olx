@@ -20,3 +20,14 @@ export function formatDate(date: string | Date): string {
   }).format(new Date(date));
 }
 
+export function formatMediaUrl(url?: string | null): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('/') || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+  return `/media/${trimmed}`;
+}
+
+
+

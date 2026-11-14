@@ -33,24 +33,30 @@ flowchart TD
     Worker -->|"All 3 Attempts Exhausted"| DLQ
     DLQ -->|"DB Update (status: FAILED)"| Postgres
 
-    Client -->|"Direct Static Fetch (/media/...)"| Nginx
-    Nginx -->|"Zero-Copy Direct Disk Read (Kernel sendfile)"| LocalStorage
+    Client -->|"11. Static Fetch (/media/...)"| Nginx
+    Nginx -->|"12. Zero-Copy Kernel sendfile"| LocalStorage
+    Nginx -.->|"13. Fallback on 404 (@media_backend)"| Server
+    Server -.->|"14. Native Stream Fallback"| LocalStorage
 ```
 
 ### Core Architectural Principles
 
-1. **Local Persistent Volume Architecture (Zero S3 / MinIO Overhead)**
-   - Media assets are stored on a persistent volume or directory configured by `MEDIA_ROOT`.
-   - **In Docker**: Mounted at `/data/olx-media` via the named volume `media_data`.
-   - **Without Docker (Bare Metal / Local)**: Defaults to `./data/olx-media` (or any custom directory like `/var/www/olx-media`).
-   - No external S3 or MinIO dependencies required. Reduces container memory usage by >500MB and eliminates external authentication/network latency.
-   - Nginx serves all static media requests (`/media/...`) directly from disk using kernel-level `sendfile`, HTTP browser caching (`Cache-Control: public, max-age=2592000, immutable`), and CORS headers (`Access-Control-Allow-Origin: *`). If Nginx is not used, Fastify serves it directly from `MEDIA_ROOT`.
+1. **Single Source of Truth Media URL Architecture**
+   - **Database Level**: Strictly stores pure relative filepaths (e.g., `ads/drafts/images/med_123/image.webp`, `categories/med_456/icon/image.webp`, `users/usr_789/avatar/image.webp`). No protocols or hostnames are ever hardcoded in the database.
+   - **Backend API Layer**: Formats outgoing media URLs into clean relative paths `/media/${filepath}` (or `${MEDIA_PUBLIC_BASE_URL}/media/${filepath}`). It completely prevents malformed duplicate protocols (never `https://https://`).
+   - **Frontend Layer**: Client applications (`@olx/client`, `@olx/admin`) receive valid, production-ready URLs and pass them directly to `<img src />`. No client-side URL parsing, regex stripping, or protocol manipulation is needed.
+   - **Environment Independent**: Works out-of-the-box on `localhost`, `127.0.0.1`, Docker containers, GitHub Codespaces, and custom domains without code alterations.
 
-2. **Ultra-Fast Ingestion with Instant Variant Staging (<200ms Response)**
+2. **Dual-Tier Media Delivery (Zero S3 / MinIO Overhead)**
+   - **Tier 1 (Nginx Direct Kernel Delivery)**: Nginx intercepts `/media/` and reads files directly from `/data/olx-media` using Linux kernel `sendfile` with 30-day immutable cache headers (`Cache-Control: public, max-age=2592000, immutable`) and CORS (`Access-Control-Allow-Origin: *`).
+   - **Tier 2 (Fastify Smart Backend Fallback)**: If a requested file is not yet present on disk (or during local development without Nginx), Nginx delegates to `@media_backend` (`error_page 404 = @media_backend;`). Fastify's native `onRequest` stream hook locates the file in `MEDIA_ROOT` and streams it with high-efficiency chunked transfer and proper MIME types.
+   - Eliminates AWS S3 and MinIO dependencies entirely, saving >500MB container RAM and eliminating network/credential latency.
+
+3. **Ultra-Fast Ingestion with Instant Variant Staging (<200ms Response)**
    - When files are uploaded, the Fastify HTTP server validates magic bytes (header validation), writes an initial copy directly into the storage location, registers the asset in PostgreSQL with `status: PROCESSING`, and returns `201 Created` immediately.
    - Because the initial copy is already in place, newly created listings or chat messages load their images with `200 OK` instantly without race-condition `404` errors while the background worker optimizes them.
 
-3. **Multi-Tier WebP Generation via BullMQ & Sharp Libvips**
+4. **Multi-Tier WebP Generation via BullMQ & Sharp Libvips**
    - The BullMQ worker processes image optimization jobs with controlled concurrency (`max 4`) to prevent memory thrashing.
    - Sharp compiles 4 distinct WebP variants with focal smart cropping:
      - `thumbnail` (300×300 focal crop, quality 80)
@@ -59,7 +65,7 @@ flowchart TD
      - `large` (1600px max width/height, quality 86)
    - Storage savings: **~65% to 75%** space reduction compared to original JPEG/PNG files.
 
-4. **Resilient Retry & Dead Letter Queue (DLQ)**
+5. **Resilient Retry & Dead Letter Queue (DLQ)**
    - Transient processing errors are retried up to 3 times with exponential backoff (2s, 4s, 8s).
    - If all attempts fail, the job moves to `media-dead-letter`, the record is marked `FAILED`, and temporary files are safely unlinked.
 
@@ -189,12 +195,12 @@ curl -X POST "http://localhost:5000/api/v1/uploads?resource=chats&resourceId=con
   "success": true,
   "data": {
     "mediaId": "med_mwb8x7291a",
-    "url": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/large.webp",
+    "url": "/media/chats/conv_12345/med_mwb8x7291a/large.webp",
     "variants": {
-      "thumbnail": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/thumbnail.webp",
-      "card": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/card.webp",
-      "medium": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/medium.webp",
-      "large": "http://localhost:5000/media/chats/conv_12345/med_mwb8x7291a/large.webp"
+      "thumbnail": "/media/chats/conv_12345/med_mwb8x7291a/thumbnail.webp",
+      "card": "/media/chats/conv_12345/med_mwb8x7291a/card.webp",
+      "medium": "/media/chats/conv_12345/med_mwb8x7291a/medium.webp",
+      "large": "/media/chats/conv_12345/med_mwb8x7291a/large.webp"
     }
   }
 }
@@ -218,10 +224,10 @@ curl -X POST "http://localhost:5000/api/v1/uploads?resource=chats&resourceId=con
       "mimeType": "image/jpeg",
       "fileSize": 2048500,
       "variants": {
-        "thumbnail": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/thumbnail.webp",
-        "card": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/card.webp",
-        "medium": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/medium.webp",
-        "large": "http://localhost:5000/media/ads/drafts/images/med_mwb8x7291a/large.webp"
+        "thumbnail": "/media/ads/drafts/images/med_mwb8x7291a/thumbnail.webp",
+        "card": "/media/ads/drafts/images/med_mwb8x7291a/card.webp",
+        "medium": "/media/ads/drafts/images/med_mwb8x7291a/medium.webp",
+        "large": "/media/ads/drafts/images/med_mwb8x7291a/large.webp"
       }
     }
   ]

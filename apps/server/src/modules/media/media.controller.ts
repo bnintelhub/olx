@@ -16,9 +16,11 @@ export class MediaController {
       throw new AppError(401, 'UNAUTHORIZED', 'Authentication is required to upload media');
     }
 
-    const host = request.headers.host || 'localhost:5000';
-    const protocol = request.protocol === 'https' ? 'https' : 'http';
-    const baseUrl = `${protocol}://${host}`;
+    const rawHost = request.headers['x-forwarded-host'] || request.headers.host || 'localhost:5000';
+    const cleanHost = String(rawHost).replace(/^(?:https?:\/*)+/i, '').split(',')[0].trim();
+    const rawProto = request.headers['x-forwarded-proto'] || request.protocol || 'http';
+    const protocol = String(rawProto).includes('https') ? 'https' : 'http';
+    const baseUrl = `${protocol}://${cleanHost}`;
 
     const query = (request.query as any) || {};
     const defaultResource =
@@ -71,7 +73,7 @@ export class MediaController {
 
     // Pure asynchronous response: worker processes variants concurrently in the background
     const results = stagedUploads.map((item) => {
-      const singleUrl = toPublicMediaUrl(item.variants.url || item.variants.image || item.variants.large, baseUrl);
+      const singleUrl = toPublicMediaUrl(item.storageKey || item.variants.url, baseUrl);
       return {
         mediaId: item.mediaId,
         status: 'processing',

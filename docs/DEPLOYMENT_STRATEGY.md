@@ -585,7 +585,7 @@ server {
 
     client_max_body_size 50M;
 
-    # 1. Direct Static Media Serving from disk
+    # 1. Direct Static Media Serving from disk with dynamic Fastify fallback
     location /media/ {
         alias /data/olx-media/;
         expires 30d;
@@ -597,7 +597,17 @@ server {
             return 403;
         }
 
-        try_files $uri =404;
+        # Fallback to backend Fastify if static file not directly on disk
+        error_page 404 = @media_backend;
+    }
+
+    location @media_backend {
+        proxy_pass http://127.0.0.1:5000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     # 2. REST API Reverse Proxy
@@ -688,10 +698,12 @@ All media is saved and read directly under `MEDIA_ROOT` (`/data/olx-media`):
 └── temp/
 ```
 
-### Static Nginx Direct Disk Serving
+### Dual-Tier Media Delivery & Single Source of Truth Architecture
 
-- Files requested at `GET /media/...` bypass Node.js and are transmitted directly by Nginx using Linux kernel `sendfile`.
-- Fastify also mounts `@fastify/static` pointing to `MEDIA_ROOT` as a fallback when running in local development mode without Nginx.
+- **Single Source of Truth**: The database stores strictly relative filepaths (e.g. `ads/drafts/images/med_xxx/image.webp`, `categories/med_yyy/icon/image.webp`). The API outputs clean relative paths `/media/${filepath}` (or `${MEDIA_PUBLIC_BASE_URL}/media/${filepath}`). Clients render `<img src={url} />` directly without string stripping or regex.
+- **Tier 1 (Nginx Direct Disk Serving)**: Files requested at `GET /media/...` bypass Node.js and are transmitted directly by Nginx using Linux kernel `sendfile` with 30-day immutable caching.
+- **Tier 2 (Fastify Smart Fallback)**: If a requested file or WebP variant is not yet written to disk (`error_page 404 = @media_backend;`), Nginx routes to Fastify, which automatically locates the file in `MEDIA_ROOT` and streams it with chunked transfer and proper MIME types.
+- **GitHub Codespaces / Cloud Remote Port Visibility**: In remote cloud environments like GitHub Codespaces, ensure Port `5000` (Backend API & Media) and Port `5174` (Admin) are set to **Public** so browser requests outside the workspace are not blocked by GitHub authentication.
 
 ### Media Orphan Cleanup Automation
 

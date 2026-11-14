@@ -135,19 +135,73 @@ export async function buildApp(): Promise<FastifyInstance> {
     },
   });
 
-  // Single Source of Truth Image: Serve image.webp directly from local disk
+  // Single Source of Truth Image: Serve media directly from local disk with smart fallback
   app.addHook('onRequest', async (req, reply) => {
     if (req.url.startsWith('/media/')) {
-      const cleanPath = req.url.replace(/^\/media\//, '').split('?')[0];
-      const targetPath = path.join(mediaRoot, cleanPath);
+      const cleanPath = req.url.replace(/^\/media\//, '').split('?')[0].replace(/^[/\\]+/, '');
+      if (!cleanPath || cleanPath.includes('..')) return;
+
+      // 1. Direct path check
+      let targetPath = path.join(mediaRoot, cleanPath);
+
+      // 2. Subdirectory fallbacks if direct path is missing prefix (e.g. "med_xxx/icon/image.webp" -> "categories/med_xxx/icon/image.webp")
       if (!fs.existsSync(targetPath)) {
-        const dir = path.dirname(targetPath);
-        if (fs.existsSync(dir)) {
-          const singleTruth = path.join(dir, 'image.webp');
-          if (fs.existsSync(singleTruth)) {
-            return reply.sendFile(path.relative(mediaRoot, singleTruth), mediaRoot);
+        const candidatePrefixes = [
+          'categories',
+          'ads',
+          'ads/drafts/images',
+          'banners',
+          'chats',
+          'users',
+          'images',
+        ];
+        for (const prefix of candidatePrefixes) {
+          const candidate = path.join(mediaRoot, prefix, cleanPath);
+          if (fs.existsSync(candidate)) {
+            targetPath = candidate;
+            break;
           }
         }
+      }
+
+      // 3. If target is a directory, look for image.webp inside
+      if (fs.existsSync(targetPath)) {
+        try {
+          if (fs.statSync(targetPath).isDirectory()) {
+            const indexFile = path.join(targetPath, 'image.webp');
+            if (fs.existsSync(indexFile)) {
+              targetPath = indexFile;
+            }
+          }
+        } catch {}
+      }
+
+      // 4. Stream found file directly with proper content-type & CORS headers
+      if (fs.existsSync(targetPath)) {
+        try {
+          if (fs.statSync(targetPath).isFile()) {
+            const ext = path.extname(targetPath).toLowerCase();
+            const mimeTypes: Record<string, string> = {
+              '.webp': 'image/webp',
+              '.avif': 'image/avif',
+              '.jpg': 'image/jpeg',
+              '.jpeg': 'image/jpeg',
+              '.png': 'image/png',
+              '.svg': 'image/svg+xml',
+              '.gif': 'image/gif',
+              '.mp4': 'video/mp4',
+              '.pdf': 'application/pdf',
+            };
+            const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+            reply
+              .header('Content-Type', contentType)
+              .header('Access-Control-Allow-Origin', '*')
+              .header('Cache-Control', 'public, max-age=2592000, immutable');
+
+            return reply.send(fs.createReadStream(targetPath));
+          }
+        } catch {}
       }
     }
   });

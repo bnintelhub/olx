@@ -147,17 +147,46 @@ curl -i http://localhost/health
 
 # Verify API
 curl -i http://localhost/api/v1/categories
+
+# Verify Static & Dynamic Media Serving through Nginx
+curl -I http://localhost/media/categories/med_mwf5exqab15bc2e326db/icon/image.webp
 ```
 
-Expected output:
+Expected output for Health:
 ```json
 HTTP/1.1 200 OK
 {"status":"ok"}
 ```
 
+Expected output for Media:
+```http
+HTTP/1.1 200 OK
+Content-Type: image/webp
+Cache-Control: public, max-age=2592000, immutable
+Access-Control-Allow-Origin: *
+```
+
 ---
 
-## 4. Setting Up SSL (HTTPS) with Let's Encrypt / Certbot
+## 4. Media Storage & Delivery Configuration
+
+BharatMarket operates on a high-efficiency **Zero-S3 / Zero-MinIO Local Persistent Volume Architecture**:
+- **Disk Mount**: In Docker, `./data/olx-media` is mounted to `/data/olx-media` (`media_data` volume).
+- **Single Source of Truth**: Database stores only relative filepaths (`ads/drafts/...`, `categories/...`). Backend returns `/media/${filepath}`. Frontend renders `<img src={url} />` directly without string replacement.
+- **Dual-Tier Serving**:
+  1. Nginx checks `/data/olx-media/` directly using kernel `sendfile` (30-day immutable caching).
+  2. If a file is not yet cached on disk, Nginx falls back to `@media_backend` (`server:5000`), where Fastify streams the image.
+
+### Remote / GitHub Codespaces Testing
+When testing on GitHub Codespaces:
+1. Open the **Ports** panel in VS Code.
+2. Ensure **Port 5000 (Backend API & Media)** is set to **Public** (otherwise external requests will return 401 Unauthorized / redirect to GitHub login).
+3. Ensure **Port 5174 (Admin)** is set to **Public**.
+4. Access via the forwarded URL or click the 🌐 **Open in Browser** icon.
+
+---
+
+## 5. Setting Up SSL (HTTPS) with Let's Encrypt / Certbot
 
 In production, run Certbot on the host to generate SSL certificates for your domain:
 

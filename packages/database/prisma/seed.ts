@@ -1,7 +1,5 @@
 import './load_env';
 
-import './load_env';
-
 import { PrismaClient, AttributeType } from '@prisma/client';
 
 const prisma = new PrismaClient();

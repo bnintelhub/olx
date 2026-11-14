@@ -222,6 +222,16 @@ sequenceDiagram
     end
 ```
 
+#### Media URL Single Source of Truth & Delivery Architecture
+
+- **Database Storage**: Strictly relative paths (e.g., `ads/drafts/images/med_123/image.webp`, `categories/med_456/icon/image.webp`). No protocols or hostnames are ever stored in the database.
+- **Backend API Output**: Provides clean relative URLs `/media/${filepath}` (or `${MEDIA_PUBLIC_BASE_URL}/media/${filepath}`). Never duplicates protocols (`https://https://` eliminated).
+- **Client Handling**: Frontend components (`AdCard`, `MediaPage`, etc.) pass the returned URL straight into `<img src />` without any brittle regex or domain sanitization.
+- **Dual-Tier Serving**:
+  1. **Nginx Direct**: Nginx serves `/media/*` directly from `/data/olx-media` using Linux kernel `sendfile` (30-day immutable caching).
+  2. **Fastify Fallback**: If an image is newly uploaded or not yet on disk (`error_page 404 = @media_backend`), Nginx routes to Fastify, which automatically streams the file from `MEDIA_ROOT`.
+- **Cloud & Codespaces Ready**: Runs seamlessly across `localhost`, Docker, VPS, and GitHub Codespaces. *(In GitHub Codespaces, ensure Port 5000 and 5174 Port Visibility is set to **Public** for external browser access).*
+
 ---
 
 ### 2. Real-Time Chat & Push Notifications

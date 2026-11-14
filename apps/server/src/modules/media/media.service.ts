@@ -88,7 +88,7 @@ export class MediaService {
 
     const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'image', format: 'webp' });
 
-    const host = baseUrl || process.env.MEDIA_CDN_URL || 'http://localhost:5000';
+    const host = baseUrl || process.env.MEDIA_PUBLIC_BASE_URL || '';
     const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
     const relativeVariants = {
@@ -144,6 +144,7 @@ export class MediaService {
       originalName: path.basename(part.filename || 'image.jpg'),
       mimeType: validated.mimeType,
       fileSize: size,
+      storageKey: imagePath,
       variants: publicVariants,
     };
   }
