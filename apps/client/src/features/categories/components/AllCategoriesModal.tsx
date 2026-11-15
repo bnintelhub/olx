@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { X, Search, ChevronRight, Layers, ArrowRight } from 'lucide-react';
 import { Category } from '@/types';
+import { useGsapModal } from '@/lib/gsapModalAnimation';
 
 interface AllCategoriesModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export const AllCategoriesModal: React.FC<AllCategoriesModalProps> = ({
 }) => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const { overlayRef, contentRef, requestClose } = useGsapModal(isOpen, onClose);
 
   // Lock body scroll when open
   useEffect(() => {
@@ -101,8 +103,17 @@ export const AllCategoriesModal: React.FC<AllCategoriesModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+    <div
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) requestClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs"
+    >
+      <div
+        ref={contentRef}
+        className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
+      >
         {/* Header */}
         <div className="p-4 sm:p-6 border-b border-slate-100 flex items-center justify-between gap-4 bg-slate-50/60">
           <div className="flex items-center gap-2.5">
@@ -121,7 +132,7 @@ export const AllCategoriesModal: React.FC<AllCategoriesModalProps> = ({
 
           <button
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             className="w-8 h-8 rounded-full bg-slate-200/70 hover:bg-slate-200 text-slate-600 hover:text-slate-900 flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-4 h-4" />

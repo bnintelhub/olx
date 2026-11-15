@@ -722,35 +722,106 @@ export class AuthService {
 
     const passwordHash = await HashUtil.hashPassword(data.password.trim());
 
-    // Create or upgrade user with the invited role
-    const user = await prisma.user.upsert({
+    // Normalize phone number if supplied (must be null instead of empty string to satisfy @unique constraint)
+    const rawPhone = data.phoneNumber?.trim();
+    let sanitizedPhone: string | null = null;
+    if (rawPhone && rawPhone.length > 0) {
+      try {
+        sanitizedPhone = this.sanitizePhoneNumber(rawPhone);
+      } catch {
+        const digits = rawPhone.replace(/[^0-9]/g, '');
+        sanitizedPhone = digits.length >= 10 ? (digits.length === 10 ? `+91${digits}` : `+${digits}`) : null;
+      }
+    }
+
+    // Check if an existing account is already registered with this invitation email
+    const existingUserByEmail = await prisma.user.findUnique({
       where: { email: invitation.email },
-      update: {
-        passwordHash,
-        role: invitation.role,
-        status: 'ACTIVE',
-        isEmailVerified: true,
-        phoneNumber: data.phoneNumber?.trim() || undefined,
-        profile: {
-          upsert: {
-            create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
-            update: { name: data.name.trim() },
-          },
-        },
-      },
-      create: {
-        email: invitation.email,
-        passwordHash,
-        role: invitation.role,
-        status: 'ACTIVE',
-        isEmailVerified: true,
-        phoneNumber: data.phoneNumber?.trim(),
-        profile: {
-          create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
-        },
-      },
       include: { profile: true },
     });
+
+    // Check if an existing account is already registered with this phone number
+    const existingUserByPhone = sanitizedPhone
+      ? await prisma.user.findFirst({
+          where: {
+            OR: [
+              { phoneNumber: sanitizedPhone },
+              { phoneNumber: sanitizedPhone.replace('+91', '') },
+            ],
+          },
+          include: { profile: true },
+        })
+      : null;
+
+    // Prevent collision if phone number belongs to another user
+    if (
+      existingUserByPhone &&
+      existingUserByEmail &&
+      existingUserByPhone.id !== existingUserByEmail.id
+    ) {
+      throw new AppError(
+        409,
+        'PHONE_ALREADY_EXISTS',
+        'This phone number is already registered to another account. Please use a different phone number.'
+      );
+    }
+
+    let user;
+    if (existingUserByEmail) {
+      // Existing user by email: upgrade credentials, role, status, and phone if supplied
+      user = await prisma.user.update({
+        where: { id: existingUserByEmail.id },
+        data: {
+          passwordHash,
+          role: invitation.role,
+          status: 'ACTIVE',
+          isEmailVerified: true,
+          ...(sanitizedPhone ? { phoneNumber: sanitizedPhone } : {}),
+          profile: {
+            upsert: {
+              create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
+              update: { name: data.name.trim() },
+            },
+          },
+        },
+        include: { profile: true },
+      });
+    } else if (existingUserByPhone) {
+      // Existing user by phone: link invitation email and upgrade to invited role
+      user = await prisma.user.update({
+        where: { id: existingUserByPhone.id },
+        data: {
+          email: invitation.email,
+          passwordHash,
+          role: invitation.role,
+          status: 'ACTIVE',
+          isEmailVerified: true,
+          profile: {
+            upsert: {
+              create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
+              update: { name: data.name.trim() },
+            },
+          },
+        },
+        include: { profile: true },
+      });
+    } else {
+      // Brand new user registration from invitation
+      user = await prisma.user.create({
+        data: {
+          email: invitation.email,
+          passwordHash,
+          role: invitation.role,
+          status: 'ACTIVE',
+          isEmailVerified: true,
+          phoneNumber: sanitizedPhone || null,
+          profile: {
+            create: { name: data.name.trim(), bio: `${invitation.role} Staff Member` },
+          },
+        },
+        include: { profile: true },
+      });
+    }
 
     // Mark invitation as ACCEPTED
     await (prisma as any).staffInvitation.update({

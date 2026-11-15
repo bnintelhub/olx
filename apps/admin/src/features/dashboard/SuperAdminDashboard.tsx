@@ -67,7 +67,7 @@ export function SuperAdminDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState('Last 30 Days');
   const [activityFilter, setActivityFilter] = useState<'ALL' | 'LISTINGS' | 'PAYMENTS' | 'USERS' | 'REPORTS'>('ALL');
 
-  const { data: stats, isLoading } = useDashboardStats('SUPER_ADMIN');
+  const { data: stats, isLoading, isConnected } = useDashboardStats('SUPER_ADMIN');
 
   // Real database metrics with zero fake defaults
   const totalUsers = stats?.totalUsers ?? 0;
@@ -105,14 +105,35 @@ export function SuperAdminDashboard() {
   const policyViolationCount = stats?.policyViolationCount ?? 0;
   const hasPendingModeration = pendingAds > 0 || openReports > 0 || spamCount > 0 || policyViolationCount > 0;
 
+  // Real Platform Health
+  const platformHealth = stats?.platformHealth || {
+    apiStatus: 'Operational',
+    mediaStorage: 'Healthy',
+    backgroundJobs: 'Running',
+    serverLoad: 0,
+  };
+
   return (
     <div className="space-y-5 pb-10">
       {/* 1. Header (No redundant avatar/bell since AdminHeader already has them) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Dashboard
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+              Dashboard
+            </h1>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                isConnected
+                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+              }`}
+              title={isConnected ? 'Live WebSocket connected: real-time updates active' : 'Connecting to live WebSocket...'}
+            >
+              <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              {isConnected ? 'Live Realtime' : 'Connecting...'}
+            </span>
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Platform overview, performance and revenue at a glance.
           </p>
@@ -518,38 +539,74 @@ export function SuperAdminDashboard() {
         <div className="lg:col-span-3 space-y-4 flex flex-col justify-between">
           {/* Platform Health */}
           <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-border shadow-[0_2px_10px_rgba(0,0,0,0.03)] p-4 space-y-3">
-            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-border/60">
-              <Activity className="w-4 h-4 text-purple-600" />
-              <h3 className="text-xs font-bold text-slate-900 dark:text-white">Platform Health</h3>
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-border/60">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-purple-600" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white">Platform Health</h3>
+              </div>
+              <span className="flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Realtime
+              </span>
             </div>
             <div className="space-y-2 text-xs">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <CheckCircle2
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      platformHealth.apiStatus === 'Operational' ? 'text-emerald-500' : 'text-amber-500'
+                    }`}
+                  />
                   <span>API Status</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200/50">
-                  Operational
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                    platformHealth.apiStatus === 'Operational'
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200/50'
+                      : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200/50'
+                  }`}
+                >
+                  {platformHealth.apiStatus}
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <CheckCircle2
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      platformHealth.mediaStorage === 'Healthy' ? 'text-emerald-500' : 'text-amber-500'
+                    }`}
+                  />
                   <span>Media Storage</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200/50">
-                  Healthy
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                    platformHealth.mediaStorage === 'Healthy'
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200/50'
+                      : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200/50'
+                  }`}
+                >
+                  {platformHealth.mediaStorage}
                 </span>
               </div>
 
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <CheckCircle2
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      platformHealth.backgroundJobs === 'Running' ? 'text-emerald-500' : 'text-amber-500'
+                    }`}
+                  />
                   <span>Background Jobs</span>
                 </div>
-                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border border-emerald-200/50">
-                  Running
+                <span
+                  className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
+                    platformHealth.backgroundJobs === 'Running'
+                      ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200/50'
+                      : 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400 border-amber-200/50'
+                  }`}
+                >
+                  {platformHealth.backgroundJobs}
                 </span>
               </div>
 
@@ -559,10 +616,15 @@ export function SuperAdminDashboard() {
                     <Layers className="w-3.5 h-3.5 text-purple-500 shrink-0" />
                     <span>Server Load</span>
                   </div>
-                  <span className="text-[11px] font-bold font-mono text-slate-700 dark:text-slate-300">32%</span>
+                  <span className="text-[11px] font-bold font-mono text-slate-700 dark:text-slate-300">
+                    {platformHealth.serverLoad}%
+                  </span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-muted h-1.5 rounded-full overflow-hidden">
-                  <div className="bg-purple-600 h-full rounded-full" style={{ width: '32%' }} />
+                  <div
+                    className="bg-purple-600 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, Math.max(0, platformHealth.serverLoad))}%` }}
+                  />
                 </div>
               </div>
             </div>

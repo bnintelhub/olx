@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   dashboardService,
   AdminStatsResponse,
@@ -7,6 +8,7 @@ import {
   GetUsersParams,
   GetUsersResponse,
 } from '../service/dashboard.service';
+import { getAdminSocket } from '../../../lib/socket';
 
 // Query keys for dashboard caching
 export const DASHBOARD_QUERY_KEYS = {
@@ -25,14 +27,81 @@ export const DASHBOARD_QUERY_KEYS = {
   categories: ['categories-list'] as const,
 };
 
-// 1. Single smart KPI endpoint query hook for stats by role
-export function useDashboardStats(role?: string) {
-  return useQuery<AdminStatsResponse>({
+// 1. Single smart KPI endpoint query hook for stats by role with real-time WebSocket connection
+export function useDashboardStats(role = 'SUPER_ADMIN', enableRealtime = true) {
+  const queryClient = useQueryClient();
+  const [isConnected, setIsConnected] = useState<boolean>(() => {
+    try {
+      return getAdminSocket().connected;
+    } catch {
+      return false;
+    }
+  });
+  const [lastSocketUpdate, setLastSocketUpdate] = useState<Date | null>(null);
+
+  const query = useQuery<AdminStatsResponse>({
     queryKey: DASHBOARD_QUERY_KEYS.stats(role),
     queryFn: () => dashboardService.getStats(role),
     staleTime: 60000,
     refetchOnWindowFocus: false,
   });
+
+  useEffect(() => {
+    if (!enableRealtime) return;
+
+    const socket = getAdminSocket();
+
+    const handleConnect = () => {
+      setIsConnected(true);
+      socket.emit('join_admin_dashboard', { role });
+    };
+
+    const handleDisconnect = () => {
+      setIsConnected(false);
+    };
+
+    const handleDashboardStats = (newStats: AdminStatsResponse) => {
+      if (newStats) {
+        queryClient.setQueryData(DASHBOARD_QUERY_KEYS.stats(role), (oldData: AdminStatsResponse | undefined) => {
+          return {
+            ...oldData,
+            ...newStats,
+          };
+        });
+        setLastSocketUpdate(new Date());
+      }
+    };
+
+    if (socket.connected) {
+      setIsConnected(true);
+      socket.emit('join_admin_dashboard', { role });
+    } else {
+      socket.connect();
+    }
+
+    socket.on('connect', handleConnect);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('admin:dashboard_stats', handleDashboardStats);
+
+    return () => {
+      socket.emit('leave_admin_dashboard');
+      socket.off('connect', handleConnect);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('admin:dashboard_stats', handleDashboardStats);
+    };
+  }, [role, enableRealtime, queryClient]);
+
+  const refreshViaSocket = useCallback(() => {
+    const socket = getAdminSocket();
+    socket.emit('admin:request_stats', { role });
+  }, [role]);
+
+  return {
+    ...query,
+    isConnected,
+    lastSocketUpdate,
+    refreshViaSocket,
+  };
 }
 
 // 2. Pending ads moderation queue hook

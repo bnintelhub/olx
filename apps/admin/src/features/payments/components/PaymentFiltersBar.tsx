@@ -49,7 +49,7 @@ export function PaymentFiltersBar({
   };
 
   return (
-    <div className="bg-card border border-border/80 rounded-2xl p-4 space-y-3.5 shadow-2xs">
+    <div className="bg-white dark:bg-card border border-slate-100 dark:border-border/60 rounded-2xl p-4 space-y-3.5 shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
         {/* Search input (User, Transaction ID, Email, Phone) */}
         <div className="relative flex-1 max-w-md">

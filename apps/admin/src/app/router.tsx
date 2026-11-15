@@ -19,7 +19,6 @@ import { PaymentsPage } from '../features/payments/PaymentsPage';
 import { PromotionsPage } from '../features/promotions/PromotionsPage';
 import { RevenuePolicyPage } from '../features/revenue/RevenuePolicyPage';
 import { SupportPage } from '../features/support/SupportPage';
-import { AnalyticsPage } from '../features/analytics/AnalyticsPage';
 import { RolesPage } from '../features/roles-permissions/RolesPage';
 import { AuditLogsPage } from '../features/audit-logs/AuditLogsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
@@ -183,14 +182,6 @@ export const router = createBrowserRouter([
         element: (
           <RoleGuard allowedRoles={['SUPER_ADMIN', 'CUSTOMER_SUPPORT']}>
             <SupportPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'analytics',
-        element: (
-          <RoleGuard allowedRoles={['SUPER_ADMIN', 'ANALYST']}>
-            <AnalyticsPage />
           </RoleGuard>
         ),
       },

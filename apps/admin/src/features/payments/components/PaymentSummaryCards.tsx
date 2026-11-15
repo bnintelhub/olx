@@ -1,16 +1,11 @@
-import { Card, CardContent } from '../../../components/ui/card';
 import { formatCurrency } from '../../../lib/utils';
 import {
-  IndianRupee,
-  RotateCcw,
-  CheckCircle2,
-  AlertCircle,
   TrendingUp,
-  Percent,
+  CheckCircle2,
+  RotateCcw,
   Layers,
-  ShieldCheck,
-  ArrowDownRight,
   ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 import { RevenueOverviewData } from '../service/payments.service';
 
@@ -24,130 +19,103 @@ export function PaymentSummaryCards({ overview }: PaymentSummaryCardsProps) {
   const fees = overview?.paymentFees ?? 0;
   const refunds = overview?.refundAmount ?? 0;
   const net = overview?.netRevenue ?? 0;
-  const earnings = overview?.platformEarnings ?? 0;
+  const totalTransactions = overview?.totalTransactions ?? 0;
+  const successfulPayments = overview?.successfulPayments ?? 0;
+  const failedPayments = overview?.failedPayments ?? 0;
+  const successRate = overview?.successRate ?? 0;
+  const refundedPayments = overview?.refundedPayments ?? 0;
 
   return (
-    <div className="space-y-4">
-      {/* 1. Strict Financial Waterfall Breakdown Bar */}
-      <div className="bg-card border border-border/80 rounded-2xl p-4 sm:p-5 shadow-2xs">
-        <div className="flex items-center justify-between pb-3 border-b border-border/60">
-          <div>
-            <h3 className="text-sm font-black text-foreground uppercase tracking-wider">
-              Financial Reconciliation Waterfall
-            </h3>
-            <p className="text-[11px] text-muted-foreground">
-              Gross Collection → Deductions (Fees & Refunds) → Net Settlement → Platform Earnings
-            </p>
+    <div className="space-y-3">
+      {/* 1. Minimal 4 KPI Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Gross Collection */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-border/60 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)] space-y-1.5 transition-all">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold">Gross Collection</span>
+            <div className="w-7 h-7 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+              <TrendingUp className="w-3.5 h-3.5" />
+            </div>
           </div>
-          <span className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Audited & Reconciled</span>
-          </span>
+          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {formatCurrency(gross)}
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">{successfulPayments}</span>
+            <span>orders processed</span>
+          </p>
         </div>
 
-        {/* Horizontal Flow Steps */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-3 text-xs">
-          <div className="bg-muted/40 p-3 rounded-xl border border-border/60 space-y-1">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase">1. Gross Collection</span>
-            <p className="text-base font-black text-foreground">{formatCurrency(gross)}</p>
-            <p className="text-[10px] text-muted-foreground">Processed orders</p>
+        {/* Net Settlement */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-border/60 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)] space-y-1.5 transition-all">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold">Net Settlement</span>
+            <div className="w-7 h-7 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+              <ShieldCheck className="w-3.5 h-3.5" />
+            </div>
           </div>
+          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {formatCurrency(net)}
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Bank deposit after fees & refunds
+          </p>
+        </div>
 
-          <div className="bg-rose-50/50 dark:bg-rose-950/20 p-3 rounded-xl border border-rose-200/60 dark:border-rose-900/60 space-y-1">
-            <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase">2. Refunds</span>
-            <p className="text-base font-black text-rose-700 dark:text-rose-400">-{formatCurrency(refunds)}</p>
-            <p className="text-[10px] text-rose-600/80">{overview?.refundedPayments ?? 0} refunded</p>
+        {/* Refunds & Deductions */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-border/60 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)] space-y-1.5 transition-all">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold">Refunds & Fees</span>
+            <div className="w-7 h-7 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center">
+              <RotateCcw className="w-3.5 h-3.5" />
+            </div>
           </div>
+          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {formatCurrency(refunds + fees)}
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1">
+            <span>{refundedPayments} refunded ({formatCurrency(refunds)})</span>
+            <span>•</span>
+            <span>Fees: {formatCurrency(fees)}</span>
+          </p>
+        </div>
 
-          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-3 rounded-xl border border-amber-200/60 dark:border-amber-900/60 space-y-1">
-            <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">3. Gateway Fees</span>
-            <p className="text-base font-black text-amber-700 dark:text-amber-400">-{formatCurrency(fees)}</p>
-            <p className="text-[10px] text-amber-600/80">PayU MDR (2.0%)</p>
+        {/* Total Volume & Success */}
+        <div className="bg-white dark:bg-card rounded-2xl border border-slate-100 dark:border-border/60 p-4 shadow-[0_2px_8px_rgba(0,0,0,0.02)] space-y-1.5 transition-all">
+          <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-semibold">Total Transactions</span>
+            <div className="w-7 h-7 rounded-lg bg-purple-50 dark:bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+              <Layers className="w-3.5 h-3.5" />
+            </div>
           </div>
-
-          <div className="bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-200/60 dark:border-emerald-900/60 space-y-1">
-            <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-400 uppercase">4. Net Collection</span>
-            <p className="text-base font-black text-emerald-800 dark:text-emerald-400">{formatCurrency(net)}</p>
-            <p className="text-[10px] text-emerald-600/80">Net bank deposit</p>
+          <div className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            {totalTransactions.toLocaleString('en-IN')}
           </div>
-
-          <div className="bg-primary/10 p-3 rounded-xl border border-primary/20 space-y-1 col-span-2 sm:col-span-1">
-            <span className="text-[10px] font-bold text-primary uppercase">5. Platform Earnings</span>
-            <p className="text-base font-black text-primary">{formatCurrency(earnings)}</p>
-            <p className="text-[10px] text-primary/80">Retained revenue</p>
-          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+            <span className="text-emerald-600 font-semibold">{successRate}% success</span>
+            <span>•</span>
+            <span className="text-rose-500 font-medium">{failedPayments} failed</span>
+          </p>
         </div>
       </div>
 
-      {/* 2. Top Summary KPI Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Total Transactions */}
-        <Card className="rounded-2xl border-border/70 hover:shadow-md transition">
-          <CardContent className="p-4 space-y-1.5">
-            <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-              <span>Total Transactions</span>
-              <Layers className="w-4 h-4 text-primary" />
-            </div>
-            <div className="text-2xl font-black text-foreground">
-              {(overview?.totalTransactions ?? 0).toLocaleString('en-IN')}
-            </div>
-            <div className="text-[11px] text-muted-foreground font-medium flex items-center gap-1.5">
-              <span className="text-emerald-600 font-bold">{overview?.successfulPayments ?? 0} Successful</span>
-              <span>•</span>
-              <span className="text-rose-600 font-bold">{overview?.failedPayments ?? 0} Failed</span>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Successful Volume */}
-        <Card className="rounded-2xl border-border/70 hover:shadow-md transition">
-          <CardContent className="p-4 space-y-1.5">
-            <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-              <span>Successful Amount</span>
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            </div>
-            <div className="text-2xl font-black text-emerald-600">
-              {formatCurrency(gross)}
-            </div>
-            <div className="text-[11px] text-muted-foreground font-medium">
-              Success rate: <strong className="text-emerald-600">{overview?.successRate}%</strong>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Refunded Amount */}
-        <Card className="rounded-2xl border-border/70 hover:shadow-md transition">
-          <CardContent className="p-4 space-y-1.5">
-            <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-              <span>Refunded Amount</span>
-              <RotateCcw className="w-4 h-4 text-rose-600" />
-            </div>
-            <div className="text-2xl font-black text-rose-600">
-              {formatCurrency(refunds)}
-            </div>
-            <div className="text-[11px] text-muted-foreground font-medium">
-              Refund rate: <strong className="text-rose-600">{overview?.refundRate}%</strong>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Net Collection */}
-        <Card className="rounded-2xl border-border/70 hover:shadow-md transition">
-          <CardContent className="p-4 space-y-1.5">
-            <div className="flex items-center justify-between text-muted-foreground text-xs font-bold uppercase tracking-wider">
-              <span>Net Collection</span>
-              <IndianRupee className="w-4 h-4 text-purple-600" />
-            </div>
-            <div className="text-2xl font-black text-foreground">
-              {formatCurrency(net)}
-            </div>
-            <div className="text-[11px] text-muted-foreground font-medium">
-              Pending in pipeline: <strong className="text-amber-600">{overview?.pendingPayments ?? 0}</strong>
-            </div>
-          </CardContent>
-        </Card>
+      {/* 2. Compact Minimal Reconciliation Flow Strip */}
+      <div className="flex items-center justify-between text-xs px-3.5 py-2 rounded-xl bg-slate-50 dark:bg-muted/40 border border-slate-100 dark:border-border/60 text-slate-600 dark:text-slate-400">
+        <div className="flex items-center gap-2 flex-wrap text-[11px]">
+          <span className="font-semibold text-slate-700 dark:text-slate-300">Reconciliation:</span>
+          <span className="text-slate-800 dark:text-slate-200">Gross {formatCurrency(gross)}</span>
+          <ArrowRight className="w-3 h-3 text-slate-400" />
+          <span className="text-rose-600 dark:text-rose-400">Refunds -{formatCurrency(refunds)}</span>
+          <ArrowRight className="w-3 h-3 text-slate-400" />
+          <span className="text-amber-600 dark:text-amber-400">Fees -{formatCurrency(fees)}</span>
+          <ArrowRight className="w-3 h-3 text-slate-400" />
+          <span className="font-bold text-emerald-600 dark:text-emerald-400">Net {formatCurrency(net)}</span>
+        </div>
+        <div className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
+          <CheckCircle2 className="w-3.5 h-3.5" />
+          <span>Reconciled</span>
+        </div>
       </div>
     </div>
   );
 }
-

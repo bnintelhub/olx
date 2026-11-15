@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, Command, Github } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useGsapModal } from '@/lib/gsapModalAnimation';
 
 export const AuthModal: React.FC = () => {
   const { isAuthModalOpen, closeAuthModal, loginWithTokens } = useAuth();
+  const { overlayRef, contentRef, requestClose } = useGsapModal(isAuthModalOpen, closeAuthModal);
 
   const [mode, setMode] = useState<'REGISTER' | 'LOGIN'>('REGISTER');
   const [step, setStep] = useState<'INPUT' | 'OTP'>('INPUT');
@@ -136,11 +138,20 @@ export const AuthModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-4xl overflow-hidden rounded-2xl bg-zinc-950 border border-zinc-800 text-zinc-100 shadow-2xl grid md:grid-cols-2">
+    <div
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) requestClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+    >
+      <div
+        ref={contentRef}
+        className="relative w-full max-w-4xl overflow-hidden rounded-2xl bg-zinc-950 border border-zinc-800 text-zinc-100 shadow-2xl grid md:grid-cols-2"
+      >
         {/* Close Button */}
         <button
-          onClick={closeAuthModal}
+          onClick={requestClose}
           className="absolute right-4 top-4 z-20 rounded-full p-2 text-zinc-400 hover:bg-zinc-800 hover:text-white transition cursor-pointer"
         >
           <X size={18} />

@@ -13,6 +13,7 @@ import {
 import { LocationItem } from '@/types';
 import { locationsService } from '../service/locations.service';
 import { toast } from 'sonner';
+import { useGsapModal } from '@/lib/gsapModalAnimation';
 
 interface LocationPickerModalProps {
   isOpen: boolean;
@@ -42,6 +43,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
   // Hierarchy drill-down navigation state
   const [drillStack, setDrillStack] = useState<LocationItem[]>([]);
+  const { overlayRef, contentRef, requestClose } = useGsapModal(isOpen, onClose);
   const [currentLevelChildren, setCurrentLevelChildren] = useState<LocationItem[]>([]);
   const [isLoadingLevel, setIsLoadingLevel] = useState(false);
 
@@ -195,8 +197,17 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
-      <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[88vh] animate-fade-in">
+    <div
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) requestClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4"
+    >
+      <div
+        ref={contentRef}
+        className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl border border-gray-100 overflow-hidden flex flex-col max-h-[88vh]"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50/50">
           <div className="flex items-center gap-2.5">
@@ -209,7 +220,7 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
             </div>
           </div>
           <button
-            onClick={onClose}
+            onClick={requestClose}
             className="p-1.5 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition cursor-pointer"
           >
             <X className="w-5 h-5" />

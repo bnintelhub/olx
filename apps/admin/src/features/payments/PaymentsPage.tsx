@@ -89,8 +89,8 @@ export function PaymentsPage() {
       {/* 1. Header with View Tabs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black tracking-tight text-foreground">Payments & Settlements</h1>
-          <p className="text-xs text-muted-foreground">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">Payments & Settlements</h1>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Complete transaction reconciliation ledger, gateway logs, and refund operations.
           </p>
         </div>
@@ -122,11 +122,11 @@ export function PaymentsPage() {
         </div>
       </div>
 
-      {/* 2. Strict Financial Waterfall & Summary Cards */}
-      <PaymentSummaryCards overview={overview} isLoading={isOverviewLoading} />
-
       {activeTab === 'TRANSACTIONS' ? (
         <>
+          {/* 2. Financial Summary Cards */}
+          <PaymentSummaryCards overview={overview} isLoading={isOverviewLoading} />
+
           {/* 3. Filter Bar */}
           <PaymentFiltersBar
             search={search}

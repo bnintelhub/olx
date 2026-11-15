@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
 import { getGroupedNavForRole, ROLE_CONFIGS } from '../../lib/permissions';
+import { useDashboardStats } from '../../features/dashboard/hook/useDashboardQuery';
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -25,6 +26,25 @@ export function NavMain() {
   const navGroups = getGroupedNavForRole(effectiveRole);
   const { isMobile, setOpenMobile, state } = useSidebar();
   const location = useLocation();
+
+  // Real live operational counts for sidebar badges with zero dummy fallbacks
+  const { data: stats } = useDashboardStats(effectiveRole);
+
+  const getDynamicBadge = (href: string): string | undefined => {
+    if (href === '/moderation' || (href === '/dashboard' && effectiveRole === 'MODERATOR')) {
+      const count = stats?.pendingAds ?? stats?.pendingReviews ?? 0;
+      return count > 0 ? String(count) : undefined;
+    }
+    if (href === '/reports') {
+      const count = stats?.openReports ?? 0;
+      return count > 0 ? String(count) : undefined;
+    }
+    if (href === '/support') {
+      const count = stats?.openTickets ?? 0;
+      return count > 0 ? String(count) : undefined;
+    }
+    return undefined;
+  };
 
   const handleLinkClick = () => {
     if (isMobile) {
@@ -65,31 +85,29 @@ export function NavMain() {
       </div>
 
       {/* Grouped Navigation Sections */}
-      {navGroups.map((group) => (
-        <SidebarGroup key={group.label} className="py-1 px-2">
-          <SidebarGroupLabel className="text-[10px] font-extrabold text-sidebar-foreground/70 tracking-wider uppercase pl-3.5 pr-2 pt-3 pb-1 mb-0.5 group-data-[collapsible=icon]:hidden flex items-center gap-1.5">
-            <span className="w-1.5 h-1 rounded-full bg-primary/40 inline-block shrink-0" />
-            <span>{group.label}</span>
-          </SidebarGroupLabel>
-          <SidebarMenu>
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const currentPath = location.pathname + location.search;
-              const isExactRoute =
-                item.href === '/dashboard' ||
-                item.href === '/reports' ||
-                item.href === '/moderation' ||
-                item.href === '/listings' ||
-                item.href === '/users' ||
-                item.href === '/payments' ||
-                item.href === '/promotions' ||
-                item.href === '/revenue-policy';
+      {(() => {
+        const currentPath = location.pathname + location.search;
+        const allNavHrefs = navGroups.flatMap((g) => g.items.map((i) => i.href));
+        const hasExactQueryMatch = allNavHrefs.includes(currentPath);
 
-              const isActive = item.href.includes('?')
-                ? currentPath === item.href
-                : isExactRoute
-                ? location.pathname === item.href
-                : location.pathname === item.href || location.pathname.startsWith(item.href + '/');
+        return navGroups.map((group) => (
+          <SidebarGroup key={group.label} className="py-1 px-2">
+            <SidebarGroupLabel className="text-[10px] font-extrabold text-sidebar-foreground/70 tracking-wider uppercase pl-3.5 pr-2 pt-3 pb-1 mb-0.5 group-data-[collapsible=icon]:hidden flex items-center gap-1.5">
+              <span className="w-1.5 h-1 rounded-full bg-primary/40 inline-block shrink-0" />
+              <span>{group.label}</span>
+            </SidebarGroupLabel>
+            <SidebarMenu>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive = hasExactQueryMatch
+                  ? item.href === currentPath
+                  : item.href === location.pathname ||
+                    (!item.href.includes('?') &&
+                      item.href !== '/dashboard' &&
+                      item.href !== '/' &&
+                      location.pathname.startsWith(item.href + '/'));
+
+                const dynamicBadge = getDynamicBadge(item.href) || item.badge;
 
               return (
                 <SidebarMenuItem key={`${item.href}-${item.title}`}>
@@ -109,16 +127,16 @@ export function NavMain() {
                       <span className="truncate group-data-[collapsible=icon]:hidden font-medium text-xs">
                         {item.title}
                       </span>
-                      {item.badge && (
+                      {dynamicBadge && (
                         <SidebarMenuBadge
                           className={cn(
                             'group-data-[collapsible=icon]:hidden ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full',
-                            item.badgeVariant === 'danger'
+                            item.badgeVariant === 'danger' || item.href === '/moderation'
                               ? 'bg-destructive text-destructive-foreground'
                               : 'bg-amber-500/20 text-amber-700 dark:text-amber-400'
                           )}
                         >
-                          {item.badge}
+                          {dynamicBadge}
                         </SidebarMenuBadge>
                       )}
                     </NavLink>
@@ -128,7 +146,7 @@ export function NavMain() {
             })}
           </SidebarMenu>
         </SidebarGroup>
-      ))}
+      ))})()}
     </div>
   );
 }

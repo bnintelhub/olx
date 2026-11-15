@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CheckoutStep, CheckoutPlan } from './CheckoutStep';
+import { useGsapModal } from '@/lib/gsapModalAnimation';
 
 export interface ExtraPackage extends CheckoutPlan {
   badge?: string;
@@ -44,6 +45,7 @@ export const PricingUpgradeModal: React.FC<PricingUpgradeModalProps> = ({
   const [tab, setTab] = useState<'ONE_TIME' | 'SELLER'>('ONE_TIME');
   const [selectedPlanId, setSelectedPlanId] = useState<string>('extra_15');
   const [view, setView] = useState<'PLANS' | 'CHECKOUT'>('PLANS');
+  const { overlayRef, contentRef, requestClose } = useGsapModal(isOpen, onClose);
 
   useEffect(() => {
     if (isOpen) {
@@ -163,8 +165,17 @@ export const PricingUpgradeModal: React.FC<PricingUpgradeModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-xs overflow-hidden animate-in fade-in duration-150">
-      <div className="relative w-full max-w-6xl max-h-[94vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden">
+    <div
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) requestClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-xs overflow-hidden"
+    >
+      <div
+        ref={contentRef}
+        className="relative w-full max-w-6xl max-h-[94vh] flex flex-col bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden"
+      >
         {/* Header */}
         <div className="px-6 sm:px-8 pt-6 pb-4 border-b border-slate-100 flex items-start justify-between">
           <div className="space-y-1.5 flex-1 pr-4">
@@ -208,7 +219,7 @@ export const PricingUpgradeModal: React.FC<PricingUpgradeModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
             >
               <X className="w-5 h-5" />
@@ -223,7 +234,7 @@ export const PricingUpgradeModal: React.FC<PricingUpgradeModalProps> = ({
               selectedPlan={activePlan}
               onBack={() => setView('PLANS')}
               onSuccess={handleCheckoutSuccess}
-              onClose={onClose}
+              onClose={requestClose}
             />
           ) : (
             <>

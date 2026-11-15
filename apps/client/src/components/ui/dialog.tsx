@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
+import { useGsapModal } from '@/lib/gsapModalAnimation';
 
 export interface DialogProps {
   open: boolean;
@@ -10,18 +11,32 @@ export interface DialogProps {
 }
 
 export function Dialog({ open, onOpenChange, children, className }: DialogProps) {
+  const { overlayRef, contentRef, requestClose } = useGsapModal(open, () => onOpenChange(false));
+
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      ref={overlayRef}
+      onClick={(e) => {
+        if (e.target === overlayRef.current) requestClose();
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    >
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
-        onClick={() => onOpenChange(false)}
+        onClick={requestClose}
       />
-      <div className={cn("relative z-50 w-full max-w-lg rounded-2xl border border-[#E5EAED] bg-white p-6 shadow-2xl animate-in fade-in-0 zoom-in-95", className)}>
+      <div
+        ref={contentRef}
+        className={cn(
+          "relative z-50 w-full max-w-lg rounded-2xl border border-[#E5EAED] bg-white p-6 shadow-2xl",
+          className
+        )}
+      >
         {children}
         <button
-          onClick={() => onOpenChange(false)}
+          onClick={requestClose}
           className="absolute right-4 top-4 rounded-full p-1 text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors cursor-pointer"
         >
           <X className="h-4 w-4" />

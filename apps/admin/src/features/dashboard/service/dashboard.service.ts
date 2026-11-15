@@ -28,6 +28,13 @@ export interface AdminStatsResponse {
   totalTransactions?: number;
   currency?: string;
   operationalStatus?: string;
+  platformHealth?: {
+    apiStatus: string;
+    mediaStorage: string;
+    backgroundJobs: string;
+    serverLoad: number;
+    uptimeSeconds?: number;
+  };
   statusDistribution?: Array<{
     name: string;
     value: number;
