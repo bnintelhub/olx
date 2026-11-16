@@ -1,5 +1,17 @@
 # OLX Marketplace Monorepo — Engineering & Agent Guidelines
 
+> [!CAUTION]
+> ### 🔒 CRITICAL SYSTEM POLICY: PROTECTED CHAT & REALTIME SUBSYSTEM (LOCKED)
+> The Real-Time Chat & Messaging system across all workspaces is **PROTECTED & LOCKED**:
+> - **Backend**: `olx/apps/server/src/modules/chat/**` (`chat.service.ts`, `chat.socket.ts`, `chat.controller.ts`, `chat.routes.ts`, `fcm-decision.service.ts`).
+> - **Web Client**: `olx/apps/client/src/features/chat/**` (`ChatMessageThread.tsx`, `ChatPage.tsx`, `ChatModal.tsx`, `chatSocket.service.ts`).
+> - **Mobile Client (Flutter)**: `olx-app/lib/features/chat/**`.
+> 
+> **STRICT AGENT RULES:**
+> 1. **DO NOT MODIFY WITHOUT EXPLICIT PERMISSION**: No agent may refactor, rewrite, modify, or delete any chat file without **first explaining the proposed change and obtaining explicit affirmative confirmation from the user**.
+> 2. **PRESERVE REALTIME SYNC CONTRACTS**: The Socket.IO events (`message.send`, `message.sent`, `message.new`, `message.delivered`, `message.read`, `message.delete`, `typing.start`, `typing.stop`), message deduplication (`clientMessageId`, `id`), and image variant pipelines are stabilized and synchronized across web, mobile, and server. Any unauthorized modification will break cross-platform real-time chat parity.
+> 3. **MODULARITY RULE**: Any modified file in the chat ecosystem must remain focused and **under 300 lines of code**.
+
 This document provides architectural standards, directory mappings, coding conventions, and operational workflows for AI coding agents and human engineers working on the OLX Marketplace codebase.
 
 ---

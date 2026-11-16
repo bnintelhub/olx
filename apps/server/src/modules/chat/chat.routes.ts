@@ -10,6 +10,8 @@ export async function chatRoutes(fastify: FastifyInstance) {
   fastify.get('/conversations/:id/messages', auth, ChatController.getMessages);
   fastify.post('/conversations/:id/messages', auth, ChatController.sendMessage);
   fastify.patch('/conversations/:id/read', auth, ChatController.markAsRead);
+  fastify.patch('/conversations/:id/pin', auth, ChatController.togglePin);
+  fastify.patch('/conversations/:id/archive', auth, ChatController.toggleArchive);
 
   // Messages
   fastify.delete('/messages/:messageId', auth, ChatController.deleteMessage);

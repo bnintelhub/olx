@@ -24,6 +24,10 @@ export interface ChatConversationSummary {
   otherParty: ChatParticipant;
   lastMessageText: string | null;
   lastMessageAt: Date | null;
+  lastActivityAt?: Date | null;
+  isPinned: boolean;
+  pinnedAt?: Date | null;
+  isArchived: boolean;
   unreadCount: number;
   isBlocked: boolean;
   status: string;

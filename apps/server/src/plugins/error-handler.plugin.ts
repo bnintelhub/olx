@@ -52,6 +52,20 @@ export const errorHandlerPlugin = fp(async (fastify: FastifyInstance) => {
       });
     }
 
+    // Fastify HTTP 4xx Client Errors (e.g. 400 Bad Request, 415 Unsupported Media Type, 413 Payload Too Large)
+    const statusCode = (error as any).statusCode;
+    if (statusCode && statusCode >= 400 && statusCode < 500) {
+      return reply.status(statusCode).send({
+        success: false,
+        error: {
+          code: (error as any).code || 'BAD_REQUEST',
+          message: error.message,
+          details: process.env.NODE_ENV === 'development' ? (error as any).details || null : null,
+        },
+        meta: { timestamp, path: request.url, requestId },
+      });
+    }
+
     // Fallback 500
     request.log.error(error);
     return reply.status(500).send({

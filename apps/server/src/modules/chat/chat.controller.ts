@@ -1,6 +1,6 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { ChatService } from './chat.service';
-import { broadcastChatMessage, getChatIO } from './chat.socket';
+import { broadcastChatMessage, broadcastMessageDeleted, getChatIO } from './chat.socket';
 import {
   startConversationSchema,
   sendMessageSchema,
@@ -57,7 +57,9 @@ export class ChatController {
       clientMessageId,
       replyToMessageId,
     });
-    broadcastChatMessage(id, result.message, userId, result.message.receiverId);
+    if (!(result as any).isDuplicate) {
+      broadcastChatMessage(id, result.message, userId, result.message.receiverId);
+    }
     return reply.status(201).send({ success: true, data: result.message, safetyNotice: result.safetyNotice });
   }
 
@@ -76,6 +78,17 @@ export class ChatController {
   static async deleteMessage(request: FastifyRequest, reply: FastifyReply) {
     const { messageId } = request.params as { messageId: string };
     const result = await ChatService.deleteMessage(request.user!.id, messageId);
+    if (result.conversationId) {
+      broadcastMessageDeleted(
+        result.conversationId,
+        result.messageId,
+        request.user!.id,
+        result.buyerId,
+        result.sellerId,
+        result.isLastMessage,
+        result.clientMessageId
+      );
+    }
     return reply.status(200).send({ success: true, data: result });
   }
 
@@ -95,5 +108,19 @@ export class ChatController {
     const body = reportChatSchema.parse(request.body);
     const result = await ChatService.reportChat(request.user!.id, body);
     return reply.status(201).send({ success: true, data: result });
+  }
+
+  static async togglePin(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const { isPinned } = (request.body as { isPinned?: boolean }) || {};
+    const result = await ChatService.togglePinConversation(request.user!.id, id, isPinned);
+    return reply.status(200).send({ success: true, data: result });
+  }
+
+  static async toggleArchive(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const { isArchived } = (request.body as { isArchived?: boolean }) || {};
+    const result = await ChatService.toggleArchiveConversation(request.user!.id, id, isArchived);
+    return reply.status(200).send({ success: true, data: result });
   }
 }

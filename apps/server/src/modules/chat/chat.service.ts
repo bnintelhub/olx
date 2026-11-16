@@ -104,6 +104,7 @@ export class ChatService {
           const createdConv = await tx.conversation.create({
             data: {
               adId, buyerId, sellerId, lastMessageText: text.slice(0, 500), lastMessageAt: new Date(),
+              lastActivityAt: new Date(),
               buyerUnreadCount: 0, sellerUnreadCount: 1, status: 'ACTIVE',
             },
           });
@@ -166,21 +167,24 @@ export class ChatService {
   static async getConversations(userId: string, filter: 'all' | 'archived' = 'all') {
     const where: Prisma.ConversationWhereInput = filter === 'archived'
       ? {
-          OR: [
-            { buyerId: userId, buyerDeletedAt: null, buyerArchivedAt: { not: null } },
-            { sellerId: userId, sellerDeletedAt: null, sellerArchivedAt: { not: null } },
-          ],
-        }
+        OR: [
+          { buyerId: userId, buyerDeletedAt: null, buyerArchivedAt: { not: null } },
+          { sellerId: userId, sellerDeletedAt: null, sellerArchivedAt: { not: null } },
+        ],
+      }
       : {
-          OR: [
-            { buyerId: userId, buyerDeletedAt: null, buyerArchivedAt: null },
-            { sellerId: userId, sellerDeletedAt: null, sellerArchivedAt: null },
-          ],
-        };
+        OR: [
+          { buyerId: userId, buyerDeletedAt: null, buyerArchivedAt: null },
+          { sellerId: userId, sellerDeletedAt: null, sellerArchivedAt: null },
+        ],
+      };
 
     const conversations = await prisma.conversation.findMany({
       where,
-      orderBy: { lastMessageAt: 'desc' },
+      orderBy: [
+        { lastMessageAt: 'desc' },
+        { createdAt: 'desc' },
+      ],
       include: {
         ad: {
           select: {
@@ -201,12 +205,16 @@ export class ChatService {
     const onlineMap = await ChatPresenceService.getOnlineStatusBatch(otherUserIds);
 
     let totalUnread = 0;
-    const formatted: ChatConversationSummary[] = conversations.map((conv) => {
+    const formatted: ChatConversationSummary[] = conversations.map((conv: any) => {
       const isBuyer = conv.buyerId === userId;
       const unread = isBuyer ? conv.buyerUnreadCount : conv.sellerUnreadCount;
       totalUnread += unread;
 
       const otherParty = isBuyer ? conv.seller : conv.buyer;
+      const pinnedAt: Date | null = isBuyer ? (conv.buyerPinnedAt ?? null) : (conv.sellerPinnedAt ?? null);
+      const isPinned = Boolean(pinnedAt);
+      const isArchived = Boolean(isBuyer ? conv.buyerArchivedAt : conv.sellerArchivedAt);
+      const lastActivityAt = conv.lastActivityAt || conv.lastMessageAt || conv.createdAt;
 
       return {
         id: conv.id, adId: conv.adId,
@@ -220,8 +228,30 @@ export class ChatService {
           isOnline: Boolean(onlineMap[otherParty.id]),
         },
         lastMessageText: conv.lastMessageText, lastMessageAt: conv.lastMessageAt,
+        lastActivityAt,
+        isPinned,
+        pinnedAt,
+        isArchived,
         unreadCount: unread, isBlocked: conv.isBlocked, status: conv.status,
       };
+    });
+
+    // Multi-level WhatsApp-style ordering:
+    // 1. isPinned DESC: Pinned chats sit above unpinned chats
+    // 2. pinnedAt DESC: Orders pinned chats so the most recently pinned sits at the very top
+    // 3. lastActivityAt DESC: Places the newest chat or latest message right at the top of the unpinned list
+    formatted.sort((a, b) => {
+      if (a.isPinned !== b.isPinned) {
+        return a.isPinned ? -1 : 1;
+      }
+      if (a.isPinned && b.isPinned) {
+        const pinA = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+        const pinB = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+        if (pinB !== pinA) return pinB - pinA;
+      }
+      const actA = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : (a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0);
+      const actB = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : (b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0);
+      return actB - actA;
     });
 
     return { conversations: formatted, totalUnread };
@@ -259,12 +289,29 @@ export class ChatService {
     const nextCursor = hasMore ? pagedMessages[pagedMessages.length - 1].id : null;
 
     // Mask soft-deleted messages for end users
-    const formatted: ChatMessageItem[] = pagedMessages.reverse().map((m) => ({
+    const rawFormatted: ChatMessageItem[] = pagedMessages.reverse().map((m) => ({
       id: m.id, conversationId: m.conversationId, senderId: m.senderId, receiverId: m.receiverId,
       type: m.type, content: m.deletedAt ? 'This message was deleted' : m.content,
       attachmentUrl: m.deletedAt ? null : (m.attachmentUrl ? toPublicMediaUrl(m.attachmentUrl) : null), replyToMessageId: m.replyToMessageId,
+      clientMessageId: m.clientMessageId || null,
       status: m.status, isDeleted: Boolean(m.deletedAt), createdAt: m.createdAt, sender: m.sender,
     }));
+
+    // Deduplicate any historical duplicate rows from race conditions
+    const formatted: ChatMessageItem[] = [];
+    for (const msg of rawFormatted) {
+      const isDup = formatted.some((prev) => {
+        if (prev.senderId !== msg.senderId) return false;
+        const timeDiff = Math.abs(new Date(prev.createdAt).getTime() - new Date(msg.createdAt).getTime());
+        if (timeDiff > 3500) return false;
+        if (msg.attachmentUrl && prev.attachmentUrl === msg.attachmentUrl) return true;
+        if (msg.content && prev.content === msg.content) return true;
+        return false;
+      });
+      if (!isDup) {
+        formatted.push(msg);
+      }
+    }
 
     const isBuyer = conversation.buyerId === userId;
     const otherParty = isBuyer ? conversation.seller : conversation.buyer;
@@ -290,7 +337,7 @@ export class ChatService {
   }
 
   // Transactional, rate-limited message creation with idempotency
-  static async sendMessage(userId: string, payload: SendMessagePayload): Promise<{ message: ChatMessageItem; safetyNotice?: string | null }> {
+  static async sendMessage(userId: string, payload: SendMessagePayload): Promise<{ message: ChatMessageItem; safetyNotice?: string | null; isDuplicate?: boolean }> {
     const { conversationId, content, attachmentUrl, clientMessageId, replyToMessageId } = payload;
     const textContent = (content || '').trim();
 
@@ -315,8 +362,31 @@ export class ChatService {
             attachmentUrl: existing.attachmentUrl ? toPublicMediaUrl(existing.attachmentUrl) : null,
             isDeleted: Boolean(existing.deletedAt),
           },
+          isDuplicate: true,
         };
       }
+    }
+
+    // Rapid duplicate suppression (accidental double tap or simultaneous socket+rest)
+    const recentDuplicate = await prisma.message.findFirst({
+      where: {
+        conversationId,
+        senderId: userId,
+        content: textContent,
+        attachmentUrl: attachmentUrl || null,
+        createdAt: { gte: new Date(Date.now() - 3500) },
+      },
+      include: { sender: { select: { id: true, profile: { select: { name: true, avatarUrl: true } } } } },
+    });
+    if (recentDuplicate) {
+      return {
+        message: {
+          ...recentDuplicate,
+          attachmentUrl: recentDuplicate.attachmentUrl ? toPublicMediaUrl(recentDuplicate.attachmentUrl) : null,
+          isDeleted: Boolean(recentDuplicate.deletedAt),
+        },
+        isDuplicate: true,
+      };
     }
 
     // Conversation authorization
@@ -398,7 +468,7 @@ export class ChatService {
         await tx.mediaAsset.updateMany({
           where: { id: mediaAssetId },
           data: { entityType: 'CHAT', entityId: created.id, status: 'READY' },
-        }).catch(() => {});
+        }).catch(() => { });
       }
 
       await tx.conversation.update({
@@ -407,6 +477,7 @@ export class ChatService {
           lastMessageId: created.id,
           lastMessageText: (textContent || 'Photo').slice(0, 500),
           lastMessageAt: new Date(),
+          lastActivityAt: new Date(),
           buyerUnreadCount: isBuyer ? conversation.buyerUnreadCount : { increment: 1 },
           sellerUnreadCount: isBuyer ? { increment: 1 } : conversation.sellerUnreadCount,
           buyerDeletedAt: null, // restore for buyer if previously hidden
@@ -461,16 +532,51 @@ export class ChatService {
 
   // Soft Delete a message
   static async deleteMessage(userId: string, messageId: string) {
-    const msg = await prisma.message.findUnique({ where: { id: messageId } });
+    let msg = await prisma.message.findUnique({
+      where: { id: messageId },
+      include: {
+        conversation: {
+          select: { id: true, buyerId: true, sellerId: true, lastMessageId: true },
+        },
+      },
+    });
+
+    if (!msg) {
+      msg = await prisma.message.findFirst({
+        where: { clientMessageId: messageId },
+        include: {
+          conversation: {
+            select: { id: true, buyerId: true, sellerId: true, lastMessageId: true },
+          },
+        },
+      });
+    }
+
     if (!msg) throw new AppError(404, 'MESSAGE_NOT_FOUND', 'Message not found');
     if (msg.senderId !== userId) throw new AppError(403, 'FORBIDDEN', 'You can only delete your own messages');
 
     await prisma.message.update({
-      where: { id: messageId },
+      where: { id: msg.id },
       data: { deletedAt: new Date() },
     });
 
-    return { success: true };
+    const isLastMessage = msg.conversation?.lastMessageId === msg.id;
+    if (isLastMessage && msg.conversation) {
+      await prisma.conversation.update({
+        where: { id: msg.conversationId },
+        data: { lastMessageText: 'This message was deleted' },
+      });
+    }
+
+    return {
+      success: true,
+      conversationId: msg.conversationId,
+      messageId: msg.id,
+      clientMessageId: msg.clientMessageId,
+      buyerId: msg.conversation?.buyerId,
+      sellerId: msg.conversation?.sellerId,
+      isLastMessage,
+    };
   }
 
   // Block a user
@@ -510,5 +616,63 @@ export class ChatService {
       },
     });
     return { success: true, reportId: report.id, priority };
+  }
+
+  // Pin or unpin a conversation for the user (WhatsApp style)
+  static async togglePinConversation(userId: string, conversationId: string, isPinned?: boolean) {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conversation) throw new AppError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+    if (conversation.buyerId !== userId && conversation.sellerId !== userId) {
+      throw new AppError(403, 'FORBIDDEN', 'Access denied to this conversation');
+    }
+
+    const isBuyer = conversation.buyerId === userId;
+    const currentPinned = isBuyer ? Boolean((conversation as any).buyerPinnedAt) : Boolean((conversation as any).sellerPinnedAt);
+    const newPinned = isPinned !== undefined ? isPinned : !currentPinned;
+    const newPinnedAt = newPinned ? new Date() : null;
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: (isBuyer
+        ? { buyerPinnedAt: newPinnedAt }
+        : { sellerPinnedAt: newPinnedAt }) as any,
+    });
+
+    return {
+      conversationId,
+      isPinned: newPinned,
+      pinnedAt: newPinnedAt,
+    };
+  }
+
+  // Archive or unarchive a conversation for the user
+  static async toggleArchiveConversation(userId: string, conversationId: string, isArchived?: boolean) {
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+    if (!conversation) throw new AppError(404, 'CONVERSATION_NOT_FOUND', 'Conversation not found');
+    if (conversation.buyerId !== userId && conversation.sellerId !== userId) {
+      throw new AppError(403, 'FORBIDDEN', 'Access denied to this conversation');
+    }
+
+    const isBuyer = conversation.buyerId === userId;
+    const currentArchived = isBuyer ? Boolean(conversation.buyerArchivedAt) : Boolean(conversation.sellerArchivedAt);
+    const newArchived = isArchived !== undefined ? isArchived : !currentArchived;
+    const newArchivedAt = newArchived ? new Date() : null;
+
+    await prisma.conversation.update({
+      where: { id: conversationId },
+      data: isBuyer
+        ? { buyerArchivedAt: newArchivedAt }
+        : { sellerArchivedAt: newArchivedAt },
+    });
+
+    return {
+      conversationId,
+      isArchived: newArchived,
+      archivedAt: newArchivedAt,
+    };
   }
 }

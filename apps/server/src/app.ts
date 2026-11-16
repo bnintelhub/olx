@@ -70,6 +70,19 @@ export async function buildApp(): Promise<FastifyInstance> {
     }
   });
 
+  // Gracefully handle empty application/json payloads (e.g. PATCH/POST with no body) as {} instead of 500/FST_ERR_CTP_EMPTY_JSON_BODY
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, defaultDone) => {
+    if (!body || (typeof body === 'string' && body.trim() === '')) {
+      return defaultDone(null, {});
+    }
+    try {
+      const parsed = JSON.parse(typeof body === 'string' ? body : body.toString('utf-8'));
+      defaultDone(null, parsed);
+    } catch (err: any) {
+      defaultDone(err, undefined);
+    }
+  });
+
   // Plugins
   await app.register(corsPlugin);
   await app.register(rateLimitPlugin);

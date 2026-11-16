@@ -34,6 +34,11 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
   const socketRef = useRef<Socket | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
+  const otherTypingTimerRef = useRef<any>(null);
+  const activeConvIdRef = useRef<string | null>(null);
+  activeConvIdRef.current = activeConvId;
+  const userIdRef = useRef<string | undefined>(undefined);
+  userIdRef.current = user?.id;
 
   const getActiveToken = (): string | null => {
     return token || getInMemoryAccessToken();
@@ -61,8 +66,31 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
 
     socket.on('message.new', (msg: MessageItem) => {
       if (msg.conversationId === activeConvId) {
+        if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+        setIsOtherTyping(false);
         setMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
+          const idx = prev.findIndex(
+            (m) =>
+              m.id === msg.id ||
+              ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
+              (m.id.startsWith('temp-') &&
+                m.senderId === msg.senderId &&
+                (m.content === msg.content || (msg.attachmentUrl && m.attachmentUrl === msg.attachmentUrl)))
+          );
+          if (idx !== -1) {
+            const next = [...prev];
+            next[idx] = { ...msg };
+            return next;
+          }
+          const isDuplicate = prev.some(
+            (m) =>
+              m.id === msg.id ||
+              (m.senderId === msg.senderId &&
+                ((msg.attachmentUrl && m.attachmentUrl === msg.attachmentUrl) ||
+                  (msg.content && m.content === msg.content)) &&
+                Math.abs(new Date(m.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 3500)
+          );
+          if (isDuplicate) return prev;
           return [...prev, msg];
         });
         socket.emit('message.read', { conversationId: activeConvId });
@@ -96,14 +124,35 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
       }
     });
 
+    socket.on('message.deleted', (data: { conversationId: string; messageId: string; clientMessageId?: string }) => {
+      if (data.conversationId === activeConvIdRef.current) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === data.messageId ||
+            (data.clientMessageId && m.id === data.clientMessageId) ||
+            ((m as any).clientMessageId &&
+              ((m as any).clientMessageId === data.messageId ||
+               (data.clientMessageId && (m as any).clientMessageId === data.clientMessageId)))
+              ? { ...m, content: 'This message was deleted', isDeleted: true, attachmentUrl: undefined }
+              : m
+          )
+        );
+      }
+    });
+
     socket.on('typing.start', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvId && data.userId !== user?.id) {
+      if (data.conversationId === activeConvIdRef.current && data.userId && data.userId !== userIdRef.current) {
         setIsOtherTyping(true);
+        if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+        otherTypingTimerRef.current = setTimeout(() => {
+          setIsOtherTyping(false);
+        }, 2500);
       }
     });
 
     socket.on('typing.stop', (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvId && data.userId !== user?.id) {
+      if (data.conversationId === activeConvIdRef.current && data.userId !== userIdRef.current) {
+        if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
         setIsOtherTyping(false);
       }
     });
@@ -184,6 +233,10 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
   useEffect(() => {
     if (!activeConvId || !user) return;
 
+    // Clear typing state when switching conversations
+    if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+    setIsOtherTyping(false);
+
     const fetchMessages = async () => {
       const activeToken = getActiveToken();
       try {
@@ -220,17 +273,28 @@ export const ChatModal: React.FC<ChatModalProps> = ({ isOpen, onClose, initialAd
   // 5. Handle typing indicator
   const handleInputChange = (val: string) => {
     setInputText(val);
-    if (activeConvId && socketRef.current) {
-      socketRef.current.emit('typing.start', { conversationId: activeConvId });
-      clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => {
-        socketRef.current?.emit('typing.stop', { conversationId: activeConvId });
-      }, 2000);
+    if (!activeConvId || !socketRef.current) return;
+
+    if (val.trim().length === 0) {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      socketRef.current.emit('typing.stop', { conversationId: activeConvId });
+      return;
     }
+
+    socketRef.current.emit('typing.start', { conversationId: activeConvId });
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      socketRef.current?.emit('typing.stop', { conversationId: activeConvId });
+    }, 2500);
   };
 
   // 6. Send message
   const handleSendMessage = async (customText?: string, attachmentUrl?: string) => {
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (activeConvId && socketRef.current) {
+      socketRef.current.emit('typing.stop', { conversationId: activeConvId });
+    }
+
     const textToSend = customText || inputText;
     if ((!textToSend.trim() && !attachmentUrl) || !activeConvId) return;
 

@@ -49,12 +49,15 @@ export const ChatPage: React.FC = () => {
   const socketRef = useRef<Socket | null>(null);
   const activeConvIdRef = useRef<string | null>(null);
   activeConvIdRef.current = activeConvId;
+  const userIdRef = useRef<string | undefined>(undefined);
+  userIdRef.current = user?.id;
   const readConversationsRef = useRef<Set<string>>(new Set());
   const lastFetchedConvIdRef = useRef<string | null>(null);
   const isFetchingInboxRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
   const typingTimerRef = useRef<any>(null);
+  const otherTypingTimerRef = useRef<any>(null);
   const fetchConversationMessagesRef = useRef<((id: string) => void) | null>(null);
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
@@ -94,7 +97,9 @@ export const ChatPage: React.FC = () => {
             (m) =>
               m.id === msg.id ||
               ((m as any).clientMessageId && (m as any).clientMessageId === (msg as any).clientMessageId) ||
-              (m.id.startsWith('temp-') && m.content === msg.content && m.senderId === msg.senderId)
+              (m.id.startsWith('temp-') &&
+                m.senderId === msg.senderId &&
+                (m.content === msg.content || (msg.attachmentUrl && m.attachmentUrl === msg.attachmentUrl)))
           );
           if (idx !== -1) {
             const existing = prev[idx];
@@ -107,11 +112,19 @@ export const ChatPage: React.FC = () => {
             return next;
           }
           // Prevent duplicate message if already in state
-          if (prev.some((m) => m.id === msg.id)) {
-            return prev;
-          }
+          const isDuplicate = prev.some(
+            (m) =>
+              m.id === msg.id ||
+              (m.senderId === msg.senderId &&
+                ((msg.attachmentUrl && m.attachmentUrl === msg.attachmentUrl) ||
+                  (msg.content && m.content === msg.content)) &&
+                Math.abs(new Date(m.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 3500)
+          );
+          if (isDuplicate) return prev;
           return [...prev, msg];
         });
+        if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+        setIsOtherTyping(false);
         setTimeout(() => scrollToBottom('smooth'), 50);
         if (!isFromMe) {
           socket?.emit('message.read', { conversationId: currentActiveId });
@@ -183,15 +196,57 @@ export const ChatPage: React.FC = () => {
     };
 
     const handleTypingStart = (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(true);
+      if (
+        data.conversationId === activeConvIdRef.current &&
+        data.userId &&
+        data.userId !== userIdRef.current
+      ) {
+        setIsOtherTyping(true);
+        if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+        otherTypingTimerRef.current = setTimeout(() => {
+          setIsOtherTyping(false);
+        }, 2500);
+      }
     };
 
     const handleTypingStop = (data: { conversationId: string; userId: string }) => {
-      if (data.conversationId === activeConvIdRef.current && data.userId !== user?.id) setIsOtherTyping(false);
+      if (data.conversationId === activeConvIdRef.current) {
+        if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+        setIsOtherTyping(false);
+      }
     };
 
     const handlePresenceUpdate = (data: { userId: string; isOnline: boolean }) => {
       setConversations((prev) => prev.map((c) => (c.otherParty.id === data.userId ? { ...c, otherParty: { ...c.otherParty, isOnline: data.isOnline } } : c)));
+    };
+
+    const handleMessageDeleted = (data: { conversationId: string; messageId: string; clientMessageId?: string }) => {
+      if (data.conversationId === activeConvIdRef.current) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === data.messageId ||
+            (data.clientMessageId && m.id === data.clientMessageId) ||
+            ((m as any).clientMessageId &&
+              ((m as any).clientMessageId === data.messageId ||
+               (data.clientMessageId && (m as any).clientMessageId === data.clientMessageId)))
+              ? {
+                  ...m,
+                  content: 'This message was deleted',
+                  isDeleted: true,
+                  attachmentUrl: undefined,
+                  localPreviewUrl: undefined,
+                }
+              : m
+          )
+        );
+      }
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === data.conversationId
+            ? { ...c, lastMessageText: 'This message was deleted' }
+            : c
+        )
+      );
     };
 
     void getChatSocket(user.id).then((sock) => {
@@ -206,6 +261,7 @@ export const ChatPage: React.FC = () => {
       sock.on('message.sent', handleMessageSent);
       sock.on('message.read', handleMessageRead);
       sock.on('message.delivered', handleMessageDelivered);
+      sock.on('message.deleted', handleMessageDeleted);
       sock.on('typing.start', handleTypingStart);
       sock.on('typing.stop', handleTypingStop);
       sock.on('presence.update', handlePresenceUpdate);
@@ -225,6 +281,7 @@ export const ChatPage: React.FC = () => {
         socket.off('message.sent', handleMessageSent);
         socket.off('message.read', handleMessageRead);
         socket.off('message.delivered', handleMessageDelivered);
+        socket.off('message.deleted', handleMessageDeleted);
         socket.off('typing.start', handleTypingStart);
         socket.off('typing.stop', handleTypingStop);
         socket.off('presence.update', handlePresenceUpdate);
@@ -251,6 +308,9 @@ export const ChatPage: React.FC = () => {
     return () => {
       useChatUnreadStore.getState().setActiveConversationId(null);
       socketRef.current?.emit('conversation.leave', { conversationId: activeConvId });
+      // Clear typing state when leaving a conversation
+      if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+      setIsOtherTyping(false);
     };
   }, [activeConvId]);
 
@@ -396,21 +456,34 @@ export const ChatPage: React.FC = () => {
   fetchConversationMessagesRef.current = fetchConversationMessages;
 
   useEffect(() => {
+    setIsOtherTyping(false);
+    if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
     if (activeConvId) void fetchConversationMessages(activeConvId);
   }, [activeConvId, fetchConversationMessages]);
 
   const handleInputChange = (val: string) => {
     setInputText(val);
-    if (activeConvId && socketRef.current) {
-      socketRef.current.emit('typing.start', { conversationId: activeConvId });
-      clearTimeout(typingTimerRef.current);
-      typingTimerRef.current = setTimeout(() => {
-        socketRef.current?.emit('typing.stop', { conversationId: activeConvId });
-      }, 2000);
+    if (!activeConvId || !socketRef.current) return;
+
+    if (val.trim().length === 0) {
+      if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+      socketRef.current.emit('typing.stop', { conversationId: activeConvId });
+      return;
     }
+
+    socketRef.current.emit('typing.start', { conversationId: activeConvId });
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      socketRef.current?.emit('typing.stop', { conversationId: activeConvId });
+    }, 2500);
   };
 
   const handleSendMessage = async (customText?: string, attachmentUrl?: string, localPreviewUrl?: string) => {
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    if (activeConvId && socketRef.current) {
+      socketRef.current.emit('typing.stop', { conversationId: activeConvId });
+    }
+
     const textToSend = (customText || inputText).trim();
     if ((!textToSend && !attachmentUrl) || !activeConvId || isSendingRef.current || isSending) return;
 
@@ -524,10 +597,24 @@ export const ChatPage: React.FC = () => {
   };
 
   const handleDeleteMessage = async (messageId: string) => {
+    // Optimistic delete
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId || (m as any).clientMessageId === messageId
+          ? { ...m, content: 'This message was deleted', isDeleted: true, attachmentUrl: undefined, localPreviewUrl: undefined }
+          : m
+      )
+    );
+
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('message.delete', { messageId });
+    }
+
     try {
-      const res = await apiClient.delete(`/chat/messages/${messageId}`);
-      if (res.data?.success) setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, content: 'This message was deleted', isDeleted: true } : m)));
-    } catch (err) { console.error('Failed to delete message', err); }
+      await apiClient.delete(`/chat/messages/${messageId}`);
+    } catch (err) {
+      console.error('Failed to delete message', err);
+    }
   };
 
   const handleBlockUser = async (targetUserId: string) => {

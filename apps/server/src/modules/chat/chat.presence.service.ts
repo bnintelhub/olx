@@ -112,16 +112,22 @@ export class ChatPresenceService {
     return result;
   }
 
-  // Throttles typing indicators (max 1 typing event per 3 seconds per conversation)
+  // Throttles typing indicators (max 1 typing event per 2 seconds per conversation)
   static shouldThrottleTyping(userId: string, conversationId: string): boolean {
     const key = `${userId}:${conversationId}`;
     const now = Date.now();
     const lastSent = typingThrottleMap.get(key) || 0;
-    if (now - lastSent < 3000) {
+    if (now - lastSent < 2000) {
       return true;
     }
     typingThrottleMap.set(key, now);
     return false;
+  }
+
+  // Reset throttle key when user stops typing so resume is immediate
+  static clearTypingThrottle(userId: string, conversationId: string): void {
+    const key = `${userId}:${conversationId}`;
+    typingThrottleMap.delete(key);
   }
 
   // Get active socket IDs for a user (for direct socket emission across multi-devices)

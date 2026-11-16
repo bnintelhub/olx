@@ -45,6 +45,49 @@ export async function isUserInsideConversation(userId: string, conversationId: s
   return ChatPresenceService.isUserInsideConversation(userId, conversationId);
 }
 
+// Broadcasts real-time message deletion across conversation room and participant user rooms
+export function broadcastMessageDeleted(
+  conversationId: string,
+  messageId: string,
+  deletedBy: string,
+  buyerId?: string | null,
+  sellerId?: string | null,
+  isLastMessage?: boolean,
+  clientMessageId?: string | null
+) {
+  if (!chatIO) {
+    console.warn('[broadcastMessageDeleted] chatIO is not initialized!');
+    return;
+  }
+
+  const payload = {
+    conversationId,
+    messageId,
+    clientMessageId: clientMessageId || null,
+    deletedBy,
+  };
+
+  console.log(`[Chat Broadcast] Emitting message.deleted for conv_${conversationId}, msg: ${messageId}`);
+
+  let delBroadcast: any = chatIO.to(`conv_${conversationId}`);
+  if (buyerId) delBroadcast = delBroadcast.to(`user_${buyerId}`);
+  if (sellerId) delBroadcast = delBroadcast.to(`user_${sellerId}`);
+  delBroadcast.emit('message.deleted', payload);
+
+  if (isLastMessage) {
+    const updatePayload = {
+      conversationId,
+      lastMessageText: 'This message was deleted',
+      lastMessageAt: new Date().toISOString(),
+      senderId: deletedBy,
+    };
+    let convBroadcast: any = chatIO.to(`conv_${conversationId}`);
+    if (buyerId) convBroadcast = convBroadcast.to(`user_${buyerId}`);
+    if (sellerId) convBroadcast = convBroadcast.to(`user_${sellerId}`);
+    convBroadcast.emit('conversation.updated', updatePayload);
+  }
+}
+
 // Broadcasts chat messages across conversation room and recipient's user room
 export function broadcastChatMessage(conversationId: string, message: any, senderId: string, receiverId?: string | null) {
   if (!chatIO) {
@@ -283,6 +326,11 @@ export function setupChatSocket(io: SocketIOServer) {
       if (conversationId) {
         socket.leave(`conv_${conversationId}`);
         void ChatPresenceService.clearUserActiveConversation(user.id, conversationId);
+        ChatPresenceService.clearTypingThrottle(user.id, conversationId);
+        socket.to(`conv_${conversationId}`).emit('typing.stop', {
+          conversationId,
+          userId: user.id,
+        });
         if (socket.data.activeConversationId === conversationId) {
           delete socket.data.activeConversationId;
         }
@@ -296,7 +344,7 @@ export function setupChatSocket(io: SocketIOServer) {
         if (!conversationId) return;
 
         // Create message in database transaction
-        const { message, safetyNotice } = await ChatService.sendMessage(user.id, payload);
+        const { message, safetyNotice, isDuplicate } = (await ChatService.sendMessage(user.id, payload)) as any;
 
         if (typeof ack === 'function') {
           ack({ success: true, data: message, safetyNotice });
@@ -308,12 +356,14 @@ export function setupChatSocket(io: SocketIOServer) {
           conversationId,
           clientMessageId: payload.clientMessageId,
           status: message.status,
-          createdAt: message.createdAt.toISOString(),
+          createdAt: message.createdAt instanceof Date ? message.createdAt.toISOString() : message.createdAt,
           safetyNotice: safetyNotice || null,
         });
 
-        // Broadcast to conversation room and user rooms
-        broadcastChatMessage(conversationId, message, user.id, message.receiverId);
+        // Broadcast to conversation room and user rooms only if not duplicate
+        if (!isDuplicate) {
+          broadcastChatMessage(conversationId, message, user.id, message.receiverId);
+        }
 
         // Real-time delivery acknowledgment: if recipient is currently online, mark DELIVERED
         if (message.receiverId) {
@@ -374,23 +424,77 @@ export function setupChatSocket(io: SocketIOServer) {
       }
     });
 
-    // 5. Ephemeral Typing Indicator
-    socket.on('typing.start', ({ conversationId }: { conversationId: string }) => {
-      if (!conversationId) return;
-      if (!ChatPresenceService.shouldThrottleTyping(user.id, conversationId)) {
-        socket.to(`conv_${conversationId}`).emit('typing.start', {
-          conversationId,
-          userId: user.id,
-        });
+    // 4.1 Real-time Message Soft Delete
+    socket.on('message.delete', async ({ messageId }: { messageId: string }) => {
+      if (!messageId) return;
+      try {
+        const result = await ChatService.deleteMessage(user.id, messageId);
+        if (result.conversationId) {
+          broadcastMessageDeleted(
+            result.conversationId,
+            result.messageId,
+            user.id,
+            result.buyerId,
+            result.sellerId,
+            result.isLastMessage,
+            result.clientMessageId
+          );
+        }
+      } catch {
+        // ignore
       }
     });
 
-    socket.on('typing.stop', ({ conversationId }: { conversationId: string }) => {
+    // 5. Ephemeral Typing Indicator
+    socket.on('typing.start', async ({ conversationId }: { conversationId: string }) => {
       if (!conversationId) return;
-      socket.to(`conv_${conversationId}`).emit('typing.stop', {
+      if (!ChatPresenceService.shouldThrottleTyping(user.id, conversationId)) {
+        const payload = {
+          conversationId,
+          userId: user.id,
+        };
+        socket.to(`conv_${conversationId}`).emit('typing.start', payload);
+
+        try {
+          const conv = await prisma.conversation.findUnique({
+            where: { id: conversationId },
+            select: { buyerId: true, sellerId: true },
+          });
+          if (conv) {
+            const otherUserId = conv.buyerId === user.id ? conv.sellerId : conv.buyerId;
+            if (otherUserId) {
+              socket.to(`user_${otherUserId}`).emit('typing.start', payload);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    });
+
+    socket.on('typing.stop', async ({ conversationId }: { conversationId: string }) => {
+      if (!conversationId) return;
+      ChatPresenceService.clearTypingThrottle(user.id, conversationId);
+      const payload = {
         conversationId,
         userId: user.id,
-      });
+      };
+      socket.to(`conv_${conversationId}`).emit('typing.stop', payload);
+
+      try {
+        const conv = await prisma.conversation.findUnique({
+          where: { id: conversationId },
+          select: { buyerId: true, sellerId: true },
+        });
+        if (conv) {
+          const otherUserId = conv.buyerId === user.id ? conv.sellerId : conv.buyerId;
+          if (otherUserId) {
+            socket.to(`user_${otherUserId}`).emit('typing.stop', payload);
+          }
+        }
+      } catch {
+        // ignore
+      }
     });
 
     // 6. Presence Heartbeat
@@ -400,8 +504,14 @@ export function setupChatSocket(io: SocketIOServer) {
 
     // 7. Disconnection
     socket.on('disconnect', async () => {
-      if (socket.data.activeConversationId) {
-        void ChatPresenceService.clearUserActiveConversation(user.id, socket.data.activeConversationId);
+      const activeConvId = socket.data.activeConversationId;
+      if (activeConvId) {
+        void ChatPresenceService.clearUserActiveConversation(user.id, activeConvId);
+        ChatPresenceService.clearTypingThrottle(user.id, activeConvId);
+        socket.to(`conv_${activeConvId}`).emit('typing.stop', {
+          conversationId: activeConvId,
+          userId: user.id,
+        });
       }
       const isCompletelyOffline = await ChatPresenceService.setUserOffline(user.id, socket.id);
       if (isCompletelyOffline) {
