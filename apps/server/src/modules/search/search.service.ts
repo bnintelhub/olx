@@ -1,3 +1,5 @@
+import { FastifyRequest } from 'fastify';
+import { performance } from 'perf_hooks';
 import { prisma } from '../../config/prisma';
 import { AdStatus, Prisma } from '@prisma/client';
 import { SearchParams } from './search.schema';
@@ -35,7 +37,7 @@ function formatSearchAdImages(ads: any[]): any[] {
 }
 
 export class SearchService {
-  static async search(params: SearchParams) {
+  static async search(params: SearchParams, request?: FastifyRequest) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(params.limit) || 20));
     const skip = (page - 1) * limit;
@@ -53,10 +55,15 @@ export class SearchService {
       attrs: params.attributes || {},
     })}`;
 
+    const tRedisStart = performance.now();
     const cachedResult = await getCache<any>(cacheKey);
+    request?.trackTiming?.('redis', performance.now() - tRedisStart);
+
     if (cachedResult) {
       return cachedResult;
     }
+
+    const tDbStart = performance.now();
 
     const where: Prisma.AdWhereInput = {
       status: AdStatus.ACTIVE,
@@ -242,6 +249,7 @@ export class SearchService {
         },
       }),
     ]);
+    request?.trackTiming?.('db', performance.now() - tDbStart);
 
     const facets = await this.computeFacets(where);
 

@@ -1,74 +1,48 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
+import { monitorEventLoopDelay } from 'perf_hooks';
 import { env } from '../config/env';
 
-export interface ResponseStats {
-  totalRequests: number;
-  averageResponseSize: string;
-  averageResponseSizeBytes: number;
-  p95ResponseSize: string;
-  p95ResponseSizeBytes: number;
-  largestResponse: {
-    url: string;
-    method: string;
-    sizeBytes: number;
-    sizeFormatted: string;
-    timestamp: string;
-  } | null;
+// Track event loop lag continuously with 20ms resolution
+const eventLoopLagHistogram = monitorEventLoopDelay({ resolution: 20 });
+eventLoopLagHistogram.enable();
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    startTime: bigint;
+    timings?: Record<string, number>;
+    trackTiming: (key: string, durationMs: number) => void;
+  }
 }
 
-interface InternalMetrics {
-  count: number;
-  totalBytes: number;
-  recentSizes: number[];
-  largestResponse: ResponseStats['largestResponse'];
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const val = (bytes / Math.pow(1024, i)).toFixed(2);
-  return `${val} ${units[i] || 'B'}`;
-}
-
-function calculateP95(sizes: number[]): number {
-  if (sizes.length === 0) return 0;
-  const sorted = [...sizes].sort((a, b) => a - b);
-  const index = Math.min(Math.floor(0.95 * sorted.length), sorted.length - 1);
-  return sorted[index];
-}
-
-const metrics: InternalMetrics = {
-  count: 0,
-  totalBytes: 0,
-  recentSizes: [],
-  largestResponse: null,
-};
-
-export function getResponseMetrics(): ResponseStats {
-  const avg = metrics.count > 0 ? Math.round(metrics.totalBytes / metrics.count) : 0;
-  const p95 = calculateP95(metrics.recentSizes);
-
+export function getEventLoopStats() {
+  const toMs = (nanos: number) => Math.round((nanos / 1e6) * 100) / 100;
   return {
-    totalRequests: metrics.count,
-    averageResponseSize: formatBytes(avg),
-    averageResponseSizeBytes: avg,
-    p95ResponseSize: formatBytes(p95),
-    p95ResponseSizeBytes: p95,
-    largestResponse: metrics.largestResponse,
+    minMs: toMs(eventLoopLagHistogram.min),
+    p50Ms: toMs(eventLoopLagHistogram.percentile(50)),
+    p90Ms: toMs(eventLoopLagHistogram.percentile(90)),
+    p95Ms: toMs(eventLoopLagHistogram.percentile(95)),
+    p99Ms: toMs(eventLoopLagHistogram.percentile(99)),
+    maxMs: toMs(eventLoopLagHistogram.max),
+    meanMs: toMs(eventLoopLagHistogram.mean),
   };
 }
 
 export const responseMetricsPlugin = fp(async (fastify: FastifyInstance) => {
-  // Record request start time using high-resolution timer
+  // 1. Record request start time using high-resolution monotonic timer
   fastify.addHook('onRequest', async (request: FastifyRequest) => {
-    (request as any).startTime = process.hrtime.bigint();
+    request.startTime = process.hrtime.bigint();
+    request.timings = {};
+    request.trackTiming = (key: string, durationMs: number) => {
+      if (request.timings) {
+        request.timings[key] = Math.round(durationMs * 100) / 100;
+      }
+    };
   });
 
-  // Calculate duration and response size on send
+  // 2. Add Server-Timing and standard response headers with ZERO JSON re-parsing overhead
   fastify.addHook('onSend', async (request: FastifyRequest, reply: FastifyReply, payload: any) => {
-    const start = (request as any).startTime;
+    const start = request.startTime;
     const durationMs = start
       ? Math.round(Number(process.hrtime.bigint() - start) / 10000) / 100
       : 0;
@@ -82,73 +56,40 @@ export const responseMetricsPlugin = fp(async (fastify: FastifyInstance) => {
       contentLength = Number(reply.getHeader('content-length')) || 0;
     }
 
-    // Set standard response headers
     reply.header('X-Response-Time-Ms', durationMs);
     reply.header('X-Content-Length-Bytes', contentLength);
 
-    // Development mode enhancements
-    if (env.NODE_ENV === 'development') {
-      // Update memory sliding window for size percentiles (up to 1,000 samples)
-      metrics.count++;
-      metrics.totalBytes += contentLength;
-      metrics.recentSizes.push(contentLength);
-      if (metrics.recentSizes.length > 1000) {
-        metrics.recentSizes.shift();
-      }
-
-      // Track largest response observed
-      if (!metrics.largestResponse || contentLength > metrics.largestResponse.sizeBytes) {
-        metrics.largestResponse = {
-          url: request.raw.url || request.url,
-          method: request.method,
-          sizeBytes: contentLength,
-          sizeFormatted: formatBytes(contentLength),
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // Inject durationMs & contentLength directly into JSON responses
-      if (typeof payload === 'string' && payload.startsWith('{')) {
-        try {
-          const parsed = JSON.parse(payload);
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            parsed.durationMs = durationMs;
-            parsed.contentLength = contentLength;
-            const modified = JSON.stringify(parsed);
-            contentLength = Buffer.byteLength(modified, 'utf8');
-            reply.header('content-length', contentLength);
-            reply.header('X-Content-Length-Bytes', contentLength);
-            return modified;
-          }
-        } catch {
-          // Keep original payload if not JSON
-        }
+    // Build standard W3C Server-Timing header (e.g., "total;dur=45.2, db;dur=12.1, redis;dur=1.4")
+    const timingEntries: string[] = [`total;dur=${durationMs}`];
+    if (request.timings) {
+      for (const [key, dur] of Object.entries(request.timings)) {
+        timingEntries.push(`${key};dur=${dur}`);
       }
     }
+    reply.header('Server-Timing', timingEntries.join(', '));
 
     return payload;
   });
 
-  // In development: Log response stats & expose metrics endpoint
-  if (env.NODE_ENV === 'development') {
-    fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
-      // Skip noisy health probes from logging
-      if (request.url.startsWith('/health') || request.url.startsWith('/favicon')) return;
-
-      const stats = getResponseMetrics();
-      const currentSize = Number(reply.getHeader('X-Content-Length-Bytes')) || 0;
-      const durationMs = reply.getHeader('X-Response-Time-Ms') || 0;
-
-      fastify.log.info(
-        `[DEV Response] ${request.method} ${request.url} -> ${reply.statusCode} | Duration: ${durationMs}ms | Size: ${formatBytes(currentSize)} | Avg: ${stats.averageResponseSize} | p95: ${stats.p95ResponseSize} | Largest: ${stats.largestResponse?.sizeFormatted || '0 B'}`
-      );
-    });
-
-    fastify.get('/api/v1/dev/response-stats', async () => {
-      return {
-        success: true,
-        data: getResponseMetrics(),
-      };
-    });
-  }
+  // 3. Real-Time Single-Instance Diagnostic Endpoint
+  fastify.get('/api/v1/diagnostics', async () => {
+    const mem = process.memoryUsage();
+    return {
+      success: true,
+      data: {
+        timestamp: new Date().toISOString(),
+        uptimeSeconds: Math.floor(process.uptime()),
+        memory: {
+          heapUsedMB: Math.round((mem.heapUsed / (1024 * 1024)) * 100) / 100,
+          heapTotalMB: Math.round((mem.heapTotal / (1024 * 1024)) * 100) / 100,
+          rssMB: Math.round((mem.rss / (1024 * 1024)) * 100) / 100,
+          externalMB: Math.round((mem.external / (1024 * 1024)) * 100) / 100,
+        },
+        eventLoopLag: getEventLoopStats(),
+        activeHandles: (process as any)._getActiveHandles ? (process as any)._getActiveHandles().length : 0,
+        activeRequests: (process as any)._getActiveRequests ? (process as any)._getActiveRequests().length : 0,
+        cpuUsage: process.cpuUsage(),
+      },
+    };
+  });
 });

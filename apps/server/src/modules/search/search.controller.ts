@@ -36,7 +36,7 @@ export class SearchController {
       categorySlug: parsed.categorySlug || parsed.category,
       citySlug: parsed.citySlug || parsed.city,
       attributes,
-    });
+    }, request);
 
     return reply.status(200).send({
       success: true,
