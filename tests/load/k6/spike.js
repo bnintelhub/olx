@@ -3,7 +3,7 @@ import { runSearch } from './scenarios/search.js';
 import { runBrowsing } from './scenarios/browsing.js';
 import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
-import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
+import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS, SUMMARY_TREND_STATS } from './config.js';
 import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
 import { generateBenchmarkSummary } from './lib/summary.js';
 
@@ -15,6 +15,7 @@ export const options = {
     { duration: '30s', target: 500 },    // Quick recovery
     { duration: '30s', target: 0 },      // Ramp down
   ],
+  summaryTrendStats: SUMMARY_TREND_STATS,
   thresholds: THRESHOLDS,
 };
 

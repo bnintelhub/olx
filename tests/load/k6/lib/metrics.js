@@ -3,8 +3,8 @@ import { Counter, Rate, Trend } from 'k6/metrics';
 /**
  * Custom k6 Metrics Suite for BharatMarket Benchmark
  * 
- * Separates transport layer failures, HTTP status code distribution,
- * business validation errors, and endpoint-specific latencies.
+ * Accurately tracks transport layer failures, status code distribution,
+ * timeout/reset rates, business validation errors, and endpoint percentiles.
  */
 
 // 1. Overall Request & Status Distribution Counters
@@ -14,11 +14,14 @@ export const failedResponses = new Counter('failed_http_responses');         // 
 export const validationFailures = new Counter('expected_response_failures'); // Business/JSON parsing errors
 
 // 2. Specific HTTP Status Code Counters
+export const status4xxCount = new Counter('status_4xx_client_error');
 export const status401Count = new Counter('status_401_unauthorized');
 export const status403Count = new Counter('status_403_forbidden');
 export const status404Count = new Counter('status_404_not_found');
 export const status429Count = new Counter('status_429_rate_limited');
 export const status5xxCount = new Counter('status_5xx_server_error');
+export const networkTimeouts = new Counter('network_timeouts');
+export const connectionResets = new Counter('connection_resets');
 
 // 3. Endpoint-Specific Latency Trends (tracks p50, p90, p95, p99 per endpoint)
 export const latencySearch = new Trend('latency_search_ads', true);
@@ -34,15 +37,11 @@ export const errorRateMessaging = new Rate('error_rate_messaging_probe');
 
 /**
  * Record metrics for an executed HTTP request
- * 
- * @param {object} res - k6 response object
- * @param {string} endpointTag - Endpoint identifier ('search', 'ads', 'categories', 'messaging')
- * @param {boolean} isBusinessValid - Whether response body/contract passed business validation
  */
 export function recordRequestMetrics(res, endpointTag, isBusinessValid = true) {
   totalRequests.add(1);
 
-  const status = res.status;
+  const status = res ? res.status : 0;
   const isHttpSuccess = status >= 200 && status < 300;
   const isFailed = !isHttpSuccess;
 
@@ -52,18 +51,30 @@ export function recordRequestMetrics(res, endpointTag, isBusinessValid = true) {
     failedResponses.add(1);
   }
 
-  // Track specific status codes
-  if (status === 401) status401Count.add(1);
-  else if (status === 403) status403Count.add(1);
-  else if (status === 404) status404Count.add(1);
-  else if (status === 429) status429Count.add(1);
-  else if (status >= 500) status5xxCount.add(1);
+  // Track status code categories
+  if (status >= 400 && status < 500) {
+    status4xxCount.add(1);
+    if (status === 401) status401Count.add(1);
+    else if (status === 403) status403Count.add(1);
+    else if (status === 404) status404Count.add(1);
+    else if (status === 429) status429Count.add(1);
+  } else if (status >= 500) {
+    status5xxCount.add(1);
+  } else if (status === 0) {
+    // Network level timeout or socket reset
+    const errStr = res && res.error ? String(res.error).toLowerCase() : '';
+    if (errStr.includes('reset') || errStr.includes('refused')) {
+      connectionResets.add(1);
+    } else {
+      networkTimeouts.add(1);
+    }
+  }
 
   if (!isBusinessValid) {
     validationFailures.add(1);
   }
 
-  const duration = res.timings ? res.timings.duration : 0;
+  const duration = res && res.timings ? res.timings.duration : 0;
   const hasError = isFailed || !isBusinessValid;
 
   // Track endpoint specific metrics

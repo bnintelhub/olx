@@ -259,14 +259,19 @@ export class SearchService {
       facets,
     };
 
-    // Cache feed in Redis for 20 seconds to prevent DB saturation during load spikes
-    void setCache(cacheKey, result, 20);
+    // Cache feed in Redis for 60 seconds to absorb traffic spikes and protect database
+    void setCache(cacheKey, result, 60);
 
     return result;
   }
 
   private static async computeFacets(baseWhere: Prisma.AdWhereInput) {
     try {
+      // 1. Check Redis for cached facets to eliminate repetitive GROUP BY queries
+      const facetCacheKey = `facets:categories:${baseWhere.categoryId ? JSON.stringify(baseWhere.categoryId) : 'all'}`;
+      const cached = await getCache<any>(facetCacheKey);
+      if (cached) return cached;
+
       const categoryCounts = await prisma.ad.groupBy({
         by: ['categoryId'],
         where: baseWhere,
@@ -280,7 +285,7 @@ export class SearchService {
         select: { id: true, name: true, slug: true },
       });
 
-      return {
+      const facets = {
         categories: categoryCounts.map((c) => {
           const cat = categories.find((item) => item.id === c.categoryId);
           return {
@@ -291,6 +296,11 @@ export class SearchService {
           };
         }),
       };
+
+      // Cache facets for 2 minutes
+      void setCache(facetCacheKey, facets, 120);
+
+      return facets;
     } catch {
       return { categories: [] };
     }

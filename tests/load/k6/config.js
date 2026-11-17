@@ -22,17 +22,33 @@ export const AUTH_CREDENTIALS = {
 export const SAMPLE_LOG_RATE = parseInt(__ENV.SAMPLE_LOG_RATE || '100', 10);
 
 /**
- * Production-Grade Performance Thresholds
+ * Configure k6 to calculate p99 (and p50/p90/p95/max) for all trend metrics
+ * By default k6 only calculates avg, min, med, max, p(90), p(95).
+ */
+export const SUMMARY_TREND_STATS = [
+  'avg',
+  'min',
+  'med',
+  'max',
+  'p(90)',
+  'p(95)',
+  'p(99)',
+];
+
+/**
+ * Production-Grade Performance Thresholds (SLIs)
  * 
- * Strict SLIs (Service Level Indicators):
+ * Strict targets:
  * - p95 Latency < 400ms
  * - p99 Latency < 800ms
- * - Global failure rate < 5% (under stress/peak load)
- * - Zero unhandled 5xx server crashes tolerated (< 10)
+ * - 5xx Error Rate < 0.01%
+ * - Timeouts ≈ 0%
+ * - HTTP failure rate < 5%
+ * - Business Contract Errors = 0
  */
 export const THRESHOLDS = {
-  http_req_failed: ['rate<0.05'], // Max 5% HTTP transport/status failures
-  http_req_duration: ['p(95)<400', 'p(99)<800'], // 95% under 400ms, 99% under 800ms
-  status_5xx_server_error: ['count<10'], // Less than 10 5xx errors across entire run
-  expected_response_failures: ['count<50'], // Business schema validation failures threshold
+  http_req_failed: ['rate<0.05'], // Max 5% failure
+  http_req_duration: ['p(95)<400', 'p(99)<800'], // 95% < 400ms, 99% < 800ms
+  status_5xx_server_error: ['count<10'], // Less than 10 5xx errors
+  expected_response_failures: ['count<1'], // Zero business errors tolerated
 };

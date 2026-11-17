@@ -46,6 +46,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     logger: env.NODE_ENV === 'development' ? { level: 'info' } : { level: 'warn' },
     trustProxy: true,
     ignoreTrailingSlash: true,
+    connectionTimeout: 15000, // 15s socket connection timeout
+    keepAliveTimeout: 65000,  // 65s keep-alive timeout (aligned with Nginx 65s)
+    requestTimeout: 30000,    // 30s max request handling timeout
   });
 
   // Security headers

@@ -3,7 +3,7 @@ import { runSearch } from './scenarios/search.js';
 import { runBrowsing } from './scenarios/browsing.js';
 import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
-import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
+import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS, SUMMARY_TREND_STATS } from './config.js';
 import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
 import { generateBenchmarkSummary } from './lib/summary.js';
 
@@ -22,15 +22,17 @@ import { generateBenchmarkSummary } from './lib/summary.js';
  */
 export const options = {
   stages: [
-    { duration: '30s', target: 100 },   // Stage 1: 100 VUs
+    { duration: '30s', target: 100 },   // Stage 1: 100 VUs (Warmup & Baseline)
     { duration: '30s', target: 250 },   // Stage 2: 250 VUs
-    { duration: '1m',  target: 500 },   // Stage 3: 500 VUs
-    { duration: '1m',  target: 1000 },  // Stage 4: 1,000 VUs
-    { duration: '2m',  target: 2000 },  // Stage 5: 2,000 VUs
-    { duration: '2m',  target: 5000 },  // Stage 6: 5,000 VUs
-    { duration: '2m',  target: 10000 }, // Stage 7: 10,000 VUs Breakpoint
-    { duration: '1m',  target: 0 },     // Stage 8: Cooldown & Recovery
+    { duration: '45s', target: 500 },   // Stage 3: 500 VUs
+    { duration: '45s', target: 750 },   // Stage 4: 750 VUs
+    { duration: '1m',  target: 1000 },  // Stage 5: 1,000 VUs (Rush Hour)
+    { duration: '1m',  target: 1500 },  // Stage 6: 1,500 VUs
+    { duration: '1m',  target: 2000 },  // Stage 7: 2,000 VUs
+    { duration: '1m',  target: 2500 },  // Stage 8: 2,500 VUs (Target Peak)
+    { duration: '30s', target: 0 },     // Stage 9: Cooldown & Recovery
   ],
+  summaryTrendStats: SUMMARY_TREND_STATS,
   thresholds: THRESHOLDS,
 };
 

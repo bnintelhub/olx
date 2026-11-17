@@ -11,8 +11,17 @@ function getMetricValue(metric, key = 'count', defaultValue = 0) {
   return typeof val === 'number' ? val : defaultValue;
 }
 
+function getTrendPercentile(metric, primaryKey, fallbackKey = 'p(95)') {
+  if (!metric || !metric.values) return 0;
+  const primary = metric.values[primaryKey];
+  if (typeof primary === 'number' && primary > 0) return primary;
+  const fallback = metric.values[fallbackKey];
+  if (typeof fallback === 'number' && fallback > 0) return fallback;
+  return typeof metric.values.max === 'number' ? metric.values.max : 0;
+}
+
 function formatNumber(num) {
-  return Math.round(num).toLocaleString('en-IN');
+  return Math.round(num || 0).toLocaleString('en-IN');
 }
 
 function formatMs(ms) {
@@ -21,8 +30,8 @@ function formatMs(ms) {
 }
 
 function formatRate(rate) {
-  if (rate === undefined || rate === null || isNaN(rate)) return '0.0%';
-  return `${(rate * 100).toFixed(1)}%`;
+  if (rate === undefined || rate === null || isNaN(rate)) return '0.00%';
+  return `${(rate * 100).toFixed(2)}%`;
 }
 
 function padRight(str, len) {
@@ -40,31 +49,44 @@ function padLeft(str, len) {
 export function generateBenchmarkSummary(data) {
   const metrics = data.metrics || {};
 
-  // 1. Overall Requests & Success
-  const totalHttp = getMetricValue(metrics.http_reqs, 'count', 0);
+  // 1. Overall Requests & Throughput
+  const httpReqsMetric = metrics.http_reqs || {};
+  const totalHttp = getMetricValue(httpReqsMetric, 'count', 0);
   const totalCustom = getMetricValue(metrics.total_requests, 'count', totalHttp);
   const totalReqs = Math.max(totalHttp, totalCustom);
+  const rps = getMetricValue(httpReqsMetric, 'rate', 0);
 
   const successful = getMetricValue(metrics.successful_http_responses, 'count', 0);
   const failed = getMetricValue(metrics.failed_http_responses, 'count', totalReqs - successful);
   const validationErrs = getMetricValue(metrics.expected_response_failures, 'count', 0);
 
-  const successPercent = totalReqs > 0 ? ((successful / totalReqs) * 100).toFixed(1) : '100.0';
-  const failPercent = totalReqs > 0 ? ((failed / totalReqs) * 100).toFixed(1) : '0.0';
+  const successPercent = totalReqs > 0 ? ((successful / totalReqs) * 100).toFixed(2) : '100.00';
+  const failPercent = totalReqs > 0 ? ((failed / totalReqs) * 100).toFixed(2) : '0.00';
 
-  // 2. HTTP Status Code Breakdown
+  // 2. HTTP Status Code Breakdown & Error Categories
+  const c4xx = getMetricValue(metrics.status_4xx_client_error, 'count', 0);
   const c401 = getMetricValue(metrics.status_401_unauthorized, 'count', 0);
   const c403 = getMetricValue(metrics.status_403_forbidden, 'count', 0);
   const c404 = getMetricValue(metrics.status_404_not_found, 'count', 0);
   const c429 = getMetricValue(metrics.status_429_rate_limited, 'count', 0);
   const c5xx = getMetricValue(metrics.status_5xx_server_error, 'count', 0);
-  const networkTimeouts = Math.max(0, failed - (c401 + c403 + c404 + c429 + c5xx));
 
-  // 3. Global Latency
+  const timeouts = getMetricValue(metrics.network_timeouts, 'count', 0);
+  const resets = getMetricValue(metrics.connection_resets, 'count', 0);
+  const totalNetErrors = timeouts + resets > 0 ? timeouts + resets : Math.max(0, failed - (c4xx + c5xx));
+
+  const rate4xx = totalReqs > 0 ? (c4xx / totalReqs) : 0;
+  const rate5xx = totalReqs > 0 ? (c5xx / totalReqs) : 0;
+  const rateTimeout = totalReqs > 0 ? (timeouts / totalReqs) : 0;
+  const rateReset = totalReqs > 0 ? (resets / totalReqs) : 0;
+
+  // 3. Global Latencies (with robust p99 resolution)
   const dur = metrics.http_req_duration || {};
   const globalAvg = getMetricValue(dur, 'avg', 0);
-  const globalP95 = getMetricValue(dur, 'p(95)', 0);
-  const globalP99 = getMetricValue(dur, 'p(99)', 0);
+  const globalP50 = getTrendPercentile(dur, 'med', 'p(50)');
+  const globalP90 = getTrendPercentile(dur, 'p(90)', 'med');
+  const globalP95 = getTrendPercentile(dur, 'p(95)', 'p(90)');
+  const globalP99 = getTrendPercentile(dur, 'p(99)', 'p(95)');
   const globalMax = getMetricValue(dur, 'max', 0);
 
   // 4. Endpoint Specific Stats
@@ -95,65 +117,80 @@ export function generateBenchmarkSummary(data) {
   const lines = [];
   lines.push('');
   lines.push('================================================================================');
-  lines.push('📊 BHARATMARKET (OLX) — LOAD & PERFORMANCE BENCHMARK FINAL REPORT');
+  lines.push('📊 BHARATMARKET (OLX) — LOAD TEST PERFORMANCE BENCHMARK REPORT');
   lines.push('================================================================================');
   lines.push('');
 
-  lines.push('📈 TRAFFIC & THROUGHPUT SUMMARY:');
-  lines.push(`  • Total Requests Dispatched:  ${padLeft(formatNumber(totalReqs), 10)}`);
-  lines.push(`  • Successful HTTP Responses:  ${padLeft(formatNumber(successful), 10)} (${successPercent}%)`);
-  lines.push(`  • Failed HTTP / Timeouts:     ${padLeft(formatNumber(failed), 10)} (${failPercent}%)`);
-  lines.push(`  • API Business Contract Errs: ${padLeft(formatNumber(validationErrs), 10)}`);
+  lines.push('📈 TRAFFIC, THROUGHPUT & SUCCESS RATES:');
+  lines.push(`  • Requests Dispatched:        ${padLeft(formatNumber(totalReqs), 10)}`);
+  lines.push(`  • Throughput (RPS):           ${padLeft(rps > 0 ? rps.toFixed(1) : 'N/A', 10)} req/sec`);
+  lines.push(`  • Successful Responses (2xx): ${padLeft(formatNumber(successful), 10)} (${successPercent}%)`);
+  lines.push(`  • Failed Requests:            ${padLeft(formatNumber(failed), 10)} (${failPercent}%)`);
+  lines.push(`  • Business Schema Errors:     ${padLeft(formatNumber(validationErrs), 10)}`);
   lines.push('');
 
-  lines.push('📋 HTTP STATUS CODE DISTRIBUTION:');
+  lines.push('📋 HTTP STATUS CODE & NETWORK ERROR PROFILE:');
   lines.push(`  • HTTP 2xx (Success):         ${padLeft(formatNumber(successful), 10)}`);
-  lines.push(`  • HTTP 401 (Unauthorized):   ${padLeft(formatNumber(c401), 10)}`);
-  lines.push(`  • HTTP 403 (Forbidden):      ${padLeft(formatNumber(c403), 10)}`);
-  lines.push(`  • HTTP 404 (Not Found):      ${padLeft(formatNumber(c404), 10)}`);
-  lines.push(`  • HTTP 429 (Rate Limited):   ${padLeft(formatNumber(c429), 10)}`);
-  lines.push(`  • HTTP 5xx (Server Error):   ${padLeft(formatNumber(c5xx), 10)}`);
-  lines.push(`  • Network Timeouts / Resets:  ${padLeft(formatNumber(networkTimeouts), 10)}`);
+  lines.push(`  • HTTP 4xx Total:             ${padLeft(formatNumber(c4xx), 10)} (${formatRate(rate4xx)})`);
+  lines.push(`    - 401 Unauthorized:         ${padLeft(formatNumber(c401), 10)}`);
+  lines.push(`    - 403 Forbidden:            ${padLeft(formatNumber(c403), 10)}`);
+  lines.push(`    - 404 Not Found:            ${padLeft(formatNumber(c404), 10)}`);
+  lines.push(`    - 429 Rate Limited:         ${padLeft(formatNumber(c429), 10)}`);
+  lines.push(`  • HTTP 5xx Server Errors:     ${padLeft(formatNumber(c5xx), 10)} (${formatRate(rate5xx)})`);
+  lines.push(`  • Network Dial/Read Timeouts: ${padLeft(formatNumber(timeouts), 10)} (${formatRate(rateTimeout)})`);
+  lines.push(`  • Connection Resets by Peer:  ${padLeft(formatNumber(resets), 10)} (${formatRate(rateReset)})`);
+  lines.push(`  • Total Unreached Sockets:    ${padLeft(formatNumber(totalNetErrors), 10)}`);
   lines.push('');
 
-  lines.push('⏱️ ENDPOINT LATENCY & ERROR BREAKDOWN:');
-  lines.push('  ' + padRight('Endpoint', 22) + padLeft('Avg', 10) + padLeft('p95', 10) + padLeft('p99', 10) + padLeft('Max', 10) + padLeft('Err Rate', 11));
-  lines.push('  ' + '─'.repeat(73));
+  lines.push('⏱️ ENDPOINT LATENCY PROFILE:');
+  lines.push('  ' + padRight('Endpoint', 20) + padLeft('Avg', 9) + padLeft('p50', 9) + padLeft('p95', 9) + padLeft('p99', 9) + padLeft('Max', 9) + padLeft('Err Rate', 10));
+  lines.push('  ' + '─'.repeat(75));
 
   for (const ep of endpoints) {
     const avg = formatMs(getMetricValue(ep.latency, 'avg', 0));
-    const p95 = formatMs(getMetricValue(ep.latency, 'p(95)', 0));
-    const p99 = formatMs(getMetricValue(ep.latency, 'p(99)', 0));
+    const p50 = formatMs(getTrendPercentile(ep.latency, 'med', 'p(50)'));
+    const p95 = formatMs(getTrendPercentile(ep.latency, 'p(95)', 'p(90)'));
+    const p99 = formatMs(getTrendPercentile(ep.latency, 'p(99)', 'p(95)'));
     const max = formatMs(getMetricValue(ep.latency, 'max', 0));
     const errRate = formatRate(getMetricValue(ep.errorRate, 'rate', 0));
 
-    lines.push('  ' + padRight(ep.name, 22) + padLeft(avg, 10) + padLeft(p95, 10) + padLeft(p99, 10) + padLeft(max, 10) + padLeft(errRate, 11));
+    lines.push('  ' + padRight(ep.name, 20) + padLeft(avg, 9) + padLeft(p50, 9) + padLeft(p95, 9) + padLeft(p99, 9) + padLeft(max, 9) + padLeft(errRate, 10));
   }
-  lines.push('  ' + '─'.repeat(73));
-  lines.push('  ' + padRight('OVERALL SYSTEM', 22) + padLeft(formatMs(globalAvg), 10) + padLeft(formatMs(globalP95), 10) + padLeft(formatMs(globalP99), 10) + padLeft(formatMs(globalMax), 10) + padLeft(failPercent + '%', 11));
+  lines.push('  ' + '─'.repeat(75));
+  lines.push('  ' + padRight('OVERALL SYSTEM', 20) + padLeft(formatMs(globalAvg), 9) + padLeft(formatMs(globalP50), 9) + padLeft(formatMs(globalP95), 9) + padLeft(formatMs(globalP99), 9) + padLeft(formatMs(globalMax), 9) + padLeft(failPercent + '%', 10));
   lines.push('');
 
-  // 6. Thresholds Assessment
-  const p95Pass = globalP95 < 400;
-  const p99Pass = globalP99 < 800;
-  const failPass = parseFloat(failPercent) < 5.0;
-  const c5xxPass = c5xx < 10;
+  // 6. Target SLI Validation
+  const p95Pass = globalP95 > 0 && globalP95 < 400;
+  const p99Pass = globalP99 > 0 && globalP99 < 800;
+  const rate5xxPass = rate5xx < 0.0001; // < 0.01%
+  const timeoutPass = rateTimeout < 0.005; // ≈ 0%
+  const httpFailPass = parseFloat(failPercent) < 5.0; // < 5%
+  const businessPass = validationErrs === 0;
 
-  lines.push('🎯 PRODUCTION SLI THRESHOLD EVALUATION:');
-  lines.push(`  [${p95Pass ? 'PASS' : 'FAIL'}] Latency p95 < 400ms:          ${formatMs(globalP95)}`);
-  lines.push(`  [${p99Pass ? 'PASS' : 'FAIL'}] Latency p99 < 800ms:          ${formatMs(globalP99)}`);
-  lines.push(`  [${failPass ? 'PASS' : 'FAIL'}] Failed Request Rate < 5%:     ${failPercent}%`);
-  lines.push(`  [${c5xxPass ? 'PASS' : 'FAIL'}] 5xx Server Crashes < 10:      ${c5xx} errors`);
+  lines.push('🎯 PRODUCTION TARGET (SLI) VALIDATION:');
+  lines.push(`  [${p95Pass ? 'PASS' : 'FAIL'}] p95 Latency < 400ms:          ${formatMs(globalP95)} (Target: <400ms)`);
+  lines.push(`  [${p99Pass ? 'PASS' : 'FAIL'}] p99 Latency < 800ms:          ${formatMs(globalP99)} (Target: <800ms)`);
+  lines.push(`  [${rate5xxPass ? 'PASS' : 'FAIL'}] 5xx Error Rate < 0.01%:       ${formatRate(rate5xx)} (Target: <0.01%)`);
+  lines.push(`  [${timeoutPass ? 'PASS' : 'FAIL'}] Timeout Rate ≈ 0%:            ${formatRate(rateTimeout)} (Target: ≈0%)`);
+  lines.push(`  [${httpFailPass ? 'PASS' : 'FAIL'}] Total HTTP Failures < 5%:     ${failPercent}% (Target: <5.0%)`);
+  lines.push(`  [${businessPass ? 'PASS' : 'FAIL'}] Business Contract Errors = 0: ${validationErrs} errors (Target: 0)`);
   lines.push('');
 
-  lines.push('💡 BREAKPOINT ANALYSIS & RECOMMENDATIONS:');
-  if (networkTimeouts > 0 || !p95Pass) {
-    lines.push('  • Peak Saturation Observed: The single Node.js container reached socket saturation');
-    lines.push('    under high concurrency (2,000+ VUs).');
-    lines.push('  • Next Step 1: Benchmark via Nginx gateway (http://nginx) to utilize pooled keepalive sockets.');
-    lines.push('  • Next Step 2: Scale backend instances (e.g., docker compose up -d --scale server=3).');
-  } else {
-    lines.push('  • Excellent Stability: Backend handled all staged concurrency levels within target SLIs.');
+  lines.push('💡 ROOT CAUSE DIAGNOSIS & ARCHITECTURAL ACTIONS:');
+  if (c5xx > 0) {
+    lines.push(`  • ${c5xx} HTTP 5xx errors detected: Typically caused by Prisma connection pool exhaustion`);
+    lines.push('    or database query timeouts under high concurrent load.');
+  }
+  if (timeouts > 0 || resets > 0) {
+    lines.push(`  • ${timeouts + resets} network timeouts/resets detected: Node.js single-thread event loop`);
+    lines.push('    saturated its TCP SYN backlog. Route traffic through Nginx (http://nginx) and scale instances.');
+  }
+  if (c429 > 0) {
+    lines.push(`  • ${c429} Rate limited (429): Set ENABLE_RATE_LIMIT=false in server .env for benchmark runs.`);
+  }
+  if (p95Pass && p99Pass && rate5xxPass && timeoutPass) {
+    lines.push('  • All production target thresholds met cleanly!');
   }
   lines.push('================================================================================');
   lines.push('');

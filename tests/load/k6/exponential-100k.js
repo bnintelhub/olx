@@ -2,7 +2,7 @@ import { runSearch } from './scenarios/search.js';
 import { runBrowsing } from './scenarios/browsing.js';
 import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
-import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
+import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS, SUMMARY_TREND_STATS } from './config.js';
 import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
 import { generateBenchmarkSummary } from './lib/summary.js';
 
@@ -42,6 +42,7 @@ export const options = {
     ...THRESHOLDS,
     http_req_failed: ['rate<0.05'], // Max 5% failure at peak
   },
+  summaryTrendStats: SUMMARY_TREND_STATS,
 };
 
 export function setup() {
