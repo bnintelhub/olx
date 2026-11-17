@@ -16,7 +16,7 @@
     "dev:server": "pnpm --filter @olx/server dev",
     "dev:workers": "pnpm --filter @olx/workers dev",
     "build": "turbo run build",
-    "typecheck": "pnpm -r exec tsc --noEmit && pnpm --filter @olx/database exec tsc --noEmit -p prisma/tsconfig.json",
+    "typecheck": "pnpm --filter @olx/database db:generate && pnpm --filter @olx/database build && pnpm --filter @olx/shared build && pnpm -r exec tsc --noEmit && pnpm --filter @olx/database exec tsc --noEmit -p prisma/tsconfig.json",
     "test:unit": "pnpm --filter @olx/server exec vitest run tests/unit",
     "precommit": "pnpm run typecheck && pnpm run test:unit",
     "build:admin": "pnpm --filter @olx/admin build",

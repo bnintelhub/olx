@@ -102,6 +102,8 @@ services:
     restart: always
     depends_on:
       - server
+    expose:
+      - "80"
     networks:
       bharatmarket_net:
         aliases:
@@ -119,6 +121,8 @@ services:
     restart: always
     depends_on:
       - server
+    expose:
+      - "80"
     networks:
       bharatmarket_net:
         aliases:
@@ -139,8 +143,8 @@ services:
       - client
       - admin
     ports:
-      - "80:80"
-      - "443:443"
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
     volumes:
       - media_data:/data/olx-media:ro
       - certbot_data:/var/www/certbot:ro
