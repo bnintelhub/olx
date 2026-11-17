@@ -220,8 +220,15 @@ export class SearchService {
         break;
     }
 
-    // Optimize COUNT(*): Cache count in Redis for 120s to avoid expensive PostgreSQL table scans
-    const countCacheKey = `search:count:${JSON.stringify(where)}`;
+    // Optimize COUNT(*): Cache count in Redis for 120s using deterministic query params
+    const countCacheKey = `search:count:${JSON.stringify({
+      q: params.q?.trim() || '',
+      c: params.categoryId || params.categorySlug || '',
+      loc: params.locationId || params.citySlug || '',
+      min: params.minPrice,
+      max: params.maxPrice,
+      attrs: params.attributes || {},
+    })}`;
     const cachedCount = await getCache<number>(countCacheKey);
 
     const countPromise = cachedCount !== null && cachedCount !== undefined
@@ -258,9 +265,8 @@ export class SearchService {
           images: {
             select: {
               id: true,
-              url: true,
-              originalUrl: true,
               sortOrder: true,
+              isCover: true,
               mediaAssetId: true,
               mediaAsset: {
                 select: { id: true, variants: true, storageKey: true, sizeBytes: true },
