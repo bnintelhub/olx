@@ -363,6 +363,8 @@ model Ad {
 
   @@index([status, categoryId, createdAt])
   @@index([status, locationId, createdAt])
+  @@index([status, expiresAt, createdAt])
+  @@index([status, createdAt])
   @@index([locationId])
   @@index([categoryId, locationId])
   @@index([status, price])

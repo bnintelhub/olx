@@ -68,6 +68,13 @@ export const responseMetricsPlugin = fp(async (fastify: FastifyInstance) => {
     }
     reply.header('Server-Timing', timingEntries.join(', '));
 
+    // Server-side diagnostic log for slow requests (> 2,000ms)
+    if (durationMs > 2000) {
+      fastify.log.warn(
+        `⚠️ [SLOW REQUEST ${durationMs}ms] ${request.method} ${request.url} | ${timingEntries.join(', ')}`
+      );
+    }
+
     return payload;
   });
 

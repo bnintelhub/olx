@@ -220,22 +220,59 @@ export class SearchService {
         break;
     }
 
+    // Optimize COUNT(*): Cache count in Redis for 120s to avoid expensive PostgreSQL table scans
+    const countCacheKey = `search:count:${JSON.stringify(where)}`;
+    const cachedCount = await getCache<number>(countCacheKey);
+
+    const countPromise = cachedCount !== null && cachedCount !== undefined
+      ? Promise.resolve(cachedCount)
+      : prisma.ad.count({ where }).then((cnt) => {
+          void setCache(countCacheKey, cnt, 120);
+          return cnt;
+        });
+
     const [total, ads] = await Promise.all([
-      prisma.ad.count({ where }),
+      countPromise,
       prisma.ad.findMany({
         where,
         orderBy,
         skip,
         take: limit,
-        include: {
+        select: {
+          id: true,
+          title: true,
+          slug: true,
+          price: true,
+          isNegotiable: true,
+          status: true,
+          viewCount: true,
+          favouriteCount: true,
+          latitude: true,
+          longitude: true,
+          createdAt: true,
+          expiresAt: true,
+          categoryId: true,
+          locationId: true,
           category: { select: { id: true, name: true, slug: true, parentId: true } },
           location: { select: { id: true, name: true, slug: true, type: true } },
-          images: { include: { mediaAsset: true }, orderBy: { sortOrder: 'asc' }, take: 4 },
+          images: {
+            select: {
+              id: true,
+              url: true,
+              originalUrl: true,
+              sortOrder: true,
+              mediaAssetId: true,
+              mediaAsset: {
+                select: { id: true, variants: true, storageKey: true, sizeBytes: true },
+              },
+            },
+            orderBy: { sortOrder: 'asc' },
+            take: 2,
+          },
           user: {
             select: {
               id: true,
               role: true,
-              createdAt: true,
               profile: {
                 select: {
                   name: true,

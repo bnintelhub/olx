@@ -212,7 +212,16 @@ export function executeRequest(method, url, options = {}) {
   // 4. Record Metrics
   recordRequestMetrics(res, tag, isBusinessValid);
 
-  // 5. Sampled Failure Logging (Strictly throttled to prevent spam)
+  // 5. Detect and log extreme latency outliers (> 3,000ms) with Server-Timing diagnostics
+  const duration = res && res.timings ? res.timings.duration : 0;
+  if (duration > 3000) {
+    const serverTiming = res.headers ? (res.headers['Server-Timing'] || res.headers['server-timing'] || 'none') : 'none';
+    console.warn(
+      `🚨 [LATENCY OUTLIER ${Math.round(duration)}ms] [${tag}] HTTP ${res.status} | URL: ${url} | Server-Timing: ${serverTiming}`
+    );
+  }
+
+  // 6. Sampled Failure Logging (Strictly throttled to prevent spam)
   if (!passed) {
     logSampledError(res, tag, validationError, sampleRate);
   }
