@@ -4,7 +4,7 @@ import { runBrowsing } from './scenarios/browsing.js';
 import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
 import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
-import { authenticateUser } from './lib/helpers.js';
+import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
 
 export const options = {
   stages: [
@@ -18,6 +18,7 @@ export const options = {
 };
 
 export function setup() {
+  verifyTargetReachable(BASE_URL);
   let token = null;
   if (AUTH_CREDENTIALS.email && AUTH_CREDENTIALS.password) {
     token = authenticateUser(BASE_URL, AUTH_CREDENTIALS.email, AUTH_CREDENTIALS.password);

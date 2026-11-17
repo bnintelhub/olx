@@ -73,6 +73,7 @@ services:
       bharatmarket_net:
         aliases:
           - backend
+          - server
 
   # ========================================================
   # BullMQ Background Worker Service (tsx watch Auto-Reload)

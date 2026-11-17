@@ -12,7 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -d $${DATABASE_URL}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-olx_marketplace}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,6 +66,7 @@ services:
         aliases:
           - backend
           - backend_service
+          - server
 
   # ========================================================
   # BullMQ Background Worker Service (Sharp WebP & Jobs)

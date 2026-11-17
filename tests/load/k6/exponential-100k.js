@@ -3,7 +3,7 @@ import { runBrowsing } from './scenarios/browsing.js';
 import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
 import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
-import { authenticateUser } from './lib/helpers.js';
+import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
 
 /**
  * 1 Lakh (100,000) Concurrent Exponential Arrival Rate Benchmark
@@ -48,6 +48,9 @@ export function setup() {
   console.log(`🚀 BharatMarket 100k Exponential Arrival Rate Benchmark`);
   console.log(`📡 Target URL: ${BASE_URL}`);
   console.log(`================================================================`);
+
+  // Verify connectivity before scheduling iterations
+  verifyTargetReachable(BASE_URL);
 
   let token = null;
   if (AUTH_CREDENTIALS.email && AUTH_CREDENTIALS.password) {
