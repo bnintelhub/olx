@@ -5,6 +5,7 @@ import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
 import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
 import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
+import { generateBenchmarkSummary } from './lib/summary.js';
 
 export const options = {
   stages: [
@@ -41,4 +42,10 @@ export default function (data) {
   }
 
   sleep(0.2);
+}
+
+export function handleSummary(data) {
+  return {
+    stdout: generateBenchmarkSummary(data),
+  };
 }

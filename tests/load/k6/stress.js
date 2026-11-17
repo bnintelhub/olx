@@ -5,6 +5,7 @@ import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
 import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
 import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
+import { generateBenchmarkSummary } from './lib/summary.js';
 
 /**
  * BharatMarket Production Staged Breakpoint Load Test
@@ -79,4 +80,14 @@ export default function (data) {
 
   // Realistic human think time between user actions (300ms - 800ms)
   sleep(0.3 + Math.random() * 0.5);
+}
+
+/**
+ * Clean Terminal Summary Output
+ * Automatically triggered at benchmark completion to print a structured report.
+ */
+export function handleSummary(data) {
+  return {
+    stdout: generateBenchmarkSummary(data),
+  };
 }

@@ -4,6 +4,7 @@ import { runAdDetails } from './scenarios/ads.js';
 import { runMessaging } from './scenarios/messaging.js';
 import { BASE_URL, AUTH_CREDENTIALS, THRESHOLDS } from './config.js';
 import { authenticateUser, verifyTargetReachable } from './lib/helpers.js';
+import { generateBenchmarkSummary } from './lib/summary.js';
 
 /**
  * 1 Lakh (100,000) Concurrent Exponential Arrival Rate Benchmark
@@ -76,4 +77,10 @@ export default function (data) {
     // 10% Chat & messaging probes
     runMessaging(token);
   }
+}
+
+export function handleSummary(data) {
+  return {
+    stdout: generateBenchmarkSummary(data),
+  };
 }
