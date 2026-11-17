@@ -244,6 +244,7 @@ async function main() {
           originalName: 'cover.jpg',
           mimeType: 'image/jpeg',
           extension: 'jpg',
+          sizeBytes: BigInt(245760),
           status: MediaAssetStatus.READY,
           variants: {
             thumbnail: item.image,

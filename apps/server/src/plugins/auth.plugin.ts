@@ -72,6 +72,12 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
     }
 
     try {
+      // Immediate blacklist check: blocks in-flight access tokens immediately if staff ID compromised/suspended
+      const isSuspended = await getCache<string>(`user:${decoded.userId}:suspended`);
+      if (isSuspended) {
+        throw new AppError(401, 'ACCOUNT_SUSPENDED', 'Account has been suspended. Please contact system administrator.');
+      }
+
       const cacheKey = `user:${decoded.userId}`;
 
       let cached = await getCache<AuthUser>(cacheKey);
@@ -94,7 +100,10 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
         });
 
         if (!user || user.status !== 'ACTIVE') {
-          throw new AppError(401, 'USER_INACTIVE', 'User account is inactive or suspended');
+          if (user?.status === 'SUSPENDED') {
+            await setCache(`user:${decoded.userId}:suspended`, 'true', 30 * 24 * 60 * 60);
+          }
+          throw new AppError(401, 'ACCOUNT_SUSPENDED', 'User account is inactive or suspended');
         }
 
         // Prevent regular non-staff user tokens from accessing admin console

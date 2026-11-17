@@ -51,11 +51,19 @@ export interface StaffInvitationItem {
   inviteLink?: string;
   isLifetime?: boolean;
   isExpired?: boolean;
+  user?: {
+    id: string;
+    email: string;
+    role: AdminRole;
+    status: 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
+    name?: string | null;
+    lastLoginAt?: string | null;
+  } | null;
   invitedBy?: {
     id: string;
     email?: string;
     profile?: { name?: string | null };
-  };
+  } | null;
 }
 
 export interface InvitationDetails {
@@ -175,6 +183,19 @@ export const authService = {
   // Prevents unauthorized onboarding if an invitation was sent by mistake.
   async revokeStaffInvitation(id: string): Promise<StaffInvitationItem> {
     const { data } = await apiClient.delete<ApiResponse<StaffInvitationItem>>(`/admin/invitations/${id}`);
+    return data.data;
+  },
+
+  // Updates the live account status (ACTIVE or SUSPENDED) of a staff member.
+  // Immediate revocation blocks compromised credentials across all active sessions.
+  async updateStaffStatus(
+    id: string,
+    payload: { status: 'ACTIVE' | 'SUSPENDED'; reason?: string }
+  ): Promise<{ user: any; isSelf?: boolean; message?: string }> {
+    const { data } = await apiClient.patch<ApiResponse<{ user: any; isSelf?: boolean; message?: string }>>(
+      `/admin/staff/${id}/status`,
+      payload
+    );
     return data.data;
   },
 

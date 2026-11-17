@@ -529,6 +529,10 @@ export class AuthService {
       throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Session expired. Please log in again.');
     }
 
+    if (user.status !== 'ACTIVE') {
+      throw new AppError(401, 'ACCOUNT_SUSPENDED', 'Account has been suspended. Please contact system administrator.');
+    }
+
     const tokenPayload: TokenPayload = {
       userId: user.id,
       role: user.role,

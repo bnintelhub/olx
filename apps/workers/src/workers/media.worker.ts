@@ -161,6 +161,36 @@ export function startMediaWorker() {
         throw new Error(`Temp file not found at ${tempStorageKey}`);
       }
 
+      // Edge case: Reject 0-byte files immediately (0-byte files are not true images)
+      const tempStat = fs.statSync(tempFullPath);
+      if (tempStat.size === 0) {
+        if (await storage.exists(tempStorageKey)) {
+          await storage.delete(tempStorageKey).catch(() => {});
+        }
+        await prisma.mediaAsset.update({
+          where: { id: assetId },
+          data: {
+            status: 'FAILED',
+            failureReason: 'Uploaded file is 0 bytes (corrupt or empty image)',
+          },
+        }).catch(() => {});
+
+        // Auto-evict 0-byte orphan if unattached
+        try {
+          const asset = await prisma.mediaAsset.findUnique({
+            where: { id: assetId },
+            include: { adImages: true, categories: true, banners: true },
+          });
+          if (asset && (!asset.entityId || (asset.adImages.length === 0 && asset.categories.length === 0 && asset.banners.length === 0))) {
+            await prisma.adImage.deleteMany({ where: { mediaAssetId: assetId } }).catch(() => {});
+            await prisma.mediaAsset.delete({ where: { id: assetId } }).catch(() => {});
+            console.log(`[Worker - media-processing] Auto-evicted 0-byte unattached asset ${assetId}`);
+          }
+        } catch {}
+
+        throw new Error(`Asset ${assetId} failed: 0 bytes empty file`);
+      }
+
       // Mark status as PROCESSING
       await prisma.mediaAsset.update({
         where: { id: assetId },
@@ -199,6 +229,10 @@ export function startMediaWorker() {
             .webp({ quality: 100, effort: 3 })
             .toBuffer();
 
+          if (!webpBuffer || webpBuffer.length === 0) {
+            throw new Error('Image optimization resulted in empty (0 bytes) file');
+          }
+
           const baseDir = `images/${year}/${month}/${day}/${assetId}`;
           const imageKey = `${baseDir}/image.webp`;
 
@@ -215,6 +249,7 @@ export function startMediaWorker() {
               storageKey: imageKey,
               width,
               height,
+              sizeBytes: BigInt(webpBuffer.length),
               variants,
               metadata: { focalPoint },
             },
@@ -257,10 +292,22 @@ export function startMediaWorker() {
         const attemptsMade = job.attemptsMade;
         const maxAttempts = job.opts.attempts || 3;
 
+        // Clean up partial destination file if any exists
+        const baseDir = `images/${year}/${month}/${day}/${assetId}`;
+        const imageKey = `${baseDir}/image.webp`;
+        try {
+          if (await storage.exists(imageKey)) {
+            await storage.delete(imageKey).catch(() => {});
+          }
+        } catch {}
+
         if (attemptsMade >= maxAttempts) {
           await prisma.mediaAsset.update({
             where: { id: assetId },
-            data: { status: 'FAILED' },
+            data: {
+              status: 'FAILED',
+              failureReason: err.message?.substring(0, 250) || 'Processing failed after max retries',
+            },
           }).catch(() => {});
 
           await mediaDeadLetterQueue.add('failed-asset-job', {
@@ -276,6 +323,21 @@ export function startMediaWorker() {
           // Clean temp
           if (await storage.exists(tempStorageKey)) {
             await storage.delete(tempStorageKey).catch(() => {});
+          }
+
+          // Auto-eviction: if this failed asset is unattached or in draft, auto-evict it
+          try {
+            const asset = await prisma.mediaAsset.findUnique({
+              where: { id: assetId },
+              include: { adImages: true, categories: true, banners: true },
+            });
+            if (asset && (!asset.entityId || (asset.adImages.length === 0 && asset.categories.length === 0 && asset.banners.length === 0))) {
+              await prisma.adImage.deleteMany({ where: { mediaAssetId: assetId } }).catch(() => {});
+              await prisma.mediaAsset.delete({ where: { id: assetId } }).catch(() => {});
+              console.log(`[Worker - media-processing] Auto-evicted failed unattached asset ${assetId}`);
+            }
+          } catch (evictErr) {
+            console.warn(`[Worker - media-processing] Auto-eviction warning for ${assetId}:`, evictErr);
           }
         }
         throw err;
@@ -310,6 +372,34 @@ export function startMediaWorker() {
         throw new Error(`Temporary file not found at: ${tempPath}`);
       }
 
+      // Edge case: Reject 0-byte files immediately (0-byte files are not true images)
+      const tempStat = fs.statSync(tempPath);
+      if (tempStat.size === 0) {
+        await fs.promises.unlink(tempPath).catch(() => {});
+        await prisma.mediaAsset.update({
+          where: { id: mediaId },
+          data: {
+            status: 'FAILED',
+            failureReason: 'Temporary file is 0 bytes (corrupt or empty image)',
+          },
+        }).catch(() => {});
+
+        // Auto-evict 0-byte orphan if unattached
+        try {
+          const asset = await prisma.mediaAsset.findUnique({
+            where: { id: mediaId },
+            include: { adImages: true, categories: true, banners: true },
+          });
+          if (asset && (!asset.entityId || (asset.adImages.length === 0 && asset.categories.length === 0 && asset.banners.length === 0))) {
+            await prisma.adImage.deleteMany({ where: { mediaAssetId: mediaId } }).catch(() => {});
+            await prisma.mediaAsset.delete({ where: { id: mediaId } }).catch(() => {});
+            console.log(`[Worker - media-process (legacy)] Auto-evicted 0-byte unattached media ${mediaId}`);
+          }
+        } catch {}
+
+        throw new Error(`Media ID ${mediaId} failed: 0 bytes empty file`);
+      }
+
       try {
         const image = sharp(tempPath, { failOn: 'error', limitInputPixels: 64000000 });
         const metadata = await image.metadata();
@@ -325,6 +415,10 @@ export function startMediaWorker() {
           .webp({ quality: 100, effort: 3 })
           .toBuffer();
 
+        if (!webpBuffer || webpBuffer.length === 0) {
+          throw new Error('Image optimization resulted in empty (0 bytes) file');
+        }
+
         const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'image', format: 'webp' });
 
         await storage.save({ destinationKey: imagePath, streamOrBuffer: webpBuffer });
@@ -339,6 +433,7 @@ export function startMediaWorker() {
             status: 'READY',
             width,
             height,
+            sizeBytes: BigInt(webpBuffer.length),
             storageKey: imagePath,
             variants,
           },
@@ -347,8 +442,17 @@ export function startMediaWorker() {
         await fs.promises.unlink(tempPath).catch(() => {});
         console.log(`[Worker - media-process (legacy)] Successfully processed Media ID: ${mediaId}`);
       } catch (err: any) {
+        console.error(`[Worker - media-process (legacy)] Failed processing Media ID: ${mediaId}:`, err);
         const attemptsMade = job.attemptsMade;
         const maxAttempts = job.opts.attempts || 3;
+
+        // Clean up partial destination file if any exists
+        const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'image', format: 'webp' });
+        try {
+          if (await storage.exists(imagePath)) {
+            await storage.delete(imagePath).catch(() => {});
+          }
+        } catch {}
 
         if (attemptsMade >= maxAttempts) {
           await prisma.mediaAsset.update({
@@ -370,6 +474,21 @@ export function startMediaWorker() {
 
           if (fs.existsSync(tempPath)) {
             await fs.promises.unlink(tempPath).catch(() => {});
+          }
+
+          // Auto-eviction: if this failed media is unattached or in draft, auto-evict it
+          try {
+            const asset = await prisma.mediaAsset.findUnique({
+              where: { id: mediaId },
+              include: { adImages: true, categories: true, banners: true },
+            });
+            if (asset && (!asset.entityId || (asset.adImages.length === 0 && asset.categories.length === 0 && asset.banners.length === 0))) {
+              await prisma.adImage.deleteMany({ where: { mediaAssetId: mediaId } }).catch(() => {});
+              await prisma.mediaAsset.delete({ where: { id: mediaId } }).catch(() => {});
+              console.log(`[Worker - media-process (legacy)] Auto-evicted failed unattached media ${mediaId}`);
+            }
+          } catch (evictErr) {
+            console.warn(`[Worker - media-process (legacy)] Auto-eviction warning for ${mediaId}:`, evictErr);
           }
         }
         throw err;

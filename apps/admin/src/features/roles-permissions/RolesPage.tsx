@@ -22,8 +22,12 @@ import {
   Share2,
   CheckCircle2,
   Link2,
+  ShieldAlert,
+  AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useAuthStore } from '../../stores/auth.store';
 
 const ADMIN_ROLES_MATRIX = [
   {
@@ -108,6 +112,9 @@ function formatExpiryDisplay(expiresAt: string, isLifetimeFlag?: boolean) {
 
 export function RolesPage() {
   const queryClient = useQueryClient();
+  const currentUser = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<AdminRole>('MODERATOR');
@@ -115,6 +122,10 @@ export function RolesPage() {
   const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [createdInviteResult, setCreatedInviteResult] = useState<{ email: string; link: string; role: AdminRole; expiresText: string } | null>(null);
+
+  // Staff ID Suspension Modal State
+  const [suspendingStaff, setSuspendingStaff] = useState<StaffInvitationItem | null>(null);
+  const [suspendReason, setSuspendReason] = useState('');
 
   // 1. Fetch Staff Invitations
   const { data: invitations = [], isLoading } = useQuery<StaffInvitationItem[]>({
@@ -159,6 +170,31 @@ export function RolesPage() {
     },
     onError: (err: any) => {
       const msg = err.response?.data?.message || err.message || 'Failed to revoke invitation';
+      toast.error(msg);
+    },
+  });
+
+  // 4. Update Staff Status Mutation (Suspend / Reactivate)
+  const updateStatusMutation = useMutation({
+    mutationFn: ({ id, status, reason }: { id: string; status: 'ACTIVE' | 'SUSPENDED'; reason?: string }) =>
+      authService.updateStaffStatus(id, { status, reason }),
+    onSuccess: async (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['staff-invitations'] });
+      setSuspendingStaff(null);
+      setSuspendReason('');
+
+      if (data.isSelf || currentUser?.id === data.user?.id) {
+        toast.warning('Your staff ID has been suspended. Logging out for security...');
+        setTimeout(async () => {
+          await logout();
+          window.location.href = '/admin/login';
+        }, 1500);
+      } else {
+        toast.success(data.message || (variables.status === 'SUSPENDED' ? 'Staff ID suspended' : 'Staff ID reactivated'));
+      }
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || err.message || 'Failed to update staff status';
       toast.error(msg);
     },
   });
@@ -294,9 +330,17 @@ export function RolesPage() {
                       </TableCell>
                       <TableCell>
                         {isAccepted && (
-                          <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 bg-emerald-500/10 text-[10px]">
-                            Accepted
-                          </Badge>
+                          inv.user?.status === 'SUSPENDED' ? (
+                            <Badge variant="outline" className="border-rose-500/40 text-rose-500 bg-rose-500/10 text-[10px] flex items-center gap-1 w-fit">
+                              <ShieldAlert className="h-3 w-3" />
+                              ID Suspended
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 bg-emerald-500/10 text-[10px] flex items-center gap-1 w-fit">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                              Active
+                            </Badge>
+                          )
                         )}
                         {isRevoked && (
                           <Badge variant="outline" className="border-rose-500/40 text-rose-500 bg-rose-500/10 text-[10px]">
@@ -311,7 +355,7 @@ export function RolesPage() {
                         {isPending && !isExpired && (
                           <Badge variant="outline" className="border-emerald-500/40 text-emerald-500 bg-emerald-500/10 text-[10px] flex items-center gap-1 w-fit">
                             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Active
+                            Active Invite
                           </Badge>
                         )}
                       </TableCell>
@@ -348,9 +392,15 @@ export function RolesPage() {
                             )}
                           </Button>
                         ) : isAccepted ? (
-                          <span className="text-[11px] text-emerald-500 font-medium flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3" /> Account Active
-                          </span>
+                          inv.user?.status === 'SUSPENDED' ? (
+                            <span className="text-[11px] text-rose-500 font-medium flex items-center gap-1">
+                              <ShieldAlert className="h-3 w-3" /> Access Terminated
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-emerald-500 font-medium flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" /> Account Active
+                            </span>
+                          )
                         ) : isRevoked ? (
                           <span className="text-[11px] text-muted-foreground">Link Canceled</span>
                         ) : (
@@ -358,19 +408,49 @@ export function RolesPage() {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        {isPending && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => revokeMutation.mutate(inv.id)}
-                            disabled={revokeMutation.isPending}
-                            className="h-7 px-2 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
-                            title="Revoke invitation"
-                          >
-                            <Ban className="h-3.5 w-3.5" />
-                            <span>Revoke</span>
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          {isPending && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => revokeMutation.mutate(inv.id)}
+                              disabled={revokeMutation.isPending}
+                              className="h-7 px-2 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                              title="Revoke pending invitation"
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                              <span>Revoke</span>
+                            </Button>
+                          )}
+
+                          {isAccepted && inv.user?.status === 'SUSPENDED' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => updateStatusMutation.mutate({ id: inv.user?.id || inv.id, status: 'ACTIVE' })}
+                              disabled={updateStatusMutation.isPending || (currentUser?.role === 'ADMIN' && inv.role === 'SUPER_ADMIN')}
+                              className="h-7 px-2 text-xs border-emerald-500/40 text-emerald-500 hover:bg-emerald-500/10 cursor-pointer font-medium"
+                              title={currentUser?.role === 'ADMIN' && inv.role === 'SUPER_ADMIN' ? 'Admins cannot modify Super Admins' : 'Reactivate staff access'}
+                            >
+                              <RotateCcw className="h-3.5 w-3.5" />
+                              <span>Reactivate ID</span>
+                            </Button>
+                          )}
+
+                          {isAccepted && inv.user?.status !== 'SUSPENDED' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setSuspendingStaff(inv)}
+                              disabled={updateStatusMutation.isPending || (currentUser?.role === 'ADMIN' && inv.role === 'SUPER_ADMIN')}
+                              className="h-7 px-2 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-500/10 cursor-pointer"
+                              title={currentUser?.role === 'ADMIN' && inv.role === 'SUPER_ADMIN' ? 'Admins cannot modify Super Admins' : 'Suspend staff ID immediately if compromised or device stolen'}
+                            >
+                              <ShieldAlert className="h-3.5 w-3.5" />
+                              <span>Suspend ID</span>
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   );
@@ -600,6 +680,97 @@ export function RolesPage() {
             </DialogFooter>
           </form>
         )}
+      </Dialog>
+
+      {/* Staff ID Suspension Confirmation Dialog */}
+      <Dialog open={!!suspendingStaff} onOpenChange={(open) => !open && setSuspendingStaff(null)}>
+        <DialogHeader>
+          <div className="flex items-center gap-2 text-rose-500">
+            <ShieldAlert className="h-5 w-5" />
+            <DialogTitle className="text-base font-semibold">
+              Suspend Staff ID: Immediate Security Revocation
+            </DialogTitle>
+          </div>
+          <DialogDescription className="text-xs text-muted-foreground pt-1">
+            Immediate action to neutralize compromised accounts or stolen credentials.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2 text-xs">
+          <div className="bg-rose-500/10 border border-rose-500/30 rounded-md p-3 space-y-2">
+            <div className="flex items-center gap-2 font-medium text-rose-500">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>Security Impact of Suspension</span>
+            </div>
+            <ul className="list-disc list-inside text-muted-foreground space-y-1 pl-1">
+              <li><strong>In-Flight Tokens Blocked:</strong> Redis blacklist immediately rejects all active JWT tokens.</li>
+              <li><strong>Refresh Tokens Revoked:</strong> Database credentials cleared; the user cannot renew sessions.</li>
+              <li><strong>Session Evicted:</strong> Cached identity evicted from memory across all server nodes.</li>
+            </ul>
+          </div>
+
+          {suspendingStaff && (currentUser?.id === suspendingStaff.user?.id || currentUser?.email === suspendingStaff.email) && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-md p-3 text-amber-500 font-medium">
+              ⚠️ Warning: You are suspending <strong>YOUR OWN</strong> staff ID. You will be logged out immediately upon confirmation.
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="font-medium text-foreground">Target Staff Member</label>
+            <div className="p-2.5 rounded-md border bg-muted/40 flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-foreground">{suspendingStaff?.email}</p>
+                <p className="text-[11px] text-muted-foreground">{suspendingStaff?.user?.name || 'Staff Operator'}</p>
+              </div>
+              <Badge variant="outline" className="font-mono text-[10px] border-blue-500/30 text-blue-500">
+                {suspendingStaff?.role}
+              </Badge>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="font-medium text-foreground">Reason for Suspension (Optional)</label>
+            <Input
+              placeholder="e.g. Lost device, compromised credentials, or security audit"
+              value={suspendReason}
+              onChange={(e) => setSuspendReason(e.target.value)}
+              className="text-xs"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setSuspendingStaff(null)}
+            disabled={updateStatusMutation.isPending}
+            className="cursor-pointer"
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => {
+              if (!suspendingStaff) return;
+              updateStatusMutation.mutate({
+                id: suspendingStaff.user?.id || suspendingStaff.id,
+                status: 'SUSPENDED',
+                reason: suspendReason.trim() || undefined,
+              });
+            }}
+            disabled={updateStatusMutation.isPending}
+            className="gap-1.5 cursor-pointer bg-rose-600 hover:bg-rose-700 text-white font-medium"
+          >
+            {updateStatusMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <ShieldAlert className="h-3.5 w-3.5" />
+            )}
+            <span>Confirm Immediate Suspension</span>
+          </Button>
+        </DialogFooter>
       </Dialog>
     </div>
   );

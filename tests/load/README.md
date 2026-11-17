@@ -13,104 +13,100 @@ tests/load/
 ├── autocannon-exponential.js   # 1 Lakh Exponential Autocannon runner (Zero-setup Node.js)
 ├── run-codespace-100k.sh       # Codespace OS-optimized runner with ulimit tuning
 ├── k6/
-│   ├── exponential-100k.js     # k6 1 Lakh ramping arrival rate scenario
-│   ├── stress.js               # Multi-scenario breaking point test (up to 10k VUs)
-│   ├── spike.js                # Instant surge test (up to 5k VUs)
-│   ├── config.js               # Shared target URLs and thresholds
-│   └── scenarios/              # Realistic user workflows (search, browsing, ads, messaging)
+│   ├── config.js               # Shared target URLs, thresholds, and auth credentials
+│   ├── lib/
+│   │   ├── metrics.js          # Custom k6 metrics (HTTP status counters, latencies, validation)
+│   │   └── helpers.js          # Reusable HTTP client, auth login, checks, and sampled logging
+│   ├── scenarios/
+│   │   ├── search.js           # Realistic catalog search & filters
+│   │   ├── browsing.js         # Category taxonomy & tree navigation
+│   │   ├── ads.js              # Ad feed & suggestions
+│   │   └── messaging.js        # Authenticated user conversations & health fallback
+│   ├── stress.js               # 7-stage realistic VU breakpoint benchmark (100 -> 10,000 VUs)
+│   ├── spike.js                # Instant surge test (500 -> 5,000 VUs)
+│   └── exponential-100k.js     # 1 Lakh arrival rate high-throughput benchmark
 ```
 
 ---
 
-## 🚀 Running 1 Lakh (100,000) Exponential Load Test
+## 🚀 Running the Benchmarks
 
-### Method 1: In GitHub Codespaces (Recommended)
+### 1. Staged Breakpoint Benchmark (Recommended: 100 to 10,000 VUs)
 
-GitHub Codespaces containers run Linux with high CPU burst capacity. Run the pre-tuned bash runner:
-
-```bash
-# 1. Give execute permissions
-chmod +x tests/load/run-codespace-100k.sh
-
-# 2. Test Nginx Gateway Health
-./tests/load/run-codespace-100k.sh health
-
-# 3. Test Full-Stack Ads API & Database Reads
-./tests/load/run-codespace-100k.sh ads
-
-# 4. Test Categories Taxonomy
-./tests/load/run-codespace-100k.sh categories
-
-# 5. Test Search & Filter Pipeline
-./tests/load/run-codespace-100k.sh search
-```
-
-*Note: `run-codespace-100k.sh` automatically raises OS file descriptor limits (`ulimit -n 1048576`) to prevent `EMFILE: too many open files` errors.*
-
----
-
-### Method 2: Via pnpm (Cross-Platform)
+Tests realistic user flows through 7 progressive stages to identify saturation breakpoints:
 
 ```bash
-# Exponential Test (100 -> 500 -> 2k -> 10k -> 25k -> 50k -> 1 Lakh)
-pnpm test:load:100k
+# If k6 is installed natively
+k6 run -e TARGET_URL=http://localhost:5000 tests/load/k6/stress.js
 
-# Target specific endpoints:
-pnpm test:load:100k http://localhost/health
-pnpm test:load:100k http://localhost/api/v1/ads?limit=16
-pnpm test:load:100k http://localhost:5000/api/v1/health
-```
-
----
-
-### Method 3: Via k6 (Docker in Codespaces / Linux)
-
-In GitHub Codespaces and Linux, containers do not use `host.docker.internal`. Use `--network host`:
-
-```bash
-# Option A: Using host networking (Fastest in Codespaces)
-docker run --rm -i --network host -v "${PWD}/tests/load/k6:/k6" \
+# With authentic user login
+k6 run \
   -e TARGET_URL=http://localhost:5000 \
-  grafana/k6 run /k6/exponential-100k.js
+  -e TEST_USER_EMAIL=user@example.com \
+  -e TEST_USER_PASSWORD=SecretPassword123 \
+  tests/load/k6/stress.js
 
-# Option B: Connecting directly to the Docker stack network
+# Via Docker (Connecting to Docker internal network)
+docker run --rm -i --network bharatmarket_net -v "${PWD}/tests/load/k6:/k6" \
+  -e TARGET_URL=http://server:5000 \
+  grafana/k6 run /k6/stress.js
+```
+
+### 2. 1 Lakh (100,000) Concurrent Exponential Load Test
+
+```bash
+# Via Docker on Linux/Codespaces
 docker run --rm -i --network bharatmarket_net -v "${PWD}/tests/load/k6:/k6" \
   -e TARGET_URL=http://server:5000 \
   grafana/k6 run /k6/exponential-100k.js
 
-# Option C: If k6 is installed natively
-k6 run -e TARGET_URL=http://localhost:5000 tests/load/k6/exponential-100k.js
+# Via Autocannon (Zero dependencies Node.js)
+pnpm test:load:100k http://localhost/api/v1/ads?limit=16
 ```
 
 ---
 
-## 📈 The 7 Exponential Concurrency Stages
+## 📈 7-Stage VU Progression (`stress.js`)
 
-| Stage | Target In-Flight Concurrency | Raw Sockets & Pipelining | Duration | Objective |
-| :--- | :--- | :--- | :--- | :--- |
-| **Stage 1** | **100** | 50 conns × 2 pipe | 10s | Warmup & baseline measurement |
-| **Stage 2** | **500** | 100 conns × 5 pipe | 12s | Normal daily traffic density |
-| **Stage 3** | **2,000** | 200 conns × 10 pipe | 15s | Peak evening hour traffic |
-| **Stage 4** | **10,000** | 500 conns × 20 pipe | 18s | Marketing campaign spike |
-| **Stage 5** | **25,000** | 1250 conns × 20 pipe | 20s | Flash sale / Festival surge |
-| **Stage 6** | **50,000** | 2500 conns × 20 pipe | 25s | Heavy enterprise concurrency stress |
-| **Stage 7** | **100,000 (1 Lakh)** | 5000 conns × 20 pipe | 30s | **1 Lakh Target & Breakpoint Probe** |
+| Stage | Target VUs | Duration | Objective |
+| :--- | :--- | :--- | :--- |
+| **Stage 1** | **100 VUs** | 30s | Warmup & baseline measurement |
+| **Stage 2** | **250 VUs** | 30s | Light production load |
+| **Stage 3** | **500 VUs** | 1m | Standard daily peak traffic |
+| **Stage 4** | **1,000 VUs** | 1m | Evening rush hour surge |
+| **Stage 5** | **2,000 VUs** | 2m | High-density marketing campaign surge |
+| **Stage 6** | **5,000 VUs** | 2m | Heavy festival spike stress |
+| **Stage 7** | **10,000 VUs** | 2m | **Breakpoint probe & saturation test** |
+| **Stage 8** | **0 VUs** | 1m | Cooldown & recovery verification |
 
 ---
 
-## 📊 How to Interpret Results
+## 📊 Custom Metrics & Telemetry
 
-1. **Req/Sec (Throughput)**:
-   - Fastify single-instance healthy benchmark: **15,000 – 35,000 req/sec**.
-   - Nginx cached media/health benchmark: **40,000 – 70,000 req/sec**.
-2. **Latency (p99)**:
-   - `< 100ms`: Exceptional.
-   - `100ms - 300ms`: Acceptable under 50k+ concurrency.
-   - `> 1000ms`: Server event loop backlog or database connection pool starvation.
-3. **Status Codes (2xx vs 5xx)**:
-   - `2xx`: Successful in-flight deliveries.
-   - `5xx / Timeouts`: Identifies exact saturation point.
-   - If 5xx appears around 50k, scale horizontally:
-     ```bash
-     docker compose -f docker-compose.prod.yml up -d --scale server=3
-     ```
+The suite captures granular custom metrics to cleanly distinguish root causes:
+
+1. **Status Code Tracking**:
+   - `successful_http_responses`: HTTP 2xx count
+   - `failed_http_responses`: HTTP >= 400 or network connection errors
+   - `status_401_unauthorized`: Missing or expired auth token
+   - `status_403_forbidden`: Role/permission or CSRF rejection
+   - `status_404_not_found`: Broken route or missing entity
+   - `status_429_rate_limited`: Fastify or Nginx rate limiter activation
+   - `status_5xx_server_error`: Unhandled backend exceptions or database crashes
+2. **Business Contract Validation**:
+   - `expected_response_failures`: Malformed JSON or API `success: false`
+3. **Endpoint-Specific Latencies & Error Rates**:
+   - `latency_search_ads`, `error_rate_search_ads`
+   - `latency_ads_list`, `error_rate_ads_list`
+   - `latency_browsing_categories`, `error_rate_browsing_categories`
+   - `latency_messaging_probe`, `error_rate_messaging_probe`
+
+---
+
+## ⚙️ Rate Limiting Considerations
+
+Fastify enforces a default rate limit of **200 requests/minute per IP** (`apps/server/src/plugins/rate-limit.plugin.ts`).
+During high-concurrency benchmarks originating from a single IP, this limit is exhausted in milliseconds, causing Fastify to return `429 Too Many Requests` in ~1ms.
+
+To benchmark actual backend query performance without artificial rate limiting:
+- In `.env.development` or `.env.production`, ensure `ENABLE_RATE_LIMIT=false`.

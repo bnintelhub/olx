@@ -76,6 +76,9 @@ export class CategoryMediaService {
       if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/heic', 'image/heif'].includes(rawMime)) {
         throw new AppError(400, 'INVALID_FILE_TYPE', 'Only JPEG, PNG, WebP, and HEIC images are permitted');
       }
+      if (filePart.size <= 0 || !filePart.initialBuffer || filePart.initialBuffer.length === 0) {
+        throw new AppError(400, 'EMPTY_FILE', 'Category icon file is empty (0 bytes). True image files must contain valid data.');
+      }
       if (filePart.size > 10 * 1024 * 1024) {
         throw new AppError(400, 'FILE_TOO_LARGE', 'Image exceeds maximum allowed size of 10MB');
       }
@@ -243,6 +246,9 @@ export class CategoryMediaService {
       const rawMime = filePart.mimetype || '';
       if (!['image/jpeg', 'image/png', 'image/webp', 'image/jpg', 'image/heic', 'image/heif'].includes(rawMime)) {
         throw new AppError(400, 'INVALID_FILE_TYPE', 'Only JPEG, PNG, WebP, and HEIC images are permitted');
+      }
+      if (filePart.size <= 0 || !filePart.initialBuffer || filePart.initialBuffer.length === 0) {
+        throw new AppError(400, 'EMPTY_FILE', 'Category icon file is empty (0 bytes). True image files must contain valid data.');
       }
       if (filePart.size > 10 * 1024 * 1024) {
         throw new AppError(400, 'FILE_TOO_LARGE', 'Image exceeds maximum allowed size of 10MB');

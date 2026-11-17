@@ -50,6 +50,16 @@ export class MediaService {
       tempFileName
     );
 
+    // Reject 0-byte or empty files immediately (0-byte files are not true image files)
+    if (size <= 0 || !initialBuffer || initialBuffer.length === 0) {
+      await defaultStorage.deleteFile(tempPath);
+      throw new AppError(
+        400,
+        'EMPTY_FILE',
+        `Image "${part.filename || 'file'}" is empty (0 bytes). True image files must contain valid data.`
+      );
+    }
+
     // Max 10MB limit per image
     if (size > 10 * 1024 * 1024) {
       await defaultStorage.deleteFile(tempPath);

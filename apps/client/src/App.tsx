@@ -29,7 +29,7 @@ const AcceptInviteRedirect: React.FC = () => {
   const token = searchParams.get('token');
 
   useEffect(() => {
-    const adminUrl = (import.meta as any).env?.VITE_ADMIN_URL || 'http://localhost:5174';
+ const adminUrl = (import.meta as any).env?.VITE_ADMIN_URL || '/admin';
     const isPort80or443 =
       window.location.port === '' ||
       window.location.port === '80' ||

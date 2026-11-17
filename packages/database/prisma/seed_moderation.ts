@@ -35,6 +35,7 @@ async function main() {
           originalName: 'ps5.jpg',
           mimeType: 'image/jpeg',
           extension: 'jpg',
+          sizeBytes: BigInt(245760),
           status: MediaAssetStatus.READY,
           variants: {
             thumbnail: 'https://images.unsplash.com/photo-1606813907291-d86efa9b94db?w=800&auto=format&fit=crop&q=80',

@@ -44,6 +44,12 @@ export const auditLogQuerySchema = z.object({
   search: z.string().optional(),
 });
 
+export const updateStaffStatusSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED']),
+  reason: z.string().optional(),
+});
+
 export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
 export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
 export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
+export type UpdateStaffStatusInput = z.infer<typeof updateStaffStatusSchema>;

@@ -86,7 +86,9 @@ export class AdminMediaService {
       statusCounts,
       scopeCounts,
       mimeTypeCounts,
-      orphanedCount,
+      unattachedOrphanCount,
+      zeroByteCount,
+      failedCount,
       recentUploads,
     ] = await Promise.all([
       prisma.mediaAsset.count(),
@@ -118,6 +120,18 @@ export class AdminMediaService {
             entityType: 'CHAT',
             entityId: { not: null },
           },
+        },
+      }),
+      // Count 0-byte corrupt assets (not true image files)
+      prisma.mediaAsset.count({
+        where: {
+          sizeBytes: { lte: 0 },
+        },
+      }),
+      // Count permanently failed assets from worker errors
+      prisma.mediaAsset.count({
+        where: {
+          status: 'FAILED',
         },
       }),
       prisma.mediaAsset.findMany({
@@ -204,8 +218,11 @@ export class AdminMediaService {
         return acc;
       }, {} as Record<string, number>),
       orphanedMedia: {
-        count: orphanedCount,
-        cleanupRecommended: orphanedCount > 10,
+        count: unattachedOrphanCount + zeroByteCount + failedCount,
+        unattachedCount: unattachedOrphanCount,
+        zeroByteCount,
+        failedCount,
+        cleanupRecommended: unattachedOrphanCount + zeroByteCount + failedCount > 0,
         cleanupEndpoint: '/api/v1/admin/media/cleanup-orphans',
       },
       recentUploads: recentUploads.map((m) => {
@@ -285,6 +302,11 @@ export class AdminMediaService {
 
     const formattedItems = items.map((m) => {
       const publicVariants = toPublicMediaVariants(m.variants);
+      const isZeroByte = Number(m.sizeBytes) <= 0;
+      const effectiveStatus = isZeroByte && m.status === 'READY' ? 'FAILED' : m.status;
+      const effectiveFailureReason = isZeroByte
+        ? 'File is 0 bytes (corrupt or empty image)'
+        : m.failureReason;
 
       const singleUrl = publicVariants.url || publicVariants.image || (m.storageKey ? toPublicMediaUrl(m.storageKey) : null);
       return {
@@ -295,7 +317,9 @@ export class AdminMediaService {
         fileSizeFormatted: formatBytes(Number(m.sizeBytes)),
         width: m.width,
         height: m.height,
-        status: m.status,
+        status: effectiveStatus,
+        isZeroByte,
+        failureReason: effectiveFailureReason,
         scope: m.entityType,
         isAttached: Boolean(m.entityId),
         attachedToId: m.entityId,
@@ -466,6 +490,12 @@ export class AdminMediaService {
     // 1. Save new stream temporarily
     const { tempPath, size, initialBuffer } = await defaultStorage.saveTemporaryFile(part.file, tempFileName);
 
+    // Reject 0-byte or empty files immediately (0-byte files are not true image files)
+    if (size <= 0 || !initialBuffer || initialBuffer.length === 0) {
+      await defaultStorage.deleteFile(tempPath);
+      throw new AppError(400, 'EMPTY_FILE', 'Replacement file is empty (0 bytes). True image files must contain valid data.');
+    }
+
     // Max 10MB limit
     if (size > 10 * 1024 * 1024) {
       await defaultStorage.deleteFile(tempPath);
@@ -635,9 +665,111 @@ export class AdminMediaService {
     };
   }
 
-  // Purges unattached orphaned media from DB and physical storage (S3 & Disk)
+  // Comprehensive Orphan & Corrupt Media Eviction:
+  // - Evicts 0-byte or empty fake image assets (unlinks relations and removes DB entries)
+  // - Evicts failed worker assets (images where worker processing errored or exceeded max retries)
+  // - Reconciles and evicts abandoned in-flight processing assets older than 15 minutes
+  // - Purges unattached orphaned media from DB and physical storage (S3 & Disk)
   static async cleanupOrphanedMedia(gracePeriodHours = 0, actorUserId?: string) {
-    const where: any = {
+    const uploadDir = resolveUploadDir();
+    let freedBytes = 0;
+    let deletedCount = 0;
+    let zeroByteCount = 0;
+    let failedCount = 0;
+    let unattachedCount = 0;
+
+    // 1. Evict 0-byte corrupt assets (not true image files)
+    const zeroByteAssets = await prisma.mediaAsset.findMany({
+      where: {
+        sizeBytes: { lte: 0 },
+      },
+      take: 500,
+    });
+
+    for (const item of zeroByteAssets) {
+      await prisma.adImage.deleteMany({ where: { mediaAssetId: item.id } }).catch(() => {});
+      await deletePhysicalMedia(item);
+      await prisma.mediaAsset.delete({ where: { id: item.id } }).catch(() => {});
+      deletedCount++;
+      zeroByteCount++;
+    }
+
+    // 2. Scan for READY assets that have missing or 0-byte files on local disk
+    const readyAssets = await prisma.mediaAsset.findMany({
+      where: { status: 'READY' },
+      take: 300,
+      orderBy: { createdAt: 'desc' },
+    });
+
+    for (const item of readyAssets) {
+      if (!item.storageKey || item.storageKey.startsWith('http://') || item.storageKey.startsWith('https://')) {
+        continue;
+      }
+      const rawPath = item.storageKey.replace(/^[/\\]+/, '');
+      const localPath = path.isAbsolute(rawPath) ? rawPath : path.join(uploadDir, ...rawPath.split('/'));
+      let isGhost = false;
+
+      if (!fs.existsSync(localPath)) {
+        isGhost = true;
+      } else {
+        try {
+          const stat = fs.statSync(localPath);
+          if (stat.size === 0) isGhost = true;
+        } catch {
+          isGhost = true;
+        }
+      }
+
+      if (isGhost) {
+        await prisma.adImage.deleteMany({ where: { mediaAssetId: item.id } }).catch(() => {});
+        if (fs.existsSync(localPath)) {
+          await fs.promises.unlink(localPath).catch(() => {});
+        }
+        await prisma.mediaAsset.delete({ where: { id: item.id } }).catch(() => {});
+        deletedCount++;
+        zeroByteCount++;
+      }
+    }
+
+    // 3. Evict permanently failed worker assets
+    const failedWhere: any = { status: 'FAILED' };
+    if (gracePeriodHours > 0) {
+      failedWhere.updatedAt = { lt: new Date(Date.now() - gracePeriodHours * 3600 * 1000) };
+    }
+    const failedAssets = await prisma.mediaAsset.findMany({
+      where: failedWhere,
+      take: 300,
+    });
+
+    for (const item of failedAssets) {
+      await prisma.adImage.deleteMany({ where: { mediaAssetId: item.id } }).catch(() => {});
+      await deletePhysicalMedia(item);
+      freedBytes += Number(item.sizeBytes || 0);
+      await prisma.mediaAsset.delete({ where: { id: item.id } }).catch(() => {});
+      deletedCount++;
+      failedCount++;
+    }
+
+    // 4. Reconcile & evict stuck processing assets older than 15 minutes (stalled/crashed workers)
+    const fifteenMinsAgo = new Date(Date.now() - 15 * 60 * 1000);
+    const stuckAssets = await prisma.mediaAsset.findMany({
+      where: {
+        status: 'PROCESSING',
+        updatedAt: { lt: fifteenMinsAgo },
+      },
+      take: 100,
+    });
+
+    for (const item of stuckAssets) {
+      await prisma.adImage.deleteMany({ where: { mediaAssetId: item.id } }).catch(() => {});
+      await deletePhysicalMedia(item);
+      await prisma.mediaAsset.delete({ where: { id: item.id } }).catch(() => {});
+      deletedCount++;
+      failedCount++;
+    }
+
+    // 5. Purge unattached orphaned media (older than gracePeriodHours)
+    const unattachedWhere: any = {
       categories: { none: {} },
       adImages: { none: {} },
       banners: { none: {} },
@@ -650,25 +782,20 @@ export class AdminMediaService {
 
     if (gracePeriodHours > 0) {
       const cutoffDate = new Date(Date.now() - gracePeriodHours * 3600 * 1000);
-      where.createdAt = { lt: cutoffDate };
+      unattachedWhere.createdAt = { lt: cutoffDate };
     }
 
     const orphans = await prisma.mediaAsset.findMany({
-      where,
+      where: unattachedWhere,
       take: 500,
     });
 
-    let freedBytes = 0;
-    let deletedCount = 0;
-
     for (const orphan of orphans) {
-      // Thoroughly remove all physical files from storage
       await deletePhysicalMedia(orphan);
-      freedBytes += Number(orphan.sizeBytes);
-
-      // Delete from database
+      freedBytes += Number(orphan.sizeBytes || 0);
       await prisma.mediaAsset.delete({ where: { id: orphan.id } }).catch(() => {});
       deletedCount++;
+      unattachedCount++;
     }
 
     if (actorUserId && deletedCount > 0) {
@@ -680,6 +807,9 @@ export class AdminMediaService {
         status: 'SUCCESS',
         newData: {
           deletedCount,
+          zeroByteCount,
+          failedCount,
+          unattachedCount,
           freedBytes,
           freedFormatted: formatBytes(freedBytes),
           gracePeriodHours,
@@ -690,10 +820,13 @@ export class AdminMediaService {
     return {
       success: true,
       deletedCount,
+      zeroByteCount,
+      failedCount,
+      unattachedCount,
       healedCount: 0,
       freedBytes,
       freedFormatted: formatBytes(freedBytes),
-      message: `Cleaned up ${deletedCount} orphaned files and reclaimed ${formatBytes(freedBytes)} of storage`,
+      message: `Cleaned up ${deletedCount} files (${zeroByteCount} 0-byte/corrupt, ${failedCount} worker failures, ${unattachedCount} unattached) and reclaimed ${formatBytes(freedBytes)} of storage`,
     };
   }
 }

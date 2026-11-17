@@ -58,6 +58,9 @@ export interface MediaOverviewResponse {
   mimeTypeBreakdown: Record<string, number>;
   orphanedMedia: {
     count: number;
+    unattachedCount?: number;
+    zeroByteCount?: number;
+    failedCount?: number;
     cleanupRecommended: boolean;
     cleanupEndpoint: string;
   };

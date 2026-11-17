@@ -73,12 +73,13 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
   // 1. Super Admin: Full system control
   SUPER_ADMIN: ['*'],
 
-  // 2. Admin: Users, listings, settings, operational management
-  // NOTE: Does NOT have payments:refund or admins:manage by default to avoid universal power
+  // 2. Admin: Users, listings, settings, operational management, staff ID management
+  // NOTE: Does NOT have payments:refund by default to avoid universal power
   ADMIN: [
     Permissions.SETTINGS_READ,
     Permissions.SETTINGS_MANAGE,
     Permissions.AUDIT_READ,
+    Permissions.ADMINS_MANAGE,
     Permissions.USERS_READ,
     Permissions.USERS_MANAGE,
     Permissions.USERS_BAN,

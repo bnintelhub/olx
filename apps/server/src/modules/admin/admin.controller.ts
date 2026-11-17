@@ -7,6 +7,7 @@ import {
   changeAdminPasswordSchema,
   createInvitationSchema,
   auditLogQuerySchema,
+  updateStaffStatusSchema,
 } from './admin.schema';
 import { AdStatus } from '@prisma/client';
 import { AppError } from '../../shared/errors/app-error';
@@ -287,7 +288,7 @@ export class AdminController {
     const { id } = request.params as { id: string };
 
     try {
-      const revoked = await AdminService.revokeStaffInvitation(id);
+      const revoked = await AdminService.revokeStaffInvitation(id, request.user!.id);
 
       await writeAuditLog({
         userId: request.user!.id,
@@ -309,6 +310,54 @@ export class AdminController {
         entityId: id,
         status: 'FAILED',
         newData: { error: err.message },
+        request,
+      });
+
+      throw err;
+    }
+  }
+
+  // Updates the status of an active staff member (SUSPEND or REACTIVATE).
+  // Neutralizes compromised accounts by clearing refresh tokens and blacklisting in Redis.
+  static async updateStaffStatus(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    const body = updateStaffStatusSchema.parse(request.body);
+
+    try {
+      const result = await AdminService.updateStaffStatus(
+        request.user!.id,
+        id,
+        body.status,
+        body.reason
+      );
+
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: body.status === 'SUSPENDED' ? 'STAFF_ID_SUSPENDED' : 'STAFF_ID_REACTIVATED',
+        entityType: 'USER',
+        entityId: result.user.id,
+        status: 'SUCCESS',
+        reason: body.reason,
+        oldData: { status: body.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED', role: result.user.role },
+        newData: { status: body.status, role: result.user.role },
+        request,
+      });
+
+      return reply.status(200).send({
+        success: true,
+        data: result.user,
+        isSelf: result.isSelf,
+        message: result.message,
+      });
+    } catch (err: any) {
+      await writeAuditLog({
+        userId: request.user!.id,
+        action: body.status === 'SUSPENDED' ? 'STAFF_ID_SUSPEND_FAILED' : 'STAFF_ID_REACTIVATE_FAILED',
+        entityType: 'USER',
+        entityId: id,
+        status: 'FAILED',
+        reason: err.message,
+        newData: { targetId: id, status: body.status },
         request,
       });
 

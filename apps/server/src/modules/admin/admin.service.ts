@@ -5,7 +5,7 @@ import { env } from '../../config/env';
 import { AppError } from '../../shared/errors/app-error';
 import { AdStatus, PaymentStatus, Prisma, UserRole } from '@prisma/client';
 import { HashUtil } from '../../shared/utils/hash.util';
-import { redis, delCache } from '../../config/redis';
+import { redis, delCache, setCache } from '../../config/redis';
 import { ListingsDeleteService } from '../listings/listings.delete.service';
 import { formatAdImages } from '../listings/listings.service';
 
@@ -768,6 +768,12 @@ export class AdminService {
       throw new AppError(400, 'INVALID_ROLE', 'Only administrative staff roles can be invited');
     }
 
+    // Role Hierarchy: Non-SuperAdmins cannot invite SuperAdmins
+    const inviter = await prisma.user.findUnique({ where: { id: invitedById } });
+    if (inviter && inviter.role !== UserRole.SUPER_ADMIN && role === UserRole.SUPER_ADMIN) {
+      throw new AppError(403, 'FORBIDDEN', 'Only Super Administrators can invite or assign Super Admin roles');
+    }
+
     // Check if user already exists as active staff
     const existingUser = await prisma.user.findUnique({ where: { email: cleanEmail } });
     if (existingUser && staffRoles.includes(existingUser.role)) {
@@ -831,7 +837,8 @@ export class AdminService {
   }
 
   // Returns all historical and active staff invitations with persistent share links.
-  // Computes active validity status so invitations can be re-copied anytime before expiry.
+  // Enriches accepted invitations with live user account details (status, lastLoginAt).
+  // Appends direct staff accounts (e.g. seeded super admin/admin) to ensure complete visibility.
   static async getStaffInvitations() {
     const list = await (prisma as any).staffInvitation.findMany({
       orderBy: { createdAt: 'desc' },
@@ -842,27 +849,109 @@ export class AdminService {
       },
     });
 
+    const staffRoles: UserRole[] = [
+      UserRole.SUPER_ADMIN,
+      UserRole.ADMIN,
+      UserRole.MODERATOR,
+      UserRole.CUSTOMER_SUPPORT,
+      UserRole.FINANCE_ADMIN,
+      UserRole.CONTENT_MANAGER,
+      UserRole.ANALYST,
+    ];
+
+    // Fetch live user accounts for all staff members
+    const staffUsers = await prisma.user.findMany({
+      where: { role: { in: staffRoles } },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        lastLoginAt: true,
+        createdAt: true,
+        profile: { select: { name: true } },
+      },
+    });
+
+    const staffUserByEmail = new Map<string, (typeof staffUsers)[0]>();
+    for (const u of staffUsers) {
+      if (u.email) {
+        staffUserByEmail.set(u.email.toLowerCase(), u);
+      }
+    }
+
     const adminOrigin =
       env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174');
 
-    return list.map((inv: any) => {
+    const processedEmails = new Set<string>();
+
+    const enrichedList = list.map((inv: any) => {
       const isLifetime = inv.expiresAt ? new Date(inv.expiresAt).getFullYear() >= 2099 : true;
       const isExpired = inv.expiresAt && !isLifetime ? new Date() > new Date(inv.expiresAt) : false;
+      const user = inv.email ? staffUserByEmail.get(inv.email.toLowerCase()) : null;
+      if (inv.email) processedEmails.add(inv.email.toLowerCase());
 
       return {
         ...inv,
         inviteLink: `${adminOrigin}/accept-invite?token=${inv.token}`,
         isLifetime,
         isExpired,
+        user: user
+          ? {
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              status: user.status,
+              name: user.profile?.name,
+              lastLoginAt: user.lastLoginAt,
+            }
+          : null,
       };
     });
+
+    // Append staff members who do not have an invitation row (seeded accounts)
+    for (const staff of staffUsers) {
+      if (staff.email && !processedEmails.has(staff.email.toLowerCase())) {
+        enrichedList.push({
+          id: `staff_${staff.id}`,
+          email: staff.email,
+          role: staff.role,
+          token: '',
+          status: 'ACCEPTED',
+          expiresAt: new Date('2099-12-31T23:59:59.999Z'),
+          acceptedAt: staff.createdAt,
+          createdAt: staff.createdAt,
+          inviteLink: '',
+          isLifetime: true,
+          isExpired: false,
+          invitedBy: null,
+          user: {
+            id: staff.id,
+            email: staff.email,
+            role: staff.role,
+            status: staff.status,
+            name: staff.profile?.name,
+            lastLoginAt: staff.lastLoginAt,
+          },
+        });
+      }
+    }
+
+    return enrichedList;
   }
 
   // Revokes a pending staff invitation so that the token can no longer be used for onboarding.
-  // Rejects requests to revoke invitations that have already been accepted or expired.
-  static async revokeStaffInvitation(id: string) {
+  // Enforces hierarchy check: Admins cannot revoke Super Admin invitations.
+  static async revokeStaffInvitation(id: string, callerUserId?: string) {
     const invitation = await (prisma as any).staffInvitation.findUnique({ where: { id } });
     if (!invitation) throw new AppError(404, 'INVITATION_NOT_FOUND', 'Staff invitation not found');
+
+    if (callerUserId && invitation.role === UserRole.SUPER_ADMIN) {
+      const caller = await prisma.user.findUnique({ where: { id: callerUserId } });
+      if (caller && caller.role !== UserRole.SUPER_ADMIN) {
+        throw new AppError(403, 'FORBIDDEN', 'Admins are not permitted to revoke Super Admin invitations');
+      }
+    }
 
     if (invitation.status !== 'PENDING') {
       throw new AppError(400, 'CANNOT_REVOKE', `Invitation cannot be revoked because status is ${invitation.status}`);
@@ -872,6 +961,139 @@ export class AdminService {
       where: { id },
       data: { status: 'REVOKED' },
     });
+  }
+
+  // Updates the live account status (ACTIVE or SUSPENDED) of an administrative staff member.
+  // Immediate security enforcement:
+  // - Evicts Redis cache and immediately registers a suspension blacklist key
+  // - Revokes refresh tokens in the database to prevent session renewal
+  // - Fastify auth plugin rejects in-flight access tokens immediately on all endpoints
+  // Handles critical edge cases:
+  // - Admins cannot suspend or modify Super Admins
+  // - System prevents suspending the sole active Super Admin to avoid total platform lockout
+  // - Supports self-suspension if a staff member suspects credential theft, returning clean instructions
+  static async updateStaffStatus(
+    callerUserId: string,
+    targetId: string,
+    newStatus: 'ACTIVE' | 'SUSPENDED',
+    reason?: string
+  ) {
+    // 1. Fetch caller identity
+    const caller = await prisma.user.findUnique({ where: { id: callerUserId } });
+    if (!caller) {
+      throw new AppError(401, 'UNAUTHORIZED', 'Caller not recognized');
+    }
+
+    // 2. Resolve target user (by user id or by invitation id)
+    let user = await prisma.user.findUnique({
+      where: { id: targetId.replace(/^staff_/, '') },
+      include: { profile: { select: { name: true } } },
+    });
+
+    if (!user) {
+      const invitation = await (prisma as any).staffInvitation.findUnique({
+        where: { id: targetId },
+      });
+      if (invitation?.email) {
+        user = await prisma.user.findUnique({
+          where: { email: invitation.email.toLowerCase() },
+          include: { profile: { select: { name: true } } },
+        });
+      }
+    }
+
+    if (!user) {
+      throw new AppError(404, 'USER_NOT_FOUND', 'Target staff account not found');
+    }
+
+    // 3. Ensure target is an administrative staff account
+    const staffRoles: UserRole[] = [
+      UserRole.SUPER_ADMIN,
+      UserRole.ADMIN,
+      UserRole.MODERATOR,
+      UserRole.CUSTOMER_SUPPORT,
+      UserRole.FINANCE_ADMIN,
+      UserRole.CONTENT_MANAGER,
+      UserRole.ANALYST,
+    ];
+
+    if (!staffRoles.includes(user.role)) {
+      throw new AppError(400, 'NOT_A_STAFF_ACCOUNT', 'Only staff accounts can be managed via this endpoint');
+    }
+
+    // 4. Role Hierarchy: Admin cannot suspend or modify Super Admin
+    if (user.role === UserRole.SUPER_ADMIN && caller.role !== UserRole.SUPER_ADMIN) {
+      throw new AppError(403, 'FORBIDDEN', 'Admins are not permitted to modify or suspend Super Admin accounts');
+    }
+
+    // 5. Sole Super Admin Lockout Guard
+    if (user.role === UserRole.SUPER_ADMIN && newStatus === 'SUSPENDED') {
+      const activeSuperAdmins = await prisma.user.count({
+        where: { role: UserRole.SUPER_ADMIN, status: 'ACTIVE' },
+      });
+      if (activeSuperAdmins <= 1) {
+        throw new AppError(
+          400,
+          'SOLE_SUPER_ADMIN_LOCKOUT',
+          'Cannot suspend the sole active Super Administrator. Appoint or activate another Super Administrator first to avoid total system lockout.'
+        );
+      }
+    }
+
+    // 6. Idempotency Check
+    if (user.status === newStatus) {
+      throw new AppError(
+        400,
+        newStatus === 'SUSPENDED' ? 'ALREADY_SUSPENDED' : 'ALREADY_ACTIVE',
+        `Staff account is already ${newStatus.toLowerCase()}`
+      );
+    }
+
+    // 7. Update User in Database
+    // When suspended: revoke refresh token to stop session renewal
+    const updatedUser = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        status: newStatus,
+        ...(newStatus === 'SUSPENDED' ? { refreshTokenHash: null } : {}),
+      },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        status: true,
+        profile: { select: { name: true } },
+      },
+    });
+
+    // 8. Redis Session Invalidation & Blacklist
+    // Evict cached user profile from Redis
+    await delCache(`user:${user.id}`);
+
+    if (newStatus === 'SUSPENDED') {
+      // Set blacklist flag for 30 days to immediately block all in-flight access tokens
+      await setCache(`user:${user.id}:suspended`, 'true', 30 * 24 * 60 * 60);
+    } else {
+      // Remove blacklist flag when reactivated
+      await delCache(`user:${user.id}:suspended`);
+    }
+
+    // 9. Check for Self-Suspension
+    const isSelf = caller.id === user.id;
+    let message: string;
+    if (isSelf && newStatus === 'SUSPENDED') {
+      message = 'Your staff account has been suspended for security. All active sessions, refresh tokens, and permissions have been terminated immediately.';
+    } else if (newStatus === 'SUSPENDED') {
+      message = `Staff ID for ${user.email} has been suspended. All active sessions and tokens have been revoked.`;
+    } else {
+      message = `Staff ID for ${user.email} has been successfully reactivated.`;
+    }
+
+    return {
+      user: updatedUser,
+      isSelf,
+      message,
+    };
   }
 
   // Retrieves paginated forensic audit records ordered from newest to oldest.

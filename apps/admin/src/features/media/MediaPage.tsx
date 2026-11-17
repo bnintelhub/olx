@@ -699,16 +699,18 @@ export function MediaPage() {
                 {/* Status Badge */}
                 <div className="absolute top-2 left-2">
                   <Badge
-                    variant={item.status === 'READY' ? 'default' : item.status === 'FAILED' ? 'destructive' : 'secondary'}
+                    variant={item.fileSize <= 0 || item.status === 'FAILED' ? 'destructive' : item.status === 'READY' ? 'default' : 'secondary'}
                     className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5"
                   >
-                    {item.status}
+                    {item.fileSize <= 0 ? 'CORRUPT (0B)' : item.status}
                   </Badge>
                 </div>
 
                 {/* File size & Resolution Tag */}
                 <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[10px] text-white bg-black/60 backdrop-blur-xs px-2 py-0.5 rounded-sm">
-                  <span>{item.fileSizeFormatted}</span>
+                  <span className={item.fileSize <= 0 ? 'text-rose-300 font-semibold' : ''}>
+                    {item.fileSize <= 0 ? '0 Bytes (Corrupt)' : item.fileSizeFormatted}
+                  </span>
                   <span>{item.width && item.height ? `${item.width}x${item.height}` : 'WebP'}</span>
                 </div>
               </div>
@@ -836,7 +838,9 @@ export function MediaPage() {
                   )}
                   {visibleColumns.size && (
                     <td className="p-3">
-                      <div className="font-medium text-foreground">{item.fileSizeFormatted}</div>
+                      <div className={`font-medium ${item.fileSize <= 0 ? 'text-rose-500 font-semibold' : 'text-foreground'}`}>
+                        {item.fileSize <= 0 ? '0 Bytes (Corrupt)' : item.fileSizeFormatted}
+                      </div>
                       <div className="text-[10px] text-muted-foreground">
                         {item.width && item.height ? `${item.width} x ${item.height}` : 'WebP Auto'}
                       </div>
@@ -852,10 +856,10 @@ export function MediaPage() {
                   {visibleColumns.status && (
                     <td className="p-3">
                       <Badge
-                        variant={item.status === 'READY' ? 'default' : item.status === 'FAILED' ? 'destructive' : 'secondary'}
+                        variant={item.fileSize <= 0 || item.status === 'FAILED' ? 'destructive' : item.status === 'READY' ? 'default' : 'secondary'}
                         className="text-[10px]"
                       >
-                        {item.status}
+                        {item.fileSize <= 0 ? 'CORRUPT (0B)' : item.status}
                       </Badge>
                     </td>
                   )}
@@ -1333,11 +1337,31 @@ export function MediaPage() {
 
         <div className="py-2 text-xs space-y-3">
           <p className="text-muted-foreground">
-            This routine identifies draft uploads that were never attached to an active ad listing or category and permanently deletes both their database records and physical files on storage.
+            This routine identifies draft uploads that were never attached to an active ad listing or category, permanently failed worker jobs, and evicts 0-byte or corrupt fake image files from the database and storage.
           </p>
-          <div className="p-3 border rounded-lg bg-amber-500/10 text-amber-900 dark:text-amber-200">
-            Currently detected unattached files:{' '}
-            <span className="font-bold">{overview?.orphanedMedia.count || 0}</span>
+          <div className="p-3 border rounded-lg bg-amber-500/10 text-amber-900 dark:text-amber-200 space-y-1">
+            <div className="flex justify-between">
+              <span>Total Actionable Orphans & Corrupt Files:</span>
+              <span className="font-bold">{overview?.orphanedMedia.count || 0}</span>
+            </div>
+            {Boolean(overview?.orphanedMedia?.zeroByteCount) && (
+              <div className="text-[11px] text-rose-500 flex justify-between">
+                <span>• 0-Byte / Corrupt fake images:</span>
+                <span className="font-semibold">{overview?.orphanedMedia?.zeroByteCount}</span>
+              </div>
+            )}
+            {Boolean(overview?.orphanedMedia?.failedCount) && (
+              <div className="text-[11px] text-amber-500 flex justify-between">
+                <span>• Failed worker jobs:</span>
+                <span className="font-semibold">{overview?.orphanedMedia?.failedCount}</span>
+              </div>
+            )}
+            {Boolean(overview?.orphanedMedia?.unattachedCount) && (
+              <div className="text-[11px] text-muted-foreground flex justify-between">
+                <span>• Unattached draft files:</span>
+                <span className="font-semibold">{overview?.orphanedMedia?.unattachedCount}</span>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5 pt-1">

@@ -94,6 +94,18 @@ export async function adminRoutes(fastify: FastifyInstance) {
     AdminController.revokeStaffInvitation
   );
 
+  // Staff Account Security & Suspension (Super Admin & Admin)
+  fastify.patch(
+    '/staff/:id/status',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
+    AdminController.updateStaffStatus
+  );
+  fastify.patch(
+    '/invitations/:id/status',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
+    AdminController.updateStaffStatus
+  );
+
   // Forensic Audit Trail (Immutable, restricted to roles with audit:read permission)
   fastify.get(
     '/audit-logs',
