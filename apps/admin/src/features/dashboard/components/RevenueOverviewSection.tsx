@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { io, Socket } from 'socket.io-client';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '../../../components/ui/card';
 import { Button } from '../../../components/ui/button';
@@ -46,6 +45,7 @@ import {
   usePaymentPerformanceQuery,
 } from '../../payments/hook/usePaymentsQuery';
 import { paymentsService } from '../../payments/service/payments.service';
+import { connectAdminEvents } from '../../../lib/sse';
 
 const PERIOD_OPTIONS = [
   { value: 'today', label: 'Today' },
@@ -76,7 +76,7 @@ export function RevenueOverviewSection() {
     refunds: true,
   });
 
-  // Live Socket streaming states
+  // Live SSE streaming states
   const [isConnected, setIsConnected] = useState(false);
   const [isFlashing, setIsFlashing] = useState(false);
   const [lastSynced, setLastSynced] = useState<string>(
@@ -84,30 +84,15 @@ export function RevenueOverviewSection() {
   );
 
   useEffect(() => {
-    const socket: Socket = io('/', {
-      path: '/socket.io',
-      transports: ['polling', 'websocket'],
-      auth: { context: 'admin' },
-      query: { context: 'admin' },
-      withCredentials: true,
-    });
-    socket.on('connect', () => {
-      setIsConnected(true);
-      socket.emit('join_admin_metrics');
-    });
-    socket.on('admin:metrics_update', () => {
+    return connectAdminEvents(undefined, (event) => {
+      if (event.type !== 'metrics_update') return;
       setIsFlashing(true);
       setLastSynced(
         new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
       );
       void queryClient.invalidateQueries({ queryKey: ['admin-payments'] });
       setTimeout(() => setIsFlashing(false), 1200);
-    });
-    socket.on('disconnect', () => setIsConnected(false));
-    return () => {
-      socket.emit('leave_admin_metrics');
-      socket.disconnect();
-    };
+    }, setIsConnected);
   }, [queryClient]);
 
   const { data: overview } = useRevenueOverviewQuery(

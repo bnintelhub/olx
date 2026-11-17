@@ -40,9 +40,10 @@ export const PlansPage: React.FC = () => {
   useEffect(() => {
     if (paymentStatus === 'success') {
       const txnId = searchParams.get('txnId') || undefined;
+      const callbackMessage = searchParams.get('message');
       setPaymentBanner({
         type: 'success',
-        message: 'Payment completed successfully via PayU! Your listing credits have been activated.',
+        message: callbackMessage || 'Payment completed successfully via PayU! Your listing credits have been activated.',
         txnId,
       });
       setIsCheckingOut(false);
@@ -56,9 +57,10 @@ export const PlansPage: React.FC = () => {
       const rest = next.toString();
       navigate({ pathname: '/plans', search: rest ? `?${rest}` : '' }, { replace: true });
     } else if (paymentStatus === 'failed') {
+      const callbackMessage = searchParams.get('message');
       setPaymentBanner({
         type: 'error',
-        message: 'Payment was cancelled or failed with PayU. Please try again.',
+        message: callbackMessage || 'Payment was cancelled or failed with PayU. Please try again.',
       });
       const next = new URLSearchParams(searchParams);
       next.delete('status');

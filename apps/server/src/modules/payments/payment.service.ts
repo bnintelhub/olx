@@ -37,6 +37,9 @@ export class PaymentService {
 
   // Resolves backend API callback URL for PayU hosted redirects
   private static getCallbackUrl(type: 'success' | 'failure'): string {
+    const configuredUrl = type === 'success' ? env.PAYU_SUCCESS_URL : env.PAYU_FAILURE_URL;
+    if (configuredUrl) return configuredUrl.replace(/\/+$/, '');
+
     const host = process.env.SERVER_URL || `http://localhost:${env.PORT}`;
     const cleanHost = host.replace(/\/+$/, '');
     return `${cleanHost}/api/v1/payments/payu/${type}`;
@@ -435,12 +438,12 @@ export class PaymentService {
     const txnid = payload.txnid;
 
     if (!txnid) {
-      return `${clientUrl}/payment/status?status=failed&message=Missing+transaction+reference`;
+      return `${clientUrl}/plans?status=failed&message=${encodeURIComponent('Missing transaction reference')}`;
     }
 
     const transaction = await PaymentRepository.findTransactionByMerchantId(txnid);
     if (!transaction) {
-      return `${clientUrl}/payment/status?status=failed&message=Transaction+not+found`;
+      return `${clientUrl}/plans?status=failed&message=${encodeURIComponent('Transaction not found')}`;
     }
 
     const order = transaction.order;
@@ -495,7 +498,10 @@ export class PaymentService {
     }
 
     // Construct redirect destination for user browser UX
-    const baseRedirect = customReturnUrl || `${clientUrl}/payment/status`;
+    // PlansPage and SellPage already consume `status`, `orderId`, and `txnId`.
+    // Keep the fallback on a real client route instead of the non-existent
+    // /payment/status path, which previously fell through to the home page.
+    const baseRedirect = customReturnUrl || `${clientUrl}/plans`;
     const separator = baseRedirect.includes('?') ? '&' : '?';
     const statusParam = order.status === PaymentStatus.SUCCESS ? 'success' : expectedStatus.toLowerCase();
 

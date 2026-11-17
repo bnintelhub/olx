@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../lib/api-client';
 import { Card, CardHeader, CardContent } from '../../components/ui/card';
@@ -30,6 +30,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { connectAdminEvents } from '../../lib/sse';
 
 interface ServerReport {
   id: string;
@@ -84,6 +85,14 @@ export function ReportsPage() {
       return (Array.isArray(reports) ? reports : []) as ServerReport[];
     },
   });
+
+  useEffect(() => {
+    return connectAdminEvents(undefined, (event) => {
+      if (event.type === 'reports_update') {
+        void queryClient.invalidateQueries({ queryKey: ['admin-reports'] });
+      }
+    });
+  }, [queryClient]);
 
   const reports = data || [];
 

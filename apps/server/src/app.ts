@@ -40,6 +40,7 @@ import { revenueRoutes } from './modules/revenue/revenue.routes';
 import { bannerRoutes } from './modules/banners/banners.routes';
 import { ListingsController } from './modules/listings/listings.controller';
 import { defaultStorage } from './integrations/storage/storage.adapter';
+import { eventsRoutes } from './modules/events/events.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({
@@ -298,6 +299,7 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(reportRoutes, { prefix: '/moderation' });
     await api.register(paymentRoutes, { prefix: '/payments' });
     await api.register(adminRoutes, { prefix: '/admin' });
+    await api.register(eventsRoutes, { prefix: '/admin/events' });
     await api.register(adminLocationRoutes, { prefix: '/admin/locations' });
     await api.register(chatAdminRoutes, { prefix: '/admin/chat' });
     await api.register(uploadRoutes, { prefix: '/uploads' });

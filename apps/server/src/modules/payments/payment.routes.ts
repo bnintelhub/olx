@@ -17,8 +17,17 @@ export async function paymentRoutes(fastify: FastifyInstance) {
   fastify.post('/verify', auth, PaymentController.verifyPayment);
 
   // 2. PayU Hosted Checkout SURL / FURL Callbacks (Public form-post from user browser)
-  fastify.post('/payu/success', PaymentController.payuSuccess);
-  fastify.post('/payu/failure', PaymentController.payuFailure);
+  // PayU uses POST form callbacks; GET is also supported for safe browser retries.
+  fastify.route({
+    method: ['GET', 'POST'],
+    url: '/payu/success',
+    handler: PaymentController.payuSuccess,
+  });
+  fastify.route({
+    method: ['GET', 'POST'],
+    url: '/payu/failure',
+    handler: PaymentController.payuFailure,
+  });
 
   // 3. PayU Server Webhook (Public server-to-server with cryptographic signature validation)
   fastify.post('/webhooks/payu', PaymentController.payuWebhook);

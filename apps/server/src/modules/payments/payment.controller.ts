@@ -9,6 +9,14 @@ import {
 import { PayUCallbackPayload } from './payment.types';
 
 export class PaymentController {
+  private static getPayuCallbackPayload(request: FastifyRequest): PayUCallbackPayload {
+    // PayU normally sends a form POST, while GET support helps with browser
+    // retries and provider environments that return callback parameters in the URL.
+    const body = request.body && typeof request.body === 'object' ? request.body : {};
+    const query = request.query && typeof request.query === 'object' ? request.query : {};
+    return { ...query, ...body } as PayUCallbackPayload;
+  }
+
   // POST /api/v1/payments/orders
   static async createOrder(request: FastifyRequest, reply: FastifyReply) {
     const body = createPaymentOrderSchema.parse(request.body);
@@ -52,14 +60,14 @@ export class PaymentController {
 
   // POST /api/v1/payments/payu/success (PayU Hosted Checkout SURL)
   static async payuSuccess(request: FastifyRequest, reply: FastifyReply) {
-    const payload = (request.body as PayUCallbackPayload) || {};
+    const payload = PaymentController.getPayuCallbackPayload(request);
     const redirectUrl = await PaymentService.handleRedirect(payload, 'SUCCESS');
     return reply.redirect(redirectUrl);
   }
 
   // POST /api/v1/payments/payu/failure (PayU Hosted Checkout FURL)
   static async payuFailure(request: FastifyRequest, reply: FastifyReply) {
-    const payload = (request.body as PayUCallbackPayload) || {};
+    const payload = PaymentController.getPayuCallbackPayload(request);
     const redirectUrl = await PaymentService.handleRedirect(payload, 'FAILED');
     return reply.redirect(redirectUrl);
   }

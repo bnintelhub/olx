@@ -21,14 +21,14 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { io, Socket } from 'socket.io-client';
 import { useRealtimeMetricsQuery } from '../../payments/hook/usePaymentsQuery';
 import { RealtimeMetricsData } from '../../payments/service/payments.service';
+import { connectAdminEvents } from '../../../lib/sse';
 
 export function RealtimeVelocitySection() {
   const { data: initialData } = useRealtimeMetricsQuery();
   const [metrics, setMetrics] = useState<RealtimeMetricsData | null>(null);
-  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [isSseConnected, setIsSseConnected] = useState(false);
 
   useEffect(() => {
     if (initialData && !metrics) {
@@ -37,31 +37,11 @@ export function RealtimeVelocitySection() {
   }, [initialData, metrics]);
 
   useEffect(() => {
-    const socket: Socket = io('/', {
-      path: '/socket.io',
-      transports: ['polling', 'websocket'],
-      auth: { context: 'admin' },
-      query: { context: 'admin' },
-      withCredentials: true,
-    });
-
-    socket.on('connect', () => {
-      setIsSocketConnected(true);
-      socket.emit('join_admin_metrics');
-    });
-
-    socket.on('admin:metrics_update', (data: RealtimeMetricsData) => {
-      setMetrics(data);
-    });
-
-    socket.on('disconnect', () => {
-      setIsSocketConnected(false);
-    });
-
-    return () => {
-      socket.emit('leave_admin_metrics');
-      socket.disconnect();
-    };
+    return connectAdminEvents(undefined, (event) => {
+      if (event.type === 'metrics_update') {
+        setMetrics(event.data);
+      }
+    }, setIsSseConnected);
   }, []);
 
   const data = metrics || initialData;
@@ -91,7 +71,7 @@ export function RealtimeVelocitySection() {
           <span
             className={cn(
               'inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border transition-all',
-              isSocketConnected
+              isSseConnected
                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                 : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
             )}
@@ -99,10 +79,10 @@ export function RealtimeVelocitySection() {
             <span
               className={cn(
                 'w-2 h-2 rounded-full',
-                isSocketConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                isSseConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
               )}
             />
-            <span>{isSocketConnected ? 'Socket.IO Synchronized' : 'Polling HTTP Fallback'}</span>
+            <span>{isSseConnected ? 'SSE Synchronized' : 'Connecting...'}</span>
           </span>
           <span className="text-[11px] text-muted-foreground font-mono hidden sm:inline">
             {data ? new Date(data.timestamp).toLocaleTimeString() : 'Connecting...'}

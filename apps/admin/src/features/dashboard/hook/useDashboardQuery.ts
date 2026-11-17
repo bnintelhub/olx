@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   dashboardService,
@@ -8,7 +8,7 @@ import {
   GetUsersParams,
   GetUsersResponse,
 } from '../service/dashboard.service';
-import { getAdminSocket } from '../../../lib/socket';
+import { connectAdminEvents } from '../../../lib/sse';
 
 // Query keys for dashboard caching
 export const DASHBOARD_QUERY_KEYS = {
@@ -27,16 +27,10 @@ export const DASHBOARD_QUERY_KEYS = {
   categories: ['categories-list'] as const,
 };
 
-// 1. Single smart KPI endpoint query hook for stats by role with real-time WebSocket connection
+// 1. Single smart KPI endpoint query hook with a reconnecting Server-Sent Events stream.
 export function useDashboardStats(role = 'SUPER_ADMIN', enableRealtime = true) {
   const queryClient = useQueryClient();
-  const [isConnected, setIsConnected] = useState<boolean>(() => {
-    try {
-      return getAdminSocket().connected;
-    } catch {
-      return false;
-    }
-  });
+  const [isConnected, setIsConnected] = useState(false);
   const [lastSocketUpdate, setLastSocketUpdate] = useState<Date | null>(null);
 
   const query = useQuery<AdminStatsResponse>({
@@ -49,19 +43,11 @@ export function useDashboardStats(role = 'SUPER_ADMIN', enableRealtime = true) {
   useEffect(() => {
     if (!enableRealtime) return;
 
-    const socket = getAdminSocket();
-
-    const handleConnect = () => {
-      setIsConnected(true);
-      socket.emit('join_admin_dashboard', { role });
-    };
-
-    const handleDisconnect = () => {
-      setIsConnected(false);
-    };
-
-    const handleDashboardStats = (newStats: AdminStatsResponse) => {
-      if (newStats) {
+    const disconnect = connectAdminEvents(
+      role,
+      (event) => {
+        if (event.type === 'dashboard_stats') {
+          const newStats = event.data as AdminStatsResponse;
         queryClient.setQueryData(DASHBOARD_QUERY_KEYS.stats(role), (oldData: AdminStatsResponse | undefined) => {
           return {
             ...oldData,
@@ -69,32 +55,17 @@ export function useDashboardStats(role = 'SUPER_ADMIN', enableRealtime = true) {
           };
         });
         setLastSocketUpdate(new Date());
-      }
-    };
+        }
+      },
+      setIsConnected,
+    );
 
-    if (socket.connected) {
-      setIsConnected(true);
-      socket.emit('join_admin_dashboard', { role });
-    } else {
-      socket.connect();
-    }
-
-    socket.on('connect', handleConnect);
-    socket.on('disconnect', handleDisconnect);
-    socket.on('admin:dashboard_stats', handleDashboardStats);
-
-    return () => {
-      socket.emit('leave_admin_dashboard');
-      socket.off('connect', handleConnect);
-      socket.off('disconnect', handleDisconnect);
-      socket.off('admin:dashboard_stats', handleDashboardStats);
-    };
+    return disconnect;
   }, [role, enableRealtime, queryClient]);
 
-  const refreshViaSocket = useCallback(() => {
-    const socket = getAdminSocket();
-    socket.emit('admin:request_stats', { role });
-  }, [role]);
+  const refreshViaSocket = () => {
+    void query.refetch();
+  };
 
   return {
     ...query,
