@@ -161,6 +161,7 @@ export function executeRequest(method, url, options = {}) {
 
   const requestOptions = {
     headers,
+    timeout: __ENV.HTTP_REQUEST_TIMEOUT || '15s',
     tags: {
       name: tag,
       endpoint: tag,

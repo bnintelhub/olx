@@ -59,24 +59,26 @@ export function runWebSocketChat(token = null, durationSeconds = 2, msgBurstCoun
     });
 
     // Schedule periodic messages during the session
-    for (let i = 0; i < msgBurstCount; i++) {
-      socket.setTimeout(() => {
-        clientMsgId = `k6-${__VU}-${__ITER}-${Date.now()}`;
-        sendTimestamp = Date.now();
+    if (conversationId) {
+      for (let i = 0; i < msgBurstCount; i++) {
+        socket.setTimeout(() => {
+          clientMsgId = `k6-${__VU}-${__ITER}-${Date.now()}`;
+          sendTimestamp = Date.now();
 
-        // Socket.IO event 'message.send'
-        const payload = JSON.stringify([
-          'message.send',
-          {
-            conversationId: 'benchmark-conv-01',
-            content: `Load benchmark ping #${i + 1} from VU ${__VU}`,
-            clientMessageId: clientMsgId,
-          },
-        ]);
+          // Socket.IO event 'message.send'
+          const payload = JSON.stringify([
+            'message.send',
+            {
+              conversationId,
+              content: `Load benchmark ping #${i + 1} from VU ${__VU}`,
+              clientMessageId: clientMsgId,
+            },
+          ]);
 
-        socket.send('42' + payload);
-        wsMessagesSent.add(1);
-      }, (i + 1) * 1500);
+          socket.send('42' + payload);
+          wsMessagesSent.add(1);
+        }, (i + 1) * 1500);
+      }
     }
 
     // Hold connection alive for specified duration then close cleanly

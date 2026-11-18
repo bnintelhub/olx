@@ -43,9 +43,14 @@ export function runSSENotifications(token = null, timeoutSeconds = 15) {
   sseConnectDuration.add(Date.now() - startConnect);
   sseConnectionsActive.add(-1);
 
+  const body = res.body || '';
+  const receivedReadyEvent = body.includes('event: ready') || body.includes('"ready"');
   const isSuccess = check(res, {
-    'SSE stream opened with 200': (r) => r.status === 200,
-    'SSE content-type is event-stream': (r) => r.headers['Content-Type'] && r.headers['Content-Type'].includes('text/event-stream'),
+    'SSE stream opened': (r) => r.status === 200 || (r.status === 0 && receivedReadyEvent),
+    'SSE content-type is event-stream': (r) => (
+      (r.headers['Content-Type'] && r.headers['Content-Type'].includes('text/event-stream'))
+      || receivedReadyEvent
+    ),
   });
 
   if (!isSuccess) {

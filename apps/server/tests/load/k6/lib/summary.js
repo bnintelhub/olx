@@ -21,7 +21,16 @@ function getTrendPercentile(metric, primaryKey, fallbackKey = 'p(95)') {
 }
 
 function formatNumber(num) {
-  return Math.round(num || 0).toLocaleString('en-IN');
+  const value = String(Math.round(num || 0));
+  const groups = [];
+  let end = value.length;
+
+  while (end > 3) {
+    groups.unshift(value.slice(end - 3, end));
+    end -= 3;
+  }
+  groups.unshift(value.slice(0, end));
+  return groups.join(',');
 }
 
 function formatMs(ms) {

@@ -76,6 +76,6 @@ export function testSearch(query = 'car') {
 
 // 10. Profile/user APIs
 export function testUserProfile(token) {
-  const url = `${BASE_URL}/api/v1/users/me`;
+  const url = `${BASE_URL}/api/v1/user/profile`;
   return httpGet(url, { tag: 'user_profile', token });
 }
