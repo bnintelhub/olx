@@ -12,10 +12,10 @@ export const COMMON_HEADERS = {
   'Accept': 'application/json',
 };
 
-// Optional Test User Credentials for Authenticated Endpoints
+// Test User Credentials for Authenticated Endpoints (defaults to seeded Admin account)
 export const AUTH_CREDENTIALS = {
-  email: __ENV.TEST_USER_EMAIL || '',
-  password: __ENV.TEST_USER_PASSWORD || '',
+  email: __ENV.TEST_USER_EMAIL || 'rahul@gmail.com',
+  password: __ENV.TEST_USER_PASSWORD || 'rahul@123',
 };
 
 // Sample rate for failure logging (1 error logged per N failures)

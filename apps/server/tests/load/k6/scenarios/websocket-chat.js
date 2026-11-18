@@ -23,8 +23,8 @@ export const wsMessagesReceived = new Counter('ws_messages_received');
  * 6. Measures message delivery roundtrip latency
  * 7. Sustains connection for the configured session duration
  */
-export function runWebSocketChat(token = null, durationSeconds = 10, msgBurstCount = 1) {
-  const wsUrl = BASE_URL.replace(/^http/, 'ws') + `/socket.io/?EIO=4&transport=websocket` + (token ? `&token=${token}` : '');
+export function runWebSocketChat(token = null, durationSeconds = 2, msgBurstCount = 1, conversationId = null) {
+  const wsUrl = BASE_URL.replace(/^http/, 'ws') + `/socket.io/?EIO=4&transport=websocket` + (token ? `&token=${token}&context=admin` : '');
   const startConnect = Date.now();
 
   const res = ws.connect(wsUrl, { headers: { 'User-Agent': 'k6-load-tester' } }, function (socket) {

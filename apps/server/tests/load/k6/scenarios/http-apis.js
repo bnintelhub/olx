@@ -21,13 +21,15 @@ export function testConversationList(token) {
 }
 
 // 3. Message history
-export function testMessageHistory(token, conversationId = 'benchmark-conv-01') {
+export function testMessageHistory(token, conversationId = null) {
+  if (!conversationId) return null;
   const url = `${BASE_URL}/api/v1/chat/conversations/${conversationId}/messages?limit=25`;
   return httpGet(url, { tag: 'chat_messages', token });
 }
 
 // 4. Send message API
-export function testSendMessage(token, conversationId = 'benchmark-conv-01') {
+export function testSendMessage(token, conversationId = null) {
+  if (!conversationId) return null;
   const url = `${BASE_URL}/api/v1/chat/conversations/${conversationId}/messages`;
   const payload = JSON.stringify({
     content: `REST Load benchmark message #${Date.now()}`,
@@ -37,7 +39,8 @@ export function testSendMessage(token, conversationId = 'benchmark-conv-01') {
 }
 
 // 5. Read/seen API
-export function testMarkConversationRead(token, conversationId = 'benchmark-conv-01') {
+export function testMarkConversationRead(token, conversationId = null) {
+  if (!conversationId) return null;
   const url = `${BASE_URL}/api/v1/chat/conversations/${conversationId}/read`;
   const headers = { ...COMMON_HEADERS };
   if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -51,7 +54,8 @@ export function testNotificationList(token) {
 }
 
 // 7. Mark notification read
-export function testMarkNotificationRead(token, notificationId = 'benchmark-notif-01') {
+export function testMarkNotificationRead(token, notificationId = null) {
+  if (!notificationId) return null;
   const url = `${BASE_URL}/api/v1/notifications/${notificationId}/read`;
   const headers = { ...COMMON_HEADERS };
   if (token) headers['Authorization'] = `Bearer ${token}`;
