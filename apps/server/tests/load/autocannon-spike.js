@@ -20,7 +20,8 @@ const rawTarget = args[0] || process.env.TARGET_URL || 'http://localhost/api/v1/
 const targetUrl = rawTarget.replace(/\/+$/, '');
 
 const numCores = Math.max(1, os.cpus().length || 2);
-const workers = Math.min(numCores, 4);
+const defaultWorkers = numCores <= 4 ? 1 : Math.max(1, Math.floor(numCores / 2));
+const workers = process.env.WORKERS ? parseInt(process.env.WORKERS, 10) : defaultWorkers;
 
 const spikeStages = [
   { label: 'Stage 1: Pre-warm Baseline', connections: 100, pipelining: 5, duration: 10 },

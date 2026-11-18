@@ -31,7 +31,9 @@ const rawTarget = args[0] || process.env.TARGET_URL || 'http://localhost';
 const BASE_URL = rawTarget.replace(/\/+$/, '');
 
 const numCores = Math.max(1, os.cpus().length || 2);
-const workers = Math.min(numCores, 4);
+// On 4-core VMs (like Codespaces), allocating 1 worker prevents CPU starvation of Fastify & Nginx
+const defaultWorkers = numCores <= 4 ? 1 : Math.max(1, Math.floor(numCores / 2));
+const workers = process.env.WORKERS ? parseInt(process.env.WORKERS, 10) : defaultWorkers;
 
 /**
  * 7 Exponential Stages up to 1 Lakh (100,000) Concurrent In-Flight Load:
