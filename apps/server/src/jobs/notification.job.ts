@@ -9,6 +9,12 @@ export async function dispatchNotificationJob(input: {
   data?: unknown;
 }): Promise<void> {
   try {
+    // Chat messages have their own real-time socket events and conversation unread counters.
+    // They must NEVER collide with or pollute the system notifications table.
+    if (input.type === NotificationType.CHAT_MESSAGE || (input.type as string) === 'CHAT_MESSAGE') {
+      return;
+    }
+
     await prisma.notification.create({
       data: {
         userId: input.userId,

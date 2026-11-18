@@ -3,6 +3,7 @@ import { AdminService } from '../admin/admin.service';
 import { RevenueAnalyticsService } from '../payments/services/revenue.analytics.service';
 import { authorizeRoles } from '../../plugins/auth.plugin';
 import { UserRole } from '@prisma/client';
+import { sseConnectionManager } from '../notifications/sse-connection.manager';
 
 const staffRoles = [
   UserRole.SUPER_ADMIN,
@@ -30,7 +31,21 @@ export async function eventsRoutes(fastify: FastifyInstance) {
         canSimulateRole && query.role ? query.role : request.user!.role;
       const streamId = `${Date.now()}`;
 
+      if (request.raw?.socket) {
+        request.raw.socket.setTimeout(0);
+        request.raw.socket.setNoDelay(true);
+        request.raw.socket.setKeepAlive(true);
+      }
+
       reply.sse.keepAlive();
+
+      // Register staff connection in SSE Connection Manager for live alerts
+      const cleanupManager = sseConnectionManager.register(
+        request.user!.id,
+        role,
+        reply.sse,
+        streamId
+      );
 
       await reply.sse.send({
         id: streamId,
@@ -78,6 +93,7 @@ export async function eventsRoutes(fastify: FastifyInstance) {
       const dashboardUpdates = setInterval(sendDashboard, 6000);
       reply.sse.onClose(() => {
         clearInterval(dashboardUpdates);
+        cleanupManager();
       });
     },
   );

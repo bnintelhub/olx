@@ -1,6 +1,6 @@
 import React from 'react';
 import { ShieldCheck, Users, Lock, ArrowRight } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 
 interface HeroBannerProps {
   onOpenPostAd?: () => void;

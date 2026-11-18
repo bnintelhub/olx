@@ -180,7 +180,7 @@ export const router = createBrowserRouter([
       {
         path: 'support',
         element: (
-          <RoleGuard allowedRoles={['SUPER_ADMIN', 'CUSTOMER_SUPPORT']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'ADMIN', 'CUSTOMER_SUPPORT']}>
             <SupportPage />
           </RoleGuard>
         ),

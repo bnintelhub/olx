@@ -252,6 +252,17 @@ export const UserFeatureModal: React.FC<UserFeatureModalProps> = ({
                 </div>
               </div>
 
+              <button
+                onClick={() => {
+                  onClose();
+                  window.location.href = '/support';
+                }}
+                className="w-full bg-[#002f34] hover:bg-[#003d44] text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <HelpCircle size={15} />
+                <span>Open Support Desk & File Inquiry</span>
+              </button>
+
               <div className="space-y-2">
                 <h4 className="font-bold text-[#002f34] text-xs uppercase tracking-wider">Frequently Asked</h4>
                 <details className="rounded-lg border border-gray-200 p-2.5 cursor-pointer">

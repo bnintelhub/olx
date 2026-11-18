@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, MessageCircle, LogIn, Info } from 'lucide-react';
 import { io, Socket } from 'socket.io-client';
 import { getInMemoryAccessToken } from '@/lib/api-client';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { AdItem } from '../types';
 import {
   ChatConversationList,

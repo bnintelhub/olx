@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, ShieldAlert, CheckCircle2, AlertCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { apiClient } from '@/lib/api-client';
 
 interface ReportAdModalProps {

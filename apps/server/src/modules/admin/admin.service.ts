@@ -306,11 +306,32 @@ export class AdminService {
       }
 
       case 'CUSTOMER_SUPPORT': {
-        const [urgentTickets, resolvedToday] = await Promise.all([
+        const [
+          urgentReports,
+          resolvedReportsToday,
+          openSupportTickets,
+          urgentSupportTickets,
+          resolvedTicketsToday,
+        ] = await Promise.all([
           prisma.report.count({
             where: { status: 'PENDING', reason: { in: ['SPAM_OR_FRAUD', 'PROHIBITED_ITEM'] } },
           }),
           prisma.report.count({
+            where: {
+              status: 'RESOLVED',
+              resolvedAt: { gte: todayStart },
+            },
+          }),
+          prisma.supportTicket.count({
+            where: { status: { in: ['OPEN', 'IN_PROGRESS', 'WAITING_ON_CUSTOMER'] } },
+          }),
+          prisma.supportTicket.count({
+            where: {
+              priority: 'URGENT',
+              status: { in: ['OPEN', 'IN_PROGRESS'] },
+            },
+          }),
+          prisma.supportTicket.count({
             where: {
               status: 'RESOLVED',
               resolvedAt: { gte: todayStart },
@@ -321,9 +342,9 @@ export class AdminService {
         return {
           ...baseMetrics,
           role: 'CUSTOMER_SUPPORT',
-          openTickets: openReports,
-          urgentTickets,
-          resolvedToday,
+          openTickets: openReports + openSupportTickets,
+          urgentTickets: urgentReports + urgentSupportTickets,
+          resolvedToday: resolvedReportsToday + resolvedTicketsToday,
         };
       }
 

@@ -83,6 +83,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     Permissions.USERS_READ,
     Permissions.USERS_MANAGE,
     Permissions.USERS_BAN,
+    Permissions.SUPPORT_READ,
+    Permissions.SUPPORT_MANAGE,
     Permissions.LISTINGS_READ,
     Permissions.LISTINGS_APPROVE,
     Permissions.LISTINGS_REJECT,

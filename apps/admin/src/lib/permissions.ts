@@ -126,6 +126,7 @@ export const ROLE_NAVIGATION: Record<AdminRole, NavItem[]> = {
     { title: 'Categories', href: '/categories', icon: FolderTree, group: 'Operations' },
     { title: 'Locations', href: '/locations', icon: MapPin, group: 'Operations' },
     { title: 'Reports Queue', href: '/reports', icon: ShieldAlert, badgeVariant: 'warning', group: 'Operations' },
+    { title: 'Support Desk', href: '/support', icon: Headphones, badgeVariant: 'warning', group: 'Operations' },
     { title: 'Media Library', href: '/media', icon: Image, group: 'Operations' },
     { title: 'Revenue Policy', href: '/revenue-policy', icon: DollarSign, group: 'Operations' },
   ],

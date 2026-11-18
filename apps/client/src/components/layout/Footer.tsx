@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 
 interface FooterProps {
@@ -14,6 +15,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenAdminPortal }) => {
       <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-6 text-xs text-gray-300">
         <p>© 2026 BLX Orbit India Marketplace. All rights reserved.</p>
         <div className="flex flex-wrap items-center gap-6">
+          <Link to="/support" className="hover:text-white cursor-pointer transition text-[#FFD54A]">Customer Support</Link>
           <span className="hover:text-white cursor-pointer transition">About Us</span>
           <span className="hover:text-white cursor-pointer transition">Security & Safety</span>
           <span className="hover:text-white cursor-pointer transition">Privacy Policy</span>

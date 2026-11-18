@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, RefreshCw, Command, Github } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { useGsapModal } from '@/lib/gsapModalAnimation';
 
 export const AuthModal: React.FC = () => {

@@ -39,6 +39,7 @@ import { mediaRoutes } from './modules/media/media.routes';
 import { notificationRoutes } from './modules/notifications/notifications.routes';
 import { revenueRoutes } from './modules/revenue/revenue.routes';
 import { bannerRoutes } from './modules/banners/banners.routes';
+import { supportRoutes, adminSupportRoutes } from './modules/support/support.routes';
 import { ListingsController } from './modules/listings/listings.controller';
 import { defaultStorage } from './integrations/storage/storage.adapter';
 import { eventsRoutes } from './modules/events/events.routes';
@@ -48,9 +49,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     logger: env.NODE_ENV === 'development' ? { level: 'info' } : { level: 'warn' },
     trustProxy: true,
     ignoreTrailingSlash: true,
-    connectionTimeout: 15000, // 15s socket connection timeout
-    keepAliveTimeout: 65000,  // 65s keep-alive timeout (aligned with Nginx 65s)
-    requestTimeout: 30000,    // 30s max request handling timeout
+    connectionTimeout: 0,    // Disable aggressive socket timeout to allow long-lived SSE streams
+    keepAliveTimeout: 65000, // 65s keep-alive timeout (aligned with Nginx 65s)
+    requestTimeout: 0,       // Allow streaming requests (SSE) without premature termination
   });
 
   // Security headers
@@ -309,6 +310,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(notificationRoutes, { prefix: '/notifications' });
     await api.register(revenueRoutes, { prefix: '/revenue' });
     await api.register(bannerRoutes, { prefix: '/banners' });
+    await api.register(supportRoutes, { prefix: '/support' });
+    await api.register(adminSupportRoutes, { prefix: '/admin/support' });
   }, { prefix: '/api/v1' });
 
   return app;

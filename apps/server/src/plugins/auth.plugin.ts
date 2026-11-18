@@ -28,20 +28,27 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     const appContext = (request.headers['x-app-context'] as string)?.toLowerCase();
+    const queryContext = (request.query as { context?: string })?.context?.toLowerCase();
     const url = request.url || '';
-    const isAdminRoute = url.includes('/admin');
+    const isAdminRoute = url.includes('/admin') || appContext === 'admin' || queryContext === 'admin';
 
     // 1. Collect candidate access tokens from cookies and Authorization header
     const candidateTokens: string[] = [];
-    if (appContext === 'admin' || isAdminRoute) {
+    if (isAdminRoute) {
       if (request.cookies?.admin_access_token) candidateTokens.push(request.cookies.admin_access_token);
       if (request.cookies?.access_token) candidateTokens.push(request.cookies.access_token);
     } else {
+      // Public client routes strictly isolate to client user tokens
       if (request.cookies?.access_token) candidateTokens.push(request.cookies.access_token);
       if (request.cookies?.token) candidateTokens.push(request.cookies.token);
     }
     if (request.headers.authorization?.startsWith('Bearer ')) {
       candidateTokens.push(request.headers.authorization.substring(7).trim());
+    }
+    // Also accept token from query parameter (for SSE EventSource streams)
+    const queryToken = (request.query as { token?: string })?.token;
+    if (queryToken && typeof queryToken === 'string') {
+      candidateTokens.push(queryToken.trim());
     }
 
     if (candidateTokens.length === 0) {

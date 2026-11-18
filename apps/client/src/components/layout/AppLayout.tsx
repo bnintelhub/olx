@@ -16,19 +16,21 @@ import { ADS_QUERY_KEYS } from '@/features/ads/hook/useAdsQuery';
 import { useChatNotificationListener } from '@/features/chat/hooks/useChatNotificationListener';
 import { PushNotificationPrompt } from '@/features/notifications/components/PushNotificationPrompt';
 import { usePushNotifications } from '@/features/notifications/usePushNotifications';
+import { useNotificationSSE } from '@/features/notifications/useNotificationSSE';
 
 export const AppLayout: React.FC = () => {
   useChatNotificationListener();
   usePushNotifications();
+  useNotificationSSE();
   const navigate = useNavigate();
   const location = useLocation();
   const queryClient = useQueryClient();
   const { user, openAuthModal } = useAuthStore();
   const ui = useUIStore();
 
-  // Show main Navbar only on the Home page ('/')
-  const isHomePage = location.pathname === '/';
+  // Show main Navbar on all standard pages except full-screen chat
   const isChatPage = location.pathname.startsWith('/chat');
+  const showNavbar = !isChatPage;
 
   const handleOpenPostAd = () => {
     if (!user) {
@@ -74,8 +76,8 @@ export const AppLayout: React.FC = () => {
       {/* WhatsApp-style Push Notification Permission Prompt */}
       <PushNotificationPrompt />
 
-      {/* Navbar (Rendered only on the Home page) */}
-      {isHomePage && (
+      {/* Navbar (Rendered across the application except full-screen chat) */}
+      {showNavbar && (
         <Navbar
           onLogoClick={() => navigate('/')}
           onSearch={(kw, citySlug, locationId) => {

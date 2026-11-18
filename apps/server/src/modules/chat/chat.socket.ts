@@ -7,7 +7,7 @@ import { AuthRepository } from '../auth/auth.repository';
 import { ChatService } from './chat.service';
 import { ChatPresenceService } from './chat.presence.service';
 import { SendMessagePayload } from './chat.types';
-import { fcmService } from '../../integrations/push/fcm.service';
+import { dispatchChatPushJob } from '../../jobs/push.job';
 import { fcmDecisionService } from '../../integrations/push/fcm.decision.service';
 import { toPublicMediaUrl } from '../../shared/utils/media-url.util';
 
@@ -144,7 +144,7 @@ export function broadcastChatMessage(conversationId: string, message: any, sende
         const senderAvatar = message.sender?.profile?.avatarUrl || null;
         const messageText = decision.bundledBody || payload.content || (payload.attachmentUrl ? '📷 Photo' : 'Sent an attachment');
 
-        await fcmService.sendChatMessagePush({
+        await dispatchChatPushJob({
           recipientId: receiverId,
           senderId,
           senderName,

@@ -1,0 +1,75 @@
+// Web Audio API notification chime for Staff Dashboard (100% offline, crystal-clear chime)
+let lastPlayedTimestamp = 0;
+let sharedAudioCtx: AudioContext | null = null;
+
+function getOrCreateAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) return null;
+
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new AudioCtx();
+  }
+  if (sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
+}
+
+// Auto-unlock audio context on first user interaction so alerts can sound immediately
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getOrCreateAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true, once: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true, once: true });
+}
+
+export function playNotificationChime(): void {
+  try {
+    if (typeof window === 'undefined') return;
+
+    // Throttle multiple rapid alerts within 300ms
+    const nowMs = Date.now();
+    if (nowMs - lastPlayedTimestamp < 300) return;
+    lastPlayedTimestamp = nowMs;
+
+    const ctx = getOrCreateAudioContext();
+    if (!ctx) return;
+
+    const startTime = ctx.currentTime;
+
+    // First harmonious tone (D5 note: 587.33 Hz)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.type = 'sine';
+    osc1.frequency.setValueAtTime(587.33, startTime);
+    gain1.gain.setValueAtTime(0.001, startTime);
+    gain1.gain.linearRampToValueAtTime(0.3, startTime + 0.02);
+    gain1.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
+    osc1.connect(gain1);
+    gain1.connect(ctx.destination);
+    osc1.start(startTime);
+    osc1.stop(startTime + 0.3);
+
+    // Second cheerful tone (A5 note: 880 Hz)
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(880, startTime + 0.08);
+    gain2.gain.setValueAtTime(0.001, startTime + 0.08);
+    gain2.gain.linearRampToValueAtTime(0.35, startTime + 0.1);
+    gain2.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
+    osc2.connect(gain2);
+    gain2.connect(ctx.destination);
+    osc2.start(startTime + 0.08);
+    osc2.stop(startTime + 0.45);
+  } catch {
+    // Autoplay policy restrictions prior to user gesture
+  }
+}

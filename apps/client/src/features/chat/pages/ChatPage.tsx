@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import type { Socket } from 'socket.io-client';
 import { ArrowLeft, ShieldCheck, AlertCircle, ChevronLeft } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
+import { useAuth } from '@/context/useAuth';
 import { apiClient, getInMemoryAccessToken } from '@/lib/api-client';
 import { ChatConversationList, ConversationItem } from '../components/ChatConversationList';
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';

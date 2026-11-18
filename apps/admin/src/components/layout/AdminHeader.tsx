@@ -1,4 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth.store';
 import { useTheme } from '../../app/theme-provider';
 import { Button } from '../ui/button';
@@ -8,10 +11,12 @@ import { Separator } from '../ui/separator';
 import { AdminRole } from '../../types';
 import { ROLE_CONFIGS } from '../../lib/permissions';
 import { connectAdminEvents } from '../../lib/sse';
+import { playNotificationChime } from '../../lib/sound';
+import { useAdminNotificationSSE } from '../../features/notifications/hook/useAdminNotificationSSE';
+import { AdminNotificationDropdown } from '../../features/notifications/components/AdminNotificationDropdown';
 import {
   Search,
   Calendar,
-  Bell,
   Sun,
   Moon,
   ChevronDown,
@@ -34,11 +39,16 @@ const DASHBOARD_VIEWS: AdminRole[] = [
 ];
 
 export function AdminHeader() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const activeRole = useAuthStore((s) => s.role) || 'ADMIN';
   const setRole = useAuthStore((s) => s.setRole);
   const logout = useAuthStore((s) => s.logout);
   const { theme, setTheme, resolvedTheme } = useTheme();
+
+  // Connect staff real-time notification stream (SSE) with sound alerts
+  useAdminNotificationSSE();
 
   // Strict authority identification: only genuine SUPER_ADMIN can toggle dashboards
   const userRole = user?.role || 'ADMIN';
@@ -73,9 +83,22 @@ export function AdminHeader() {
 
     return connectAdminEvents(
       effectiveRole,
-      () => {
+      (event) => {
         setLastSseEventAt(Date.now());
         setSseState('healthy');
+
+        if (event.type === 'support_activity') {
+          void queryClient.invalidateQueries({ queryKey: ['admin-notifications'] });
+          void queryClient.invalidateQueries({ queryKey: ['admin-notif-unread-count'] });
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'support', 'tickets'] });
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'support', 'ticket'] });
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'support', 'stats'] });
+          void queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
+          void queryClient.invalidateQueries({ queryKey: ['support-stats'] });
+        } else if (event.type === 'notification') {
+          void queryClient.invalidateQueries({ queryKey: ['admin-notifications'] });
+          void queryClient.invalidateQueries({ queryKey: ['admin-notif-unread-count'] });
+        }
       },
       (connected) => {
         setIsStreamConnected(connected);
@@ -245,11 +268,8 @@ export function AdminHeader() {
           <span className="sr-only">Toggle theme</span>
         </Button>
 
-        {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground h-8 w-8">
-          <Bell className="h-4 w-4" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-rose-500" />
-        </Button>
+        {/* Real-time Staff Notifications Dropdown with Sound Alerts */}
+        <AdminNotificationDropdown />
 
         {/* User Identity Profile Dropdown */}
         <div className="relative pl-1 border-l" ref={profileMenuRef}>

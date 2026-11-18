@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Plus, Heart, MessageSquare } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { Plus, Heart, MessageSquare, Bell } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { apiClient } from '@/lib/api-client';
+import { useUIStore } from '@/stores/useUIStore';
+import { useAuth } from '../context/useAuth';
 import { LocationItem } from '../types';
 import { getWishlistIds, WISHLIST_EVENT } from '../utils/wishlist';
 import { UserFeatureType } from './UserFeatureModal';
@@ -9,6 +12,7 @@ import { CategoriesRibbon } from './CategoriesRibbon';
 import { NavbarCityDropdown } from './navbar/NavbarCityDropdown';
 import { NavbarSearchBar, SuggestionItem } from './navbar/NavbarSearchBar';
 import { NavbarUserMenu } from './navbar/NavbarUserMenu';
+import { NotificationModal } from './NotificationModal';
 import { useChatUnreadStore } from '@/features/chat/stores/useChatUnreadStore';
 
 interface NavbarProps {
@@ -44,6 +48,20 @@ export const Navbar: React.FC<NavbarProps> = ({
   const hasStaffAccess = user?.role === 'ADMIN' || user?.role === 'MODERATOR';
   const storeUnreadCount = useChatUnreadStore((s) => s.unreadCount);
   const totalUnreadMessages = typeof unreadCount === 'number' && unreadCount > 0 ? unreadCount : storeUnreadCount;
+
+  const openNotification = useUIStore((s) => s.openNotification);
+  const isNotificationOpen = useUIStore((s) => s.isNotificationOpen);
+  const closeNotification = useUIStore((s) => s.closeNotification);
+  const { data: notifData } = useQuery<{ count: number }>({
+    queryKey: ['notifications-unread-count', user?.id],
+    queryFn: async () => {
+      const res = await apiClient.get('/notifications/unread-count');
+      return res.data;
+    },
+    enabled: !!user,
+    staleTime: 5000,
+  });
+  const totalUnreadNotifications = notifData?.count || 0;
 
   const [cities, setCities] = useState<LocationItem[]>([]);
   const [selectedCity, setSelectedCity] = useState('All India');
@@ -204,6 +222,41 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* User Navigation / Quick Actions */}
         <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+          {/* Notifications & Inquiries */}
+          {user && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  if (isNotificationOpen) {
+                    closeNotification();
+                  } else {
+                    openNotification();
+                  }
+                }}
+                className={`relative p-2 rounded-full transition-all duration-200 cursor-pointer ${
+                  isNotificationOpen
+                    ? 'bg-gray-100 text-[#002f34]'
+                    : 'text-[#002f34] hover:bg-gray-100'
+                }`}
+                title="Notifications & Inquiries"
+              >
+                <Bell size={20} />
+                {totalUnreadNotifications > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[#00a49f] text-[10px] font-bold text-white shadow-xs animate-in fade-in zoom-in-75">
+                    {totalUnreadNotifications > 99 ? '99+' : totalUnreadNotifications}
+                  </span>
+                )}
+              </button>
+
+              {/* Right Slide-Over Notification Drawer */}
+              <NotificationModal
+                isOpen={isNotificationOpen}
+                onClose={closeNotification}
+              />
+            </>
+          )}
+
           {/* Messages & Chat */}
           <button
             type="button"
@@ -240,6 +293,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               user={user}
               hasStaffAccess={hasStaffAccess}
               unreadCount={totalUnreadMessages}
+              notifCount={totalUnreadNotifications}
+              onOpenNotification={openNotification}
               onOpenProfile={onOpenProfile}
               onOpenMyAds={onOpenMyAds}
               onOpenWishlist={onOpenWishlist}

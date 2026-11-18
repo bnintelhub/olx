@@ -11,7 +11,7 @@ import {
   Flag,
 } from 'lucide-react';
 import { AdItem } from '../types';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/useAuth';
 import { isAdWishlisted, toggleWishlist, WISHLIST_EVENT } from '../utils/wishlist';
 import { resolveLocationCoordinates } from '../utils/locationCoordinates';
 import { formatCurrency, formatPostingDate } from '@/lib/utils';

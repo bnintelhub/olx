@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-cert
 RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
+ENV HUSKY=0
 ENV NODE_OPTIONS="--max-old-space-size=1024"
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 ENV npm_config_target_libc="glibc"
@@ -14,7 +15,8 @@ COPY packages/database ./packages/database
 COPY packages/shared ./packages/shared
 COPY apps/workers ./apps/workers
 
-RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    --mount=type=cache,id=pnpm-metadata,target=/root/.cache/pnpm,sharing=locked \
     pnpm install --frozen-lockfile --filter @olx/workers...
 RUN pnpm --filter @olx/database db:generate
 RUN pnpm --filter @olx/database build

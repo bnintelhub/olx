@@ -30,6 +30,11 @@ interface UIState {
   openProfile: () => void;
   closeProfile: () => void;
 
+  // Notification Modal State
+  isNotificationOpen: boolean;
+  openNotification: () => void;
+  closeNotification: () => void;
+
   // User Feature Modal State
   userFeatureType: UserFeatureType;
   openUserFeature: (type: UserFeatureType) => void;
@@ -83,6 +88,11 @@ export const useUIStore = create<UIState>((set) => ({
   isProfileOpen: false,
   openProfile: () => set({ isProfileOpen: true }),
   closeProfile: () => set({ isProfileOpen: false }),
+
+  // Notification Modal
+  isNotificationOpen: false,
+  openNotification: () => set({ isNotificationOpen: true }),
+  closeNotification: () => set({ isNotificationOpen: false }),
 
   // User Features
   userFeatureType: null,

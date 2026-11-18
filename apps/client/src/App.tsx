@@ -8,6 +8,7 @@ import { SellPage } from './features/sell/pages/SellPage';
 import { MyAdsPage } from './features/ads/pages/MyAdsPage';
 import { PlansPage } from './features/plans/pages/PlansPage';
 import { ChatPage } from './features/chat/pages/ChatPage';
+import { SupportDeskPage } from './features/support/pages/SupportDeskPage';
 
 interface OutletContextType {
   onOpenPostAd: () => void;
@@ -58,6 +59,7 @@ export const App: React.FC = () => {
         <Route path="search" element={<SearchPage />} />
         <Route path="sell" element={<SellPage />} />
         <Route path="plans" element={<PlansPage />} />
+        <Route path="support" element={<SupportDeskPage />} />
         <Route path="chat" element={<ChatPage />} />
         <Route path="chat/:conversationId" element={<ChatPage />} />
         <Route path="my-ads" element={<MyAdsPage />} />

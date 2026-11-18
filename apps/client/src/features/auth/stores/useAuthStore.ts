@@ -115,6 +115,7 @@ export const useAuthStore = create<AuthState>()(
         }
         setInMemoryAccessToken(null);
         localStorage.removeItem('olx_wishlist_user_id');
+        localStorage.removeItem('olx-client-auth');
         set({
           user: null,
           token: null,

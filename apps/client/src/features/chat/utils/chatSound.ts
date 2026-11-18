@@ -1,22 +1,48 @@
 // Web Audio API message sound synthesis (Zero dependencies, 100% offline, crystal-clear chime)
 let lastPlayedTimestamp = 0;
+let sharedAudioCtx: AudioContext | null = null;
+
+function getOrCreateAudioContext(): AudioContext | null {
+  if (typeof window === 'undefined') return null;
+  const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+  if (!AudioCtx) return null;
+
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new AudioCtx();
+  }
+  if (sharedAudioCtx.state === 'suspended') {
+    sharedAudioCtx.resume().catch(() => {});
+  }
+  return sharedAudioCtx;
+}
+
+// Auto-unlock audio context on first user interaction so notifications can play freely
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    const ctx = getOrCreateAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume().catch(() => {});
+    }
+    window.removeEventListener('click', unlockAudio);
+    window.removeEventListener('keydown', unlockAudio);
+    window.removeEventListener('touchstart', unlockAudio);
+  };
+  window.addEventListener('click', unlockAudio, { passive: true, once: true });
+  window.addEventListener('keydown', unlockAudio, { passive: true, once: true });
+  window.addEventListener('touchstart', unlockAudio, { passive: true, once: true });
+}
 
 export function playNewMessageSound(): void {
   try {
     if (typeof window === 'undefined') return;
 
-    // Prevent duplicate triggers from multiple socket listeners within 350ms
+    // Prevent duplicate triggers within 300ms
     const nowMs = Date.now();
-    if (nowMs - lastPlayedTimestamp < 350) return;
+    if (nowMs - lastPlayedTimestamp < 300) return;
     lastPlayedTimestamp = nowMs;
 
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioCtx) return;
-
-    const ctx = new AudioCtx();
-    if (ctx.state === 'suspended') {
-      ctx.resume().catch(() => {});
-    }
+    const ctx = getOrCreateAudioContext();
+    if (!ctx) return;
 
     const startTime = ctx.currentTime;
 
@@ -26,7 +52,7 @@ export function playNewMessageSound(): void {
     osc1.type = 'sine';
     osc1.frequency.setValueAtTime(587.33, startTime);
     gain1.gain.setValueAtTime(0.001, startTime);
-    gain1.gain.linearRampToValueAtTime(0.2, startTime + 0.02);
+    gain1.gain.linearRampToValueAtTime(0.3, startTime + 0.02);
     gain1.gain.exponentialRampToValueAtTime(0.001, startTime + 0.3);
     osc1.connect(gain1);
     gain1.connect(ctx.destination);
@@ -39,18 +65,13 @@ export function playNewMessageSound(): void {
     osc2.type = 'sine';
     osc2.frequency.setValueAtTime(880, startTime + 0.08);
     gain2.gain.setValueAtTime(0.001, startTime + 0.08);
-    gain2.gain.linearRampToValueAtTime(0.25, startTime + 0.1);
+    gain2.gain.linearRampToValueAtTime(0.35, startTime + 0.1);
     gain2.gain.exponentialRampToValueAtTime(0.001, startTime + 0.45);
     osc2.connect(gain2);
     gain2.connect(ctx.destination);
     osc2.start(startTime + 0.08);
     osc2.stop(startTime + 0.45);
-
-    // Close audio context after playback to free system audio resources
-    setTimeout(() => {
-      ctx.close().catch(() => {});
-    }, 600);
   } catch {
-    // Gracefully ignore if autoplay policy restrictions apply prior to user interaction
+    // Gracefully ignore if autoplay policy restrictions apply prior to interaction
   }
 }

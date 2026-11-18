@@ -13,7 +13,11 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-olx_marketplace}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-olx_marketplace}",
+        ]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -96,6 +100,7 @@ services:
       REDIS_URL: "redis://redis:6379"
     volumes:
       - ./apps/workers/src:/app/apps/workers/src
+      - ./apps/workers/gen-lang-client-0067863163-firebase-adminsdk-fbsvc-3a9115427b.json:/app/apps/workers/gen-lang-client-0067863163-firebase-adminsdk-fbsvc-3a9115427b.json:ro
       - ./packages/shared/src:/app/packages/shared/src
       - ./packages/shared/dist:/app/packages/shared/dist
       - ./packages/database/prisma:/app/packages/database/prisma
