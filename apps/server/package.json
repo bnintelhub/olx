@@ -11,10 +11,9 @@
     "test:watch": "vitest",
     "test:load": "tsx scripts/load-test.ts",
     "loadtest": "tsx scripts/load-test.ts",
-    "k6:mixed": "k6 run tests/load/k6/mixed-100k-realistic.js",
-    "k6:reconnect": "k6 run tests/load/k6/reconnect-storm.js",
-    "k6:spike": "k6 run tests/load/k6/spike-150k.js",
-    "k6:exponential": "k6 run tests/load/k6/exponential-100k.js"
+    "load:mixed": "node tests/load/autocannon-mixed-100k.js",
+    "load:spike": "node tests/load/autocannon-spike.js",
+    "load:exponential": "node tests/load/autocannon-exponential.js"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",

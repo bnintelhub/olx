@@ -1,53 +1,60 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# BharatMarket (OLX) — 1 Lakh (100,000) Load Test Runner for GitHub Codespaces
+# BharatMarket (OLX) — Autocannon Load Test Suite for GitHub Codespaces
 # ==============================================================================
 set -e
 
-# 1. Optimize Linux OS Socket & File Descriptor Limits for High Concurrency
+# 1. Optimize Linux OS File Descriptor & Socket Limits for Codespaces
 echo "🔧 Optimizing GitHub Codespaces socket and file descriptor limits..."
 ulimit -n 1048576 2>/dev/null || ulimit -n 65535 2>/dev/null || true
 echo "✅ Max Open File Descriptors: $(ulimit -n)"
 
-# 2. Parse Target Option
-TARGET_MODE="${1:-health}"
+MODE="${1:-mixed}"
 BASE_HOST="${2:-http://localhost}"
 
-case "$TARGET_MODE" in
-  health)
-    TARGET_URL="${BASE_HOST}/health"
-    ;;
-  ads)
-    TARGET_URL="${BASE_HOST}/api/v1/ads?limit=16&sort=newest"
-    ;;
-  categories)
-    TARGET_URL="${BASE_HOST}/api/v1/categories"
-    ;;
-  search)
-    TARGET_URL="${BASE_HOST}/api/v1/ads?q=iphone"
-    ;;
-  direct-server)
-    TARGET_URL="http://localhost:5000/api/v1/health"
-    ;;
-  *)
-    TARGET_URL="$TARGET_MODE"
-    ;;
-esac
-
 echo "================================================================================"
-echo "🚀 Starting 1 Lakh (100,000) Exponential Load Test"
-echo "📡 Target: ${TARGET_URL}"
+echo "🚀 BharatMarket 1 Lakh (100,000) Load Test Suite"
+echo "💻 Host: ${BASE_HOST}"
+echo "🎯 Mode: ${MODE}"
 echo "================================================================================"
 
-# 3. Check if target server is responding
-echo "🔍 Checking target availability..."
-if curl -s -f -I "${TARGET_URL}" > /dev/null 2>&1; then
-  echo "✅ Target is ONLINE and responding."
+# Check if target is responding
+echo "🔍 Checking gateway availability..."
+if curl -s -f -I "${BASE_HOST}/health" > /dev/null 2>&1; then
+  echo "✅ Gateway is ONLINE and responding at ${BASE_HOST}/health"
 else
-  echo "⚠️ Target did not respond to initial probe. Testing anyway..."
+  echo "⚠️ Gateway did not respond to /health. Testing anyway..."
 fi
 
-echo ""
-# 4. Run Autocannon Exponential Suite
-node "$(dirname "$0")/autocannon-exponential.js" "${TARGET_URL}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+case "$MODE" in
+  mixed)
+    echo "Running 7-Stage Realistic Mixed Load (100 -> 1 Lakh in-flight)..."
+    node "${SCRIPT_DIR}/autocannon-mixed-100k.js" "${BASE_HOST}"
+    ;;
+  spike)
+    echo "Running Traffic Spike & Burst Test..."
+    node "${SCRIPT_DIR}/autocannon-spike.js" "${BASE_HOST}/api/v1/ads?limit=16"
+    ;;
+  ads)
+    echo "Running Ads Feed Exponential Test..."
+    node "${SCRIPT_DIR}/autocannon-exponential.js" "${BASE_HOST}/api/v1/ads?limit=16"
+    ;;
+  categories)
+    echo "Running Categories Taxonomy Test..."
+    node "${SCRIPT_DIR}/autocannon-exponential.js" "${BASE_HOST}/api/v1/categories"
+    ;;
+  search)
+    echo "Running Search Pipeline Test..."
+    node "${SCRIPT_DIR}/autocannon-exponential.js" "${BASE_HOST}/api/v1/ads?q=car"
+    ;;
+  health)
+    echo "Running High-Speed Baseline Health Test..."
+    node "${SCRIPT_DIR}/autocannon-exponential.js" "${BASE_HOST}/health"
+    ;;
+  *)
+    echo "Custom URL Target: ${MODE}"
+    node "${SCRIPT_DIR}/autocannon-exponential.js" "${MODE}"
+    ;;
+esac
