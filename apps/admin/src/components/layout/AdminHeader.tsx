@@ -7,6 +7,7 @@ import { SidebarTrigger } from '../ui/sidebar';
 import { Separator } from '../ui/separator';
 import { AdminRole } from '../../types';
 import { ROLE_CONFIGS } from '../../lib/permissions';
+import { connectAdminEvents } from '../../lib/sse';
 import {
   Search,
   Calendar,
@@ -19,6 +20,7 @@ import {
   ShieldCheck,
   Eye,
   Check,
+  Radio,
 } from 'lucide-react';
 
 const DASHBOARD_VIEWS: AdminRole[] = [
@@ -46,6 +48,9 @@ export function AdminHeader() {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isStreamConnected, setIsStreamConnected] = useState(false);
+  const [lastSseEventAt, setLastSseEventAt] = useState<number | null>(null);
+  const [sseState, setSseState] = useState<'connecting' | 'healthy' | 'stale' | 'disconnected'>('connecting');
 
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -62,6 +67,33 @@ export function AdminHeader() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+
+    return connectAdminEvents(
+      effectiveRole,
+      () => {
+        setLastSseEventAt(Date.now());
+        setSseState('healthy');
+      },
+      (connected) => {
+        setIsStreamConnected(connected);
+        setSseState(connected ? 'connecting' : 'disconnected');
+      },
+    );
+  }, [effectiveRole, user]);
+
+  useEffect(() => {
+    if (!isStreamConnected) return;
+
+    const interval = window.setInterval(() => {
+      if (lastSseEventAt === null) return;
+      setSseState(Date.now() - lastSseEventAt > 15000 ? 'stale' : 'healthy');
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [isStreamConnected, lastSseEventAt]);
 
   const currentRoleMeta = ROLE_CONFIGS[effectiveRole] || ROLE_CONFIGS.ADMIN;
 
@@ -101,6 +133,38 @@ export function AdminHeader() {
 
       {/* Right Controls: Role Badge, View Switcher (Super Admin only), Theme Toggle, Profile */}
       <div className="flex items-center gap-2.5 sm:gap-3">
+        <div
+          title={
+            sseState === 'healthy'
+              ? `SSE is receiving events${lastSseEventAt ? ` · last event ${new Date(lastSseEventAt).toLocaleTimeString()}` : ''}`
+              : sseState === 'stale'
+                ? 'SSE connection is open but no recent event received'
+                : sseState === 'disconnected'
+                  ? 'SSE disconnected'
+                  : 'Connecting to SSE'
+          }
+          className={`hidden md:inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold ${
+            sseState === 'healthy'
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : sseState === 'stale'
+                ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : sseState === 'disconnected'
+                  ? 'border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400'
+                  : 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-400'
+          }`}
+        >
+          <Radio className={`h-3 w-3 ${sseState === 'healthy' ? 'animate-pulse' : ''}`} />
+          <span>
+            {sseState === 'healthy'
+              ? 'SSE Healthy'
+              : sseState === 'stale'
+                ? 'SSE Stale'
+                : sseState === 'disconnected'
+                  ? 'SSE Offline'
+                  : 'SSE Connecting'}
+          </span>
+        </div>
+
         {/* Header Display: Authority Badge */}
         {isSuperAdmin ? (
           <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-bold text-amber-600 dark:text-amber-400">

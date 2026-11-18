@@ -4,6 +4,10 @@ RUN corepack enable && corepack prepare pnpm@11.25.0 --activate
 WORKDIR /app
 
 ENV NODE_OPTIONS="--max-old-space-size=1024"
+ARG VITE_BASE_URL=/admin/
+ARG VITE_ADMIN_URL=/admin
+ENV VITE_BASE_URL=$VITE_BASE_URL
+ENV VITE_ADMIN_URL=$VITE_ADMIN_URL
 
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml* turbo.json .npmrc ./
 COPY packages/shared ./packages/shared

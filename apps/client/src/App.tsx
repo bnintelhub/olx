@@ -29,15 +29,7 @@ const AcceptInviteRedirect: React.FC = () => {
   const token = searchParams.get('token');
 
   useEffect(() => {
- const adminUrl = (import.meta as any).env?.VITE_ADMIN_URL || '/admin';
-    const isPort80or443 =
-      window.location.port === '' ||
-      window.location.port === '80' ||
-      window.location.port === '443';
-
-    const targetBase = isPort80or443
-      ? `${window.location.origin}/admin`
-      : adminUrl;
+    const targetBase = `${window.location.origin}/admin`;
 
     const targetUrl = `${targetBase.replace(/\/$/, '')}/accept-invite${
       token ? `?token=${encodeURIComponent(token)}` : ''

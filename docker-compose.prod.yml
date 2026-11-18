@@ -98,6 +98,8 @@ services:
     build:
       context: .
       dockerfile: ./infrastructure/docker/prod/Dockerfile.client
+      args:
+        VITE_ADMIN_URL: /admin
     container_name: bharatmarket_client
     restart: always
     depends_on:
@@ -117,6 +119,9 @@ services:
     build:
       context: .
       dockerfile: ./infrastructure/docker/prod/Dockerfile.admin
+      args:
+        VITE_BASE_URL: /admin/
+        VITE_ADMIN_URL: /admin
     container_name: bharatmarket_admin
     restart: always
     depends_on:

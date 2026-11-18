@@ -66,8 +66,7 @@ export const AppLayout: React.FC = () => {
   };
 
   const handleOpenAdminPortal = () => {
-   const adminUrl = (import.meta as any).env?.VITE_ADMIN_URL || '/admin';
-    window.open(adminUrl, '_blank');
+    window.open(`${window.location.origin}/admin`, '_blank', 'noopener,noreferrer');
   };
 
   return (

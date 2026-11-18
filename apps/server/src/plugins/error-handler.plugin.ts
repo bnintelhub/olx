@@ -5,6 +5,12 @@ import { AppError } from '../shared/errors/app-error';
 
 export const errorHandlerPlugin = fp(async (fastify: FastifyInstance) => {
   fastify.setErrorHandler((error, request: FastifyRequest, reply: FastifyReply) => {
+    const err = error as Error & {
+      statusCode?: number;
+      code?: string;
+      details?: unknown;
+      validation?: unknown;
+    };
     const timestamp = new Date().toISOString();
     const requestId =
       (request.headers['x-request-id'] as string) ||
@@ -31,36 +37,36 @@ export const errorHandlerPlugin = fp(async (fastify: FastifyInstance) => {
       return reply.status(error.statusCode).send({
         success: false,
         error: {
-          code: error.code,
-          message: error.message,
-          details: error.details,
+          code: err.code,
+          message: err.message,
+          details: err.details,
         },
         meta: { timestamp, path: request.url, requestId },
       });
     }
 
     // Fastify schema validation errors
-    if ((error as any).validation) {
+    if (err.validation) {
       return reply.status(400).send({
         success: false,
         error: {
           code: 'VALIDATION_FAILED',
-          message: error.message,
-          details: (error as any).validation,
+          message: err.message,
+          details: err.validation,
         },
         meta: { timestamp, path: request.url, requestId },
       });
     }
 
     // Fastify HTTP 4xx Client Errors (e.g. 400 Bad Request, 415 Unsupported Media Type, 413 Payload Too Large)
-    const statusCode = (error as any).statusCode;
+    const statusCode = err.statusCode;
     if (statusCode && statusCode >= 400 && statusCode < 500) {
       return reply.status(statusCode).send({
         success: false,
         error: {
-          code: (error as any).code || 'BAD_REQUEST',
-          message: error.message,
-          details: process.env.NODE_ENV === 'development' ? (error as any).details || null : null,
+          code: err.code || 'BAD_REQUEST',
+          message: err.message,
+          details: process.env.NODE_ENV === 'development' ? err.details || null : null,
         },
         meta: { timestamp, path: request.url, requestId },
       });
@@ -73,7 +79,7 @@ export const errorHandlerPlugin = fp(async (fastify: FastifyInstance) => {
       error: {
         code: 'INTERNAL_SERVER_ERROR',
         message: 'An unexpected internal server error occurred',
-        details: process.env.NODE_ENV === 'development' ? error.message : null,
+        details: process.env.NODE_ENV === 'development' ? err.message : null,
       },
       meta: { timestamp, path: request.url, requestId },
     });

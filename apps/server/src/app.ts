@@ -11,6 +11,7 @@ import fastifyCookie from '@fastify/cookie';
 import fastifyHelmet from '@fastify/helmet';
 import fastifyMultipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import fastifySSE from '@fastify/sse';
 import { corsPlugin } from './plugins/cors.plugin';
 import { rateLimitPlugin } from './plugins/rate-limit.plugin';
 import { swaggerPlugin } from './plugins/swagger.plugin';
@@ -92,6 +93,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(rateLimitPlugin);
   await app.register(swaggerPlugin);
   await app.register(responseMetricsPlugin);
+  await app.register(fastifySSE, { heartbeatInterval: 15000 });
 
   // File Uploads & Static files
   await app.register(fastifyMultipart, {
@@ -113,10 +115,10 @@ export async function buildApp(): Promise<FastifyInstance> {
     root: uploadRoots.length > 1 ? uploadRoots : sharedUploadDir,
     prefix: '/uploads/',
     decorateReply: false,
-    setHeaders: (res, pathName) => {
+    setHeaders: (reply, pathName) => {
       // Long-lived immutable caching for pre-processed image variants
       if (pathName.endsWith('.webp') || pathName.endsWith('.avif') || pathName.includes('variants')) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       }
     },
   });
@@ -126,9 +128,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     root: uploadRoots.length > 1 ? uploadRoots : sharedUploadDir,
     prefix: '/olx-media/',
     decorateReply: false,
-    setHeaders: (res, pathName) => {
+    setHeaders: (reply, pathName) => {
       if (pathName.endsWith('.webp') || pathName.endsWith('.avif') || pathName.includes('variants')) {
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        reply.header('Cache-Control', 'public, max-age=31536000, immutable');
       }
     },
   });
@@ -142,14 +144,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     root: mediaRoot,
     prefix: '/media/',
     decorateReply: false,
-    setHeaders: (res, pathName) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
+    setHeaders: (reply, pathName) => {
+      reply.header('Access-Control-Allow-Origin', '*');
       // Protect internal directories from direct Fastify serving if attempted
       if (pathName.startsWith('/temp') || pathName.startsWith('/quarantine') || pathName.startsWith('/trash') || pathName.startsWith('/failed')) {
-        res.statusCode = 403;
+        reply.code(403);
       }
       if (pathName.endsWith('.webp') || pathName.endsWith('.avif')) {
-        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+        reply.header('Cache-Control', 'public, max-age=2592000, immutable');
       }
     },
   });
