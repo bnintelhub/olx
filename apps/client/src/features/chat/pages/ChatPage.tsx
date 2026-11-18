@@ -20,6 +20,15 @@ function sortConversationsDesc(list: ConversationItem[]): ConversationItem[] {
   });
 }
 
+function sortMessagesAsc(list: MessageItem[]): MessageItem[] {
+  return [...list].sort((a, b) => {
+    const timeA = new Date(a.createdAt).getTime();
+    const timeB = new Date(b.createdAt).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    return (a.id || '').localeCompare(b.id || '');
+  });
+}
+
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -109,7 +118,7 @@ export const ChatPage: React.FC = () => {
               attachmentUrl: (existing as any).localPreviewUrl || (existing.attachmentUrl?.startsWith('blob:') ? existing.attachmentUrl : msg.attachmentUrl),
               localPreviewUrl: (existing as any).localPreviewUrl,
             };
-            return next;
+            return sortMessagesAsc(next);
           }
           // Prevent duplicate message if already in state
           const isDuplicate = prev.some(
@@ -121,7 +130,7 @@ export const ChatPage: React.FC = () => {
                 Math.abs(new Date(m.createdAt).getTime() - new Date(msg.createdAt).getTime()) < 3500)
           );
           if (isDuplicate) return prev;
-          return [...prev, msg];
+          return sortMessagesAsc([...prev, msg]);
         });
         if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
         setIsOtherTyping(false);
@@ -184,8 +193,17 @@ export const ChatPage: React.FC = () => {
     };
 
     const handleMessageRead = (data: { conversationId: string; readerId: string }) => {
+      // 1. If other party read our sent messages in this active thread, mark them READ
       if (data.conversationId === activeConvIdRef.current && data.readerId !== user?.id) {
         setMessages((prev) => prev.map((m) => (m.senderId === user?.id ? { ...m, status: 'READ' } : m)));
+      }
+
+      // 2. Multi-tab/device sync: If I read this conversation (from Tab A or mobile), clear unread count in Tab B
+      if (data.readerId === user?.id) {
+        setConversations((prev) =>
+          prev.map((c) => (c.id === data.conversationId ? { ...c, unreadCount: 0 } : c))
+        );
+        void useChatUnreadStore.getState().fetchUnreadCount();
       }
     };
 
@@ -203,9 +221,10 @@ export const ChatPage: React.FC = () => {
       ) {
         setIsOtherTyping(true);
         if (otherTypingTimerRef.current) clearTimeout(otherTypingTimerRef.current);
+        // Auto-expire typing indicator after 3.5s in case typing.stop was dropped over network
         otherTypingTimerRef.current = setTimeout(() => {
           setIsOtherTyping(false);
-        }, 2500);
+        }, 3500);
       }
     };
 
@@ -430,7 +449,7 @@ export const ChatPage: React.FC = () => {
     try {
       const res = await apiClient.get(`/chat/conversations/${convId}/messages?limit=30`);
       if (res.data?.success && res.data.data?.messages) {
-        setMessages(res.data.data.messages);
+        setMessages(sortMessagesAsc(res.data.data.messages));
         setNextCursor(res.data.data.nextCursor || null);
         if (res.data.data.conversation) {
           const fetchedConv = res.data.data.conversation;
@@ -590,7 +609,11 @@ export const ChatPage: React.FC = () => {
     try {
       const res = await apiClient.get(`/chat/conversations/${activeConvId}/messages?cursor=${nextCursor}&limit=30`);
       if (res.data?.success && res.data.data?.messages) {
-        setMessages((prev) => [...res.data.data.messages, ...prev]);
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => m.id));
+          const newOlder = res.data.data.messages.filter((m: MessageItem) => !existingIds.has(m.id));
+          return sortMessagesAsc([...newOlder, ...prev]);
+        });
         setNextCursor(res.data.data.nextCursor || null);
       }
     } catch (err) { console.error('Failed loading older messages', err); } finally { setLoadingOlder(false); }

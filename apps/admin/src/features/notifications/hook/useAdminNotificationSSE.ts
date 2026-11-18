@@ -46,6 +46,19 @@ export function useAdminNotificationSSE() {
       }
     });
 
+    stream.addEventListener('unread_sync', (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.unreadCount !== undefined) {
+          queryClient.setQueryData(UNREAD_COUNT_QUERY_KEY, payload.unreadCount);
+          void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
+          void queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
+        }
+      } catch {
+        // Ignore parse error
+      }
+    });
+
     stream.addEventListener('notification', (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);

@@ -63,7 +63,9 @@ export class NotificationsController {
 
   static async markRead(request: FastifyRequest, reply: FastifyReply) {
     await NotificationsService.markAllAsRead(request.user!.id);
-    return reply.status(200).send({ success: true, message: 'All notifications marked as read' });
+    // Multi-tab sync: notify all active SSE streams of this user so every tab updates instantly
+    void sseConnectionManager.sendToUser(request.user!.id, 'unread_sync', { unreadCount: 0 });
+    return reply.status(200).send({ success: true, message: 'All notifications marked as read', unreadCount: 0 });
   }
 
   static async markOneRead(request: FastifyRequest, reply: FastifyReply) {
@@ -73,6 +75,8 @@ export class NotificationsController {
     }
     await NotificationsService.markOneAsRead(request.user!.id, id);
     const unreadCount = await NotificationsService.getUnreadCount(request.user!.id);
+    // Multi-tab sync: notify all active SSE streams of this user so every tab updates instantly
+    void sseConnectionManager.sendToUser(request.user!.id, 'unread_sync', { unreadCount, readId: id });
     return reply.status(200).send({ success: true, message: 'Notification marked as read', unreadCount });
   }
 

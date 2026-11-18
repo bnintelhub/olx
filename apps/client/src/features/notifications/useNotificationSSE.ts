@@ -87,6 +87,22 @@ export function useNotificationSSE() {
       }
     });
 
+    // Multi-tab unread count sync event (e.g. when Tab A marks one or all as read)
+    es.addEventListener('unread_sync', (event: MessageEvent) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload?.unreadCount !== undefined) {
+          setUnreadCount(payload.unreadCount);
+          queryClient.setQueryData(['notifications-unread-count', user.id], { count: payload.unreadCount });
+          queryClient.setQueryData(['notifications-unread-count'], { count: payload.unreadCount });
+          void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+          void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+        }
+      } catch {
+        // Ignore JSON parse errors
+      }
+    });
+
     // Real-time notification event
     es.addEventListener('notification', (event: MessageEvent) => {
       try {
@@ -105,17 +121,14 @@ export function useNotificationSSE() {
           if (firstKey) seenIdsRef.current.delete(firstKey);
         }
 
-        // Play audio chime
-        playNewMessageSound();
-
-        // Update unread count badge
+        // Update unread count badge directly from authoritative payload
         if (data.unreadCount !== undefined) {
           setUnreadCount(data.unreadCount);
         } else {
           setUnreadCount((prev) => prev + 1);
         }
 
-        // Invalidate queries so lists and badges update live
+        // Invalidate queries so lists and badges update live across tabs
         void queryClient.invalidateQueries({ queryKey: ['notifications'] });
         void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
 
@@ -126,7 +139,30 @@ export function useNotificationSSE() {
           void queryClient.invalidateQueries({ queryKey: ['support-ticket', data.data.ticketId] });
         }
 
-        // Display in-app Sonner toast with deep-linking
+        // Multi-tab sound & toast coordination:
+        // Only one tab (the active one, or first to claim within 2s) renders the toast and plays audio
+        const tabCoordinationKey = `blx_toast_handled_${data.id}`;
+        let alreadyHandledBySiblingTab = false;
+        try {
+          alreadyHandledBySiblingTab = Boolean(localStorage.getItem(tabCoordinationKey));
+          if (!alreadyHandledBySiblingTab) {
+            localStorage.setItem(tabCoordinationKey, `${Date.now()}`);
+            setTimeout(() => {
+              try { localStorage.removeItem(tabCoordinationKey); } catch {}
+            }, 8000);
+          }
+        } catch {
+          // Fallback if localStorage is unavailable
+        }
+
+        if (alreadyHandledBySiblingTab) {
+          return;
+        }
+
+        // Play audio chime
+        playNewMessageSound();
+
+        // Display in-app Sonner toast with deep-linking & deterministic dedup ID
         const ticketId = data.data?.ticketId;
         const targetUrl = ticketId ? `/support?ticketId=${ticketId}` : (data.data?.clickUrl || null);
 
@@ -146,6 +182,7 @@ export function useNotificationSSE() {
         };
 
         toast(data.title, {
+          id: data.id, // Stable event ID prevents duplicate Sonner toasts across renders
           description: data.message,
           duration: 6000,
           action: targetUrl
@@ -190,6 +227,7 @@ export function useNotificationSSE() {
     } else {
       setIsConnected(false);
       setUnreadCount(0);
+      seenIdsRef.current.clear();
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;

@@ -400,13 +400,23 @@ export function setupChatSocket(io: SocketIOServer) {
       if (!conversationId) return;
       try {
         await ChatService.markAsRead(user.id, conversationId);
+        const readAt = new Date().toISOString();
+
+        // Broadcast to conversation room (active thread)
         io.to(`conv_${conversationId}`).emit('message.read', {
           conversationId,
           readerId: user.id,
-          readAt: new Date().toISOString(),
+          readAt,
         });
 
-        // Ensure other participant's personal room updates in real time
+        // Multi-tab sync: Notify reader's other tabs/devices so their inbox badge clears instantly
+        chatIO?.to(`user_${user.id}`).emit('message.read', {
+          conversationId,
+          readerId: user.id,
+          readAt,
+        });
+
+        // Ensure other participant's personal room updates in real time (status transitions to READ)
         const conv = await prisma.conversation.findUnique({
           where: { id: conversationId },
           select: { buyerId: true, sellerId: true },
@@ -416,7 +426,7 @@ export function setupChatSocket(io: SocketIOServer) {
           chatIO?.to(`user_${otherUserId}`).emit('message.read', {
             conversationId,
             readerId: user.id,
-            readAt: new Date().toISOString(),
+            readAt,
           });
         }
       } catch {
