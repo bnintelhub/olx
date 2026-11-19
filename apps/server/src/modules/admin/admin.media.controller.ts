@@ -83,4 +83,32 @@ export class AdminMediaController {
       data: result,
     });
   }
+
+  // Returns physical disk audit (total files on disk, disk usage, orphan/junk files, ghosts)
+  static async getDiskAudit(_request: FastifyRequest, reply: FastifyReply) {
+    const audit = await AdminMediaService.getDiskAudit();
+    return reply.status(200).send({
+      success: true,
+      data: audit,
+    });
+  }
+
+  // Synchronizes and indexes banner images from disk into media catalog
+  static async syncBannerMedia(_request: FastifyRequest, reply: FastifyReply) {
+    const result = await AdminMediaService.syncBannerMediaAssets();
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
+
+  // Purges orphaned and junk files directly from persistent disk
+  static async cleanupDiskOrphans(request: FastifyRequest, reply: FastifyReply) {
+    const actorUserId = request.user?.id;
+    const result = await AdminMediaService.cleanupDiskOrphans(actorUserId);
+    return reply.status(200).send({
+      success: true,
+      data: result,
+    });
+  }
 }

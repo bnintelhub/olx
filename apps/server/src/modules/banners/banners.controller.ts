@@ -51,7 +51,7 @@ export class BannersController {
       });
     }
 
-    const result = await BannersService.uploadBannerMedia(file);
+    const result = await BannersService.uploadBannerMedia(file, request.user?.id);
     return reply.status(201).send({ success: true, ...result });
   }
 

@@ -54,12 +54,15 @@ import {
   useMediaOverviewQuery,
   useMediaListQuery,
   useMediaDetailQuery,
+  useDiskAuditQuery,
 } from './hook/useMediaQuery';
 import {
   useDeleteMediaMutation,
   useUpdateMediaMetadataMutation,
   useReplaceMediaFileMutation,
   useCleanupOrphansMutation,
+  useSyncBannerMediaMutation,
+  useCleanupDiskOrphansMutation,
 } from './hook/useMediaMutation';
 import { MediaItem, MediaEntityScope } from './service/media.service';
 import { formatMediaUrl } from '../../lib/utils';
@@ -95,6 +98,7 @@ export function MediaPage() {
   const [deleteConfirmMedia, setDeleteConfirmMedia] = useState<MediaItem | null>(null);
   const [showCleanupDialog, setShowCleanupDialog] = useState(false);
   const [cleanupHours, setCleanupHours] = useState<number>(0);
+  const [cleanupTab, setCleanupTab] = useState<'disk' | 'database'>('disk');
 
   // Edit form state
   const [editOriginalName, setEditOriginalName] = useState('');
@@ -103,6 +107,7 @@ export function MediaPage() {
 
   // Queries
   const { data: overview, isLoading: isOverviewLoading, refetch: refetchOverview } = useMediaOverviewQuery();
+  const { data: diskAudit, isLoading: isDiskAuditLoading, refetch: refetchDiskAudit } = useDiskAuditQuery();
   const { data: listData, isLoading: isListLoading, isFetching: isListFetching, refetch: refetchList } = useMediaListQuery({
     page,
     limit,
@@ -118,10 +123,13 @@ export function MediaPage() {
   const updateMutation = useUpdateMediaMetadataMutation();
   const replaceMutation = useReplaceMediaFileMutation();
   const cleanupMutation = useCleanupOrphansMutation();
+  const syncBannersMutation = useSyncBannerMediaMutation();
+  const cleanupDiskOrphansMutation = useCleanupDiskOrphansMutation();
 
   const handleRefresh = () => {
     refetchOverview();
     refetchList();
+    refetchDiskAudit();
   };
 
   const handleOpenEdit = (media: MediaItem) => {
@@ -170,6 +178,13 @@ export function MediaPage() {
     setShowCleanupDialog(false);
   };
 
+  const handleRunDiskCleanup = async () => {
+    await cleanupDiskOrphansMutation.mutateAsync();
+    refetchDiskAudit();
+    refetchOverview();
+    refetchList();
+  };
+
   return (
     <div className="space-y-6">
       {/* Title & Top Bar */}
@@ -190,9 +205,21 @@ export function MediaPage() {
           <Button
             size="sm"
             variant="outline"
+            onClick={() => syncBannersMutation.mutate()}
+            disabled={syncBannersMutation.isPending}
+            className="text-xs h-8 gap-1.5 font-medium border-violet-500/30 text-violet-600 hover:bg-violet-500/10 cursor-pointer"
+            title="Scan persistent disk to index unindexed banner images into catalog"
+          >
+            <Sparkles className={`h-3.5 w-3.5 ${syncBannersMutation.isPending ? 'animate-spin' : ''}`} />
+            <span>{syncBannersMutation.isPending ? 'Syncing...' : 'Sync Disk Banners'}</span>
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
             onClick={handleRefresh}
             disabled={isListFetching}
-            className="text-xs h-8 gap-1.5"
+            className="text-xs h-8 gap-1.5 cursor-pointer"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isListFetching ? 'animate-spin' : ''}`} />
             <span>Refresh</span>
@@ -201,21 +228,24 @@ export function MediaPage() {
           <Button
             size="sm"
             variant="destructive"
-            onClick={() => setShowCleanupDialog(true)}
-            className="text-xs h-8 gap-1.5 font-semibold"
+            onClick={() => {
+              refetchDiskAudit();
+              setShowCleanupDialog(true);
+            }}
+            className="text-xs h-8 gap-1.5 font-semibold cursor-pointer"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            <span>Clean Orphaned Files</span>
+            <span>Disk Junk & Cleanup</span>
           </Button>
         </div>
       </div>
 
       {/* KPI Stats Summary Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Card 1: Total Media Files */}
+        {/* Card 1: Total Catalog Assets */}
         <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
-            <div className="text-xs font-medium text-muted-foreground">Total Media Files</div>
+            <div className="text-xs font-medium text-muted-foreground">Catalog Assets (DB)</div>
             <div className="text-2xl font-bold text-foreground mt-1">
               {isOverviewLoading ? '...' : overview?.totalFilesFormatted || '0'}
             </div>
@@ -228,10 +258,10 @@ export function MediaPage() {
           </div>
         </Card>
 
-        {/* Card 2: Storage Consumed */}
+        {/* Card 2: Catalog Storage Consumed */}
         <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
-            <div className="text-xs font-medium text-muted-foreground">Storage Consumed</div>
+            <div className="text-xs font-medium text-muted-foreground">Catalog Storage</div>
             <div className="text-2xl font-bold text-foreground mt-1">
               {isOverviewLoading ? '...' : overview?.storageConsumed.formatted || '0 Bytes'}
             </div>
@@ -244,15 +274,15 @@ export function MediaPage() {
           </div>
         </Card>
 
-        {/* Card 3: Storage Engine & Volume */}
+        {/* Card 3: Physical Disk Footprint */}
         <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
-            <div className="text-xs font-medium text-muted-foreground">Storage Engine</div>
+            <div className="text-xs font-medium text-muted-foreground">Physical Disk Footprint</div>
             <div className="text-2xl font-bold text-emerald-600 mt-1">
-              Local Disk
+              {isDiskAuditLoading ? 'Scanning...' : diskAudit ? `${diskAudit.totalFilesOnDisk} files` : 'Local Disk'}
             </div>
             <div className="text-[11px] text-emerald-600 font-semibold mt-0.5">
-              Volume: media_data (/data)
+              {diskAudit ? `${diskAudit.totalDiskSizeFormatted} on disk` : 'Volume: media_data (/data)'}
             </div>
           </div>
           <div className="h-10 w-10 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center">
@@ -260,15 +290,21 @@ export function MediaPage() {
           </div>
         </Card>
 
-        {/* Card 4: Orphaned Media */}
+        {/* Card 4: Disk Junk & Orphans */}
         <Card className="p-4 flex items-center justify-between shadow-xs">
           <div>
-            <div className="text-xs font-medium text-muted-foreground">Unattached Orphans</div>
+            <div className="text-xs font-medium text-muted-foreground">Disk Junk & Orphans</div>
             <div className="text-2xl font-bold text-amber-600 mt-1">
-              {isOverviewLoading ? '...' : overview?.orphanedMedia.count || 0}
+              {isDiskAuditLoading
+                ? '...'
+                : diskAudit
+                  ? `${diskAudit.orphanFilesCount} junk files`
+                  : overview?.orphanedMedia.count || 0}
             </div>
             <div className="text-[11px] text-amber-600 font-semibold mt-0.5">
-              {overview?.orphanedMedia.cleanupRecommended ? 'Cleanup recommended' : 'Storage healthy'}
+              {diskAudit && diskAudit.orphanDiskSizeBytes > 0
+                ? `${diskAudit.orphanDiskSizeFormatted} reclaimable`
+                : 'Disk clean & healthy'}
             </div>
           </div>
           <div className="h-10 w-10 rounded-lg bg-amber-500/10 text-amber-600 flex items-center justify-center">
@@ -1323,103 +1359,194 @@ export function MediaPage() {
         </DialogFooter>
       </Dialog>
 
-      {/* 4. Cleanup Orphans Confirmation Dialog */}
+      {/* 4. Cleanup & Storage Reclamation Dialog */}
       <Dialog open={showCleanupDialog} onOpenChange={setShowCleanupDialog}>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-amber-600">
-            <AlertTriangle className="h-4 w-4" />
-            <span>Clean Up Orphaned Media</span>
+          <DialogTitle className="flex items-center gap-2 text-foreground font-bold">
+            <Trash2 className="h-4 w-4 text-rose-500" />
+            <span>Storage Control & Junk Cleanup</span>
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Purge unattached and abandoned media files from database and local disk volume.
+            Inspect physical disk orphans and unattached database records to maintain a clean persistent volume.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="py-2 text-xs space-y-3">
-          <p className="text-muted-foreground">
-            This routine identifies draft uploads that were never attached to an active ad listing or category, permanently failed worker jobs, and evicts 0-byte or corrupt fake image files from the database and storage.
-          </p>
-          <div className="p-3 border rounded-lg bg-amber-500/10 text-amber-900 dark:text-amber-200 space-y-1">
-            <div className="flex justify-between">
-              <span>Total Actionable Orphans & Corrupt Files:</span>
-              <span className="font-bold">{overview?.orphanedMedia.count || 0}</span>
-            </div>
-            {Boolean(overview?.orphanedMedia?.zeroByteCount) && (
-              <div className="text-[11px] text-rose-500 flex justify-between">
-                <span>• 0-Byte / Corrupt fake images:</span>
-                <span className="font-semibold">{overview?.orphanedMedia?.zeroByteCount}</span>
-              </div>
-            )}
-            {Boolean(overview?.orphanedMedia?.failedCount) && (
-              <div className="text-[11px] text-amber-500 flex justify-between">
-                <span>• Failed worker jobs:</span>
-                <span className="font-semibold">{overview?.orphanedMedia?.failedCount}</span>
-              </div>
-            )}
-            {Boolean(overview?.orphanedMedia?.unattachedCount) && (
-              <div className="text-[11px] text-muted-foreground flex justify-between">
-                <span>• Unattached draft files:</span>
-                <span className="font-semibold">{overview?.orphanedMedia?.unattachedCount}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-1.5 pt-1">
-            <label className="text-xs font-semibold text-foreground">Reclamation Scope</label>
-            <div className="grid grid-cols-3 gap-2">
-              <button
-                type="button"
-                onClick={() => setCleanupHours(0)}
-                className={`p-2 rounded border text-left transition ${
-                  cleanupHours === 0
-                    ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                <div className="text-[11px] font-bold">All Unattached</div>
-                <div className="text-[10px] opacity-80">Immediate (0h)</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCleanupHours(1)}
-                className={`p-2 rounded border text-left transition ${
-                  cleanupHours === 1
-                    ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                <div className="text-[11px] font-bold">&gt; 1 Hour Old</div>
-                <div className="text-[10px] opacity-80">Safe draft grace</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCleanupHours(24)}
-                className={`p-2 rounded border text-left transition ${
-                  cleanupHours === 24
-                    ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
-                    : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
-                }`}
-              >
-                <div className="text-[11px] font-bold">&gt; 24 Hours Old</div>
-                <div className="text-[10px] opacity-80">Legacy uploads</div>
-              </button>
-            </div>
-          </div>
+        {/* Tab Switcher */}
+        <div className="flex border-b pt-1 gap-2">
+          <button
+            type="button"
+            onClick={() => setCleanupTab('disk')}
+            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+              cleanupTab === 'disk'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <HardDrive className="h-3.5 w-3.5" />
+            <span>Physical Disk Junk ({diskAudit?.orphanFilesCount || 0})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setCleanupTab('database')}
+            className={`pb-2 px-3 text-xs font-semibold border-b-2 transition cursor-pointer flex items-center gap-1.5 ${
+              cleanupTab === 'database'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Layers className="h-3.5 w-3.5" />
+            <span>Database Orphans ({overview?.orphanedMedia.count || 0})</span>
+          </button>
         </div>
 
-        <DialogFooter className="pt-2">
-          <Button variant="outline" size="sm" onClick={() => setShowCleanupDialog(false)}>
-            Cancel
-          </Button>
-          <Button
-            size="sm"
-            onClick={handleRunCleanup}
-            disabled={cleanupMutation.isPending}
-            className="bg-amber-600 hover:bg-amber-700 text-white font-semibold"
-          >
-            {cleanupMutation.isPending ? 'Reclaiming Storage...' : 'Start Reclamation'}
-          </Button>
-        </DialogFooter>
+        {cleanupTab === 'disk' ? (
+          <div className="py-2 text-xs space-y-3">
+            <div className="p-3 border rounded-lg bg-muted/40 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-foreground">Unreferenced Disk Files:</span>
+                <Badge variant={diskAudit && diskAudit.orphanFilesCount > 0 ? 'destructive' : 'secondary'} className="text-[11px]">
+                  {diskAudit ? `${diskAudit.orphanFilesCount} files · ${diskAudit.orphanDiskSizeFormatted}` : 'Scanning...'}
+                </Badge>
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                These files exist physically on the storage disk but are not bound to any active banner, listing, category, or user in the database.
+              </p>
+            </div>
+
+            {/* Orphan Files List */}
+            {diskAudit && diskAudit.orphansList && diskAudit.orphansList.length > 0 ? (
+              <div className="border rounded-md overflow-hidden">
+                <div className="max-h-48 overflow-y-auto divide-y divide-border text-[11px]">
+                  {diskAudit.orphansList.map((file, i) => (
+                    <div key={i} className="p-2 flex items-center justify-between hover:bg-muted/30">
+                      <div className="min-w-0 pr-2">
+                        <div className="font-mono truncate text-foreground font-medium">{file.name}</div>
+                        <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                          <span className="bg-muted px-1.5 py-0.2 rounded uppercase">{file.folder}</span>
+                          <span>{file.reason}</span>
+                        </div>
+                      </div>
+                      <div className="text-right whitespace-nowrap">
+                        <span className="font-semibold text-foreground">{file.sizeFormatted}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-xs text-muted-foreground border border-dashed rounded-lg bg-emerald-500/5 text-emerald-700 dark:text-emerald-300">
+                <ShieldCheck className="h-6 w-6 mx-auto mb-1 opacity-70" />
+                <span>Physical disk is 100% clean. Zero unreferenced junk files detected!</span>
+              </div>
+            )}
+
+            <DialogFooter className="pt-2">
+              <Button variant="outline" size="sm" onClick={() => setShowCleanupDialog(false)}>
+                Close
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={handleRunDiskCleanup}
+                disabled={cleanupDiskOrphansMutation.isPending || !diskAudit || diskAudit.orphanFilesCount === 0}
+                className="font-semibold gap-1.5"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>
+                  {cleanupDiskOrphansMutation.isPending
+                    ? 'Purging Junk...'
+                    : `Purge ${diskAudit?.orphanFilesCount || 0} Junk Files (${diskAudit?.orphanDiskSizeFormatted || '0 Bytes'})`}
+                </span>
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <div className="py-2 text-xs space-y-3">
+            <p className="text-muted-foreground">
+              This routine purges database assets that were never attached to an active ad listing or category, permanently failed worker jobs, and evicts 0-byte or corrupt fake image files.
+            </p>
+            <div className="p-3 border rounded-lg bg-amber-500/10 text-amber-900 dark:text-amber-200 space-y-1">
+              <div className="flex justify-between">
+                <span>Total Actionable Database Orphans:</span>
+                <span className="font-bold">{overview?.orphanedMedia.count || 0}</span>
+              </div>
+              {Boolean(overview?.orphanedMedia?.zeroByteCount) && (
+                <div className="text-[11px] text-rose-500 flex justify-between">
+                  <span>• 0-Byte / Corrupt fake images:</span>
+                  <span className="font-semibold">{overview?.orphanedMedia?.zeroByteCount}</span>
+                </div>
+              )}
+              {Boolean(overview?.orphanedMedia?.failedCount) && (
+                <div className="text-[11px] text-amber-500 flex justify-between">
+                  <span>• Failed worker jobs:</span>
+                  <span className="font-semibold">{overview?.orphanedMedia?.failedCount}</span>
+                </div>
+              )}
+              {Boolean(overview?.orphanedMedia?.unattachedCount) && (
+                <div className="text-[11px] text-muted-foreground flex justify-between">
+                  <span>• Unattached draft files:</span>
+                  <span className="font-semibold">{overview?.orphanedMedia?.unattachedCount}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-xs font-semibold text-foreground">Reclamation Scope</label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCleanupHours(0)}
+                  className={`p-2 rounded border text-left transition ${
+                    cleanupHours === 0
+                      ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="text-[11px] font-bold">All Unattached</div>
+                  <div className="text-[10px] opacity-80">Immediate (0h)</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCleanupHours(1)}
+                  className={`p-2 rounded border text-left transition ${
+                    cleanupHours === 1
+                      ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="text-[11px] font-bold">&gt; 1 Hour Old</div>
+                  <div className="text-[10px] opacity-80">Safe draft grace</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCleanupHours(24)}
+                  className={`p-2 rounded border text-left transition ${
+                    cleanupHours === 24
+                      ? 'border-amber-600 bg-amber-500/10 text-amber-900 dark:text-amber-100 font-semibold'
+                      : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
+                  }`}
+                >
+                  <div className="text-[11px] font-bold">&gt; 24 Hours Old</div>
+                  <div className="text-[10px] opacity-80">Legacy uploads</div>
+                </button>
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button variant="outline" size="sm" onClick={() => setShowCleanupDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleRunCleanup}
+                disabled={cleanupMutation.isPending}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-semibold cursor-pointer"
+              >
+                {cleanupMutation.isPending ? 'Reclaiming Storage...' : 'Start Reclamation'}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
       </Dialog>
     </div>
   );

@@ -149,4 +149,19 @@ export async function adminRoutes(fastify: FastifyInstance) {
     { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
     AdminMediaController.cleanupOrphanedMedia
   );
+  fastify.get(
+    '/media/disk-audit',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.getDiskAudit
+  );
+  fastify.post(
+    '/media/sync-banners',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.syncBannerMedia
+  );
+  fastify.post(
+    '/media/cleanup-disk-orphans',
+    { preHandler: [fastify.authenticate, authorizeRoles(UserRole.SUPER_ADMIN, UserRole.ADMIN)] },
+    AdminMediaController.cleanupDiskOrphans
+  );
 }

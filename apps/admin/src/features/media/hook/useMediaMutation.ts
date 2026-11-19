@@ -75,3 +75,37 @@ export function useCleanupOrphansMutation() {
   });
 }
 
+export function useSyncBannerMediaMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => mediaService.syncBannerMedia(),
+    onSuccess: (data) => {
+      toast.success(data?.message || 'Banner images synchronized from disk.');
+      queryClient.invalidateQueries({ queryKey: MEDIA_QUERY_KEYS.all });
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || err.message || 'Failed to sync banner images';
+      toast.error(msg);
+    },
+  });
+}
+
+export function useCleanupDiskOrphansMutation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => mediaService.cleanupDiskOrphans(),
+    onSuccess: (data) => {
+      toast.success(
+        `Disk cleanup completed: ${data?.deletedCount || 0} junk files deleted, ${data?.freedFormatted || '0 Bytes'} reclaimed.`
+      );
+      queryClient.invalidateQueries({ queryKey: MEDIA_QUERY_KEYS.all });
+    },
+    onError: (err: any) => {
+      const msg = err.response?.data?.message || err.message || 'Disk cleanup failed';
+      toast.error(msg);
+    },
+  });
+}
+

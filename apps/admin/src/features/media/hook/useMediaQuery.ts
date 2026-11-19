@@ -10,6 +10,7 @@ import {
 export const MEDIA_QUERY_KEYS = {
   all: ['admin-media'] as const,
   overview: ['admin-media', 'overview'] as const,
+  diskAudit: ['admin-media', 'disk-audit'] as const,
   list: (params: GetMediaParams) => [
     'admin-media',
     'list',
@@ -56,6 +57,15 @@ export function useMediaDetailQuery(id: string | null) {
       const item = query.state.data;
       return item?.status === 'PROCESSING' ? 1500 : false;
     },
+  });
+}
+
+export function useDiskAuditQuery() {
+  return useQuery({
+    queryKey: MEDIA_QUERY_KEYS.diskAudit,
+    queryFn: () => mediaService.getDiskAudit(),
+    staleTime: 10000,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -64,6 +64,15 @@ export interface MediaOverviewResponse {
     cleanupRecommended: boolean;
     cleanupEndpoint: string;
   };
+  physicalDisk?: {
+    totalFilesOnDisk: number;
+    totalDiskSizeBytes: number;
+    totalDiskSizeFormatted: string;
+    orphanFilesCount: number;
+    orphanDiskSizeBytes: number;
+    orphanDiskSizeFormatted: string;
+    ghostRecordsCount: number;
+  } | null;
   recentUploads: Array<{
     id: string;
     originalName: string;
@@ -151,6 +160,44 @@ export interface UpdateMediaMetadataPayload {
   status?: MediaStatus;
 }
 
+export interface DiskAuditFile {
+  name: string;
+  path: string;
+  folder: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  modifiedAt: string;
+  reason: string;
+}
+
+export interface DiskAuditResult {
+  diskRoot: string;
+  totalFilesOnDisk: number;
+  totalDiskSizeBytes: number;
+  totalDiskSizeFormatted: string;
+  databaseAssetsCount: number;
+  activeFilesCount: number;
+  activeDiskSizeBytes: number;
+  activeDiskSizeFormatted: string;
+  orphanFilesCount: number;
+  orphanDiskSizeBytes: number;
+  orphanDiskSizeFormatted: string;
+  ghostRecordsCount: number;
+  folderBreakdown: Array<{
+    folder: string;
+    count: number;
+    sizeBytes: number;
+    sizeFormatted: string;
+  }>;
+  orphansList: DiskAuditFile[];
+  ghostsList: Array<{
+    id: string;
+    storageKey: string;
+    entityType: string;
+    originalName: string;
+  }>;
+}
+
 export const mediaService = {
   // Retrieves high-level media storage KPIs, WebP compression metrics, and S3 status
   async getOverview(): Promise<MediaOverviewResponse> {
@@ -220,6 +267,24 @@ export const mediaService = {
   async cleanupOrphans(hours = 0): Promise<{ success: boolean; deletedCount: number; healedCount?: number; freedBytes: number; freedFormatted: string; message: string }> {
     const res = await apiClient.post(`/admin/media/cleanup-orphans?hours=${hours}`);
     return res.data;
+  },
+
+  // Audits physical storage on disk and cross-references against database to identify orphans and junk
+  async getDiskAudit(): Promise<DiskAuditResult> {
+    const res = await apiClient.get('/admin/media/disk-audit');
+    return res.data?.data;
+  },
+
+  // Synchronizes banner images from disk into catalog
+  async syncBannerMedia(): Promise<{ success: boolean; syncedCount: number; message: string }> {
+    const res = await apiClient.post('/admin/media/sync-banners');
+    return res.data?.data;
+  },
+
+  // Purges unreferenced junk and orphan files directly from physical disk
+  async cleanupDiskOrphans(): Promise<{ success: boolean; deletedCount: number; freedBytes: number; freedFormatted: string; deletedFiles: string[]; message: string }> {
+    const res = await apiClient.post('/admin/media/cleanup-disk-orphans');
+    return res.data?.data;
   },
 };
 

@@ -11,9 +11,60 @@ import {
   toPublicMediaVariants,
   toPublicMediaUrl,
   normalizeMediaVariants,
+  cleanStorageKey,
+  isExternalUrl,
 } from '../../shared/utils/media-url.util';
 import { writeAuditLog } from '../../shared/utils/audit.util';
 import { AdminMediaQueryInput, UpdateMediaMetadataInput } from './admin.media.schema';
+
+function getMimeTypeFromExt(ext: string): string {
+  const map: Record<string, string> = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    webp: 'image/webp',
+    avif: 'image/avif',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    mp4: 'video/mp4',
+    webm: 'video/webm',
+    mov: 'video/quicktime',
+  };
+  return map[ext.toLowerCase()] || 'application/octet-stream';
+}
+
+function getFilesRecursively(dir: string, baseDir: string = dir): Array<{ fullPath: string; relativePath: string; sizeBytes: number; modifiedAt: Date; folder: string }> {
+  const results: Array<{ fullPath: string; relativePath: string; sizeBytes: number; modifiedAt: Date; folder: string }> = [];
+  if (!fs.existsSync(dir)) return results;
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...getFilesRecursively(fullPath, baseDir));
+      } else if (entry.isFile()) {
+        try {
+          const stat = fs.statSync(fullPath);
+          const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+          const folder = relativePath.includes('/') ? relativePath.split('/')[0] : 'root';
+          results.push({
+            fullPath,
+            relativePath,
+            sizeBytes: stat.size,
+            modifiedAt: stat.mtime,
+            folder,
+          });
+        } catch {
+          // Ignore transient stat errors
+        }
+      }
+    }
+  } catch {
+    // Ignore directory readdir errors
+  }
+  return results;
+}
 
 export function formatBytes(bytes: number, decimals = 1): string {
   if (bytes === 0) return '0 Bytes';
@@ -78,6 +129,8 @@ export async function deletePhysicalMedia(media: {
 }
 
 export class AdminMediaService {
+  private static isSyncingBanners = false;
+
   // Aggregates platform storage usage, WebP tier statistics, and sync status for admin dashboard
   static async getOverview() {
     const [
@@ -178,6 +231,9 @@ export class AdminMediaService {
       };
     });
 
+    // Automatically synchronize banner assets from persistent disk
+    await this.syncBannerMediaAssets().catch(() => {});
+
     return {
       totalFiles,
       totalFilesFormatted: Number(totalFiles).toLocaleString(),
@@ -245,6 +301,12 @@ export class AdminMediaService {
   // Lists all media records with filtering, search, pagination, and uploader associations
   static async getAllMedia(query: AdminMediaQueryInput) {
     const { page, limit, status, scope, mimeType, search, userId, sortBy, sortOrder } = query;
+
+    // Automatically synchronize banner assets from persistent disk if querying banners or all
+    if (scope === 'BANNER' || scope === 'ALL' || !scope) {
+      await this.syncBannerMediaAssets().catch(() => {});
+    }
+
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -827,6 +889,340 @@ export class AdminMediaService {
       freedBytes,
       freedFormatted: formatBytes(freedBytes),
       message: `Cleaned up ${deletedCount} files (${zeroByteCount} 0-byte/corrupt, ${failedCount} worker failures, ${unattachedCount} unattached) and reclaimed ${formatBytes(freedBytes)} of storage`,
+    };
+  }
+
+  // Scans persistent disk and banner table to register unindexed banner media files into the catalog
+  static async syncBannerMediaAssets(): Promise<{ syncedCount: number; message: string }> {
+    if (this.isSyncingBanners) {
+      return { syncedCount: 0, message: 'Banner media synchronization already in progress' };
+    }
+
+    this.isSyncingBanners = true;
+    try {
+      const uploadDir = resolveUploadDir();
+      const bannersDir = path.join(uploadDir, 'banners');
+      let syncedCount = 0;
+
+      const adminUser = await prisma.user.findFirst({
+        where: { role: { in: ['SUPER_ADMIN', 'ADMIN'] } },
+        select: { id: true },
+      });
+      if (!adminUser) {
+        return { syncedCount: 0, message: 'No admin user found to attribute banner media assets' };
+      }
+
+      const banners = await prisma.banner.findMany({
+        select: {
+          id: true,
+          title: true,
+          desktopMediaUrl: true,
+          mobileMediaUrl: true,
+          imageMediaAssetId: true,
+        },
+      });
+
+      const bannerMap = new Map<string, (typeof banners)[0]>();
+      for (const b of banners) {
+        if (b.desktopMediaUrl) {
+          bannerMap.set(cleanStorageKey(b.desktopMediaUrl).toLowerCase(), b);
+          bannerMap.set(path.basename(cleanStorageKey(b.desktopMediaUrl)).toLowerCase(), b);
+        }
+        if (b.mobileMediaUrl) {
+          bannerMap.set(cleanStorageKey(b.mobileMediaUrl).toLowerCase(), b);
+          bannerMap.set(path.basename(cleanStorageKey(b.mobileMediaUrl)).toLowerCase(), b);
+        }
+      }
+
+      if (fs.existsSync(bannersDir)) {
+        const files = fs.readdirSync(bannersDir);
+        for (const fileName of files) {
+          const fullPath = path.join(bannersDir, fileName);
+          try {
+            const stat = fs.statSync(fullPath);
+            if (!stat.isFile() || stat.size === 0) continue;
+
+            const storageKey = `banners/${fileName}`;
+            const matchedBanner = bannerMap.get(storageKey.toLowerCase()) || bannerMap.get(fileName.toLowerCase());
+            const ext = path.extname(fileName).toLowerCase().replace(/^\./, '') || 'webp';
+            const mime = getMimeTypeFromExt(ext);
+
+            const asset = await prisma.mediaAsset
+              .upsert({
+                where: { storageKey },
+                create: {
+                  ownerId: adminUser.id,
+                  entityType: 'BANNER',
+                  entityId: matchedBanner?.id || null,
+                  storageKey,
+                  originalName: fileName,
+                  mimeType: mime,
+                  extension: ext,
+                  sizeBytes: BigInt(stat.size),
+                  status: 'READY',
+                  variants: { url: `/media/${storageKey}` },
+                },
+                update: {
+                  ...(matchedBanner?.id ? { entityId: matchedBanner.id } : {}),
+                },
+              })
+              .catch(() => null);
+
+            if (asset) {
+              syncedCount++;
+
+              if (matchedBanner && !matchedBanner.imageMediaAssetId) {
+                await prisma.banner
+                  .update({
+                    where: { id: matchedBanner.id },
+                    data: { imageMediaAssetId: asset.id },
+                  })
+                  .catch(() => {});
+              }
+            }
+          } catch {
+            // Ignore individual file error
+          }
+        }
+      }
+
+      return {
+        syncedCount,
+        message: `Indexed & synced ${syncedCount} banner media assets from disk into catalog.`,
+      };
+    } finally {
+      this.isSyncingBanners = false;
+    }
+  }
+
+  // Audits physical storage on disk and cross-references against database to identify orphans and junk
+  static async getDiskAudit() {
+    const uploadDir = resolveUploadDir();
+    const diskFiles = getFilesRecursively(uploadDir);
+
+    const totalFilesOnDisk = diskFiles.length;
+    const totalDiskSizeBytes = diskFiles.reduce((acc, f) => acc + f.sizeBytes, 0);
+
+    const [allAssets, allBanners, allCategories, allUserProfiles] = await Promise.all([
+      prisma.mediaAsset.findMany({
+        select: {
+          id: true,
+          storageKey: true,
+          variants: true,
+          entityType: true,
+          originalName: true,
+          sizeBytes: true,
+        },
+      }),
+      prisma.banner.findMany({
+        select: { id: true, desktopMediaUrl: true, mobileMediaUrl: true },
+      }),
+      prisma.category.findMany({
+        select: { id: true, iconUrl: true, imageMediaAssetId: true },
+      }),
+      prisma.profile.findMany({
+        where: { avatarUrl: { not: null } },
+        select: { id: true, avatarUrl: true },
+      }),
+    ]);
+
+    const knownKeys = new Set<string>();
+
+    for (const a of allAssets) {
+      if (a.storageKey) {
+        const clean = cleanStorageKey(a.storageKey).toLowerCase();
+        knownKeys.add(clean);
+        knownKeys.add(path.basename(clean));
+      }
+      if (a.variants && typeof a.variants === 'object') {
+        for (const v of Object.values(a.variants)) {
+          if (typeof v === 'string') {
+            const clean = cleanStorageKey(v).toLowerCase();
+            knownKeys.add(clean);
+            knownKeys.add(path.basename(clean));
+          }
+        }
+      }
+    }
+
+    for (const b of allBanners) {
+      if (b.desktopMediaUrl) {
+        const clean = cleanStorageKey(b.desktopMediaUrl).toLowerCase();
+        knownKeys.add(clean);
+        knownKeys.add(path.basename(clean));
+      }
+      if (b.mobileMediaUrl) {
+        const clean = cleanStorageKey(b.mobileMediaUrl).toLowerCase();
+        knownKeys.add(clean);
+        knownKeys.add(path.basename(clean));
+      }
+    }
+
+    for (const c of allCategories) {
+      if (c.iconUrl) {
+        const clean = cleanStorageKey(c.iconUrl).toLowerCase();
+        knownKeys.add(clean);
+        knownKeys.add(path.basename(clean));
+      }
+    }
+
+    for (const u of allUserProfiles) {
+      if (u.avatarUrl) {
+        const clean = cleanStorageKey(u.avatarUrl).toLowerCase();
+        knownKeys.add(clean);
+        knownKeys.add(path.basename(clean));
+      }
+    }
+
+    const activeFiles: any[] = [];
+    const orphansList: Array<{
+      name: string;
+      path: string;
+      folder: string;
+      sizeBytes: number;
+      sizeFormatted: string;
+      modifiedAt: Date;
+      reason: string;
+    }> = [];
+
+    for (const file of diskFiles) {
+      const cleanRel = file.relativePath.toLowerCase();
+      const baseName = path.basename(file.relativePath).toLowerCase();
+
+      const isKnown = knownKeys.has(cleanRel) || knownKeys.has(baseName);
+
+      if (isKnown) {
+        activeFiles.push(file);
+      } else {
+        let reason = 'Unreferenced file on persistent disk';
+        if (file.folder === 'temp') reason = 'Abandoned temporary upload file';
+        else if (file.folder === 'banners') reason = 'Unindexed or deleted banner file';
+        else if (file.folder === 'ads') reason = 'Orphaned ad listing image';
+        else if (file.folder === 'chats') reason = 'Orphaned chat attachment';
+        else if (file.folder === 'trash' || file.folder === 'failed') reason = 'Dead/failed worker artifact';
+
+        orphansList.push({
+          name: path.basename(file.relativePath),
+          path: file.relativePath,
+          folder: file.folder,
+          sizeBytes: file.sizeBytes,
+          sizeFormatted: formatBytes(file.sizeBytes),
+          modifiedAt: file.modifiedAt,
+          reason,
+        });
+      }
+    }
+
+    const ghostsList: Array<{
+      id: string;
+      storageKey: string;
+      entityType: string;
+      originalName: string;
+    }> = [];
+
+    for (const a of allAssets) {
+      if (!a.storageKey || isExternalUrl(a.storageKey)) continue;
+      const clean = cleanStorageKey(a.storageKey);
+      const localPath = path.isAbsolute(clean) ? clean : path.join(uploadDir, ...clean.split('/'));
+      if (!fs.existsSync(localPath)) {
+        ghostsList.push({
+          id: a.id,
+          storageKey: a.storageKey,
+          entityType: a.entityType,
+          originalName: a.originalName,
+        });
+      }
+    }
+
+    const folderMap = new Map<string, { count: number; bytes: number }>();
+    for (const f of diskFiles) {
+      const cur = folderMap.get(f.folder) || { count: 0, bytes: 0 };
+      cur.count++;
+      cur.bytes += f.sizeBytes;
+      folderMap.set(f.folder, cur);
+    }
+
+    const folderBreakdown = Array.from(folderMap.entries()).map(([folder, val]) => ({
+      folder,
+      count: val.count,
+      sizeBytes: val.bytes,
+      sizeFormatted: formatBytes(val.bytes),
+    }));
+
+    const orphanDiskSizeBytes = orphansList.reduce((acc, o) => acc + o.sizeBytes, 0);
+    const activeDiskSizeBytes = activeFiles.reduce((acc, a) => acc + a.sizeBytes, 0);
+
+    return {
+      diskRoot: uploadDir,
+      totalFilesOnDisk,
+      totalDiskSizeBytes,
+      totalDiskSizeFormatted: formatBytes(totalDiskSizeBytes),
+      databaseAssetsCount: allAssets.length,
+      activeFilesCount: activeFiles.length,
+      activeDiskSizeBytes,
+      activeDiskSizeFormatted: formatBytes(activeDiskSizeBytes),
+      orphanFilesCount: orphansList.length,
+      orphanDiskSizeBytes,
+      orphanDiskSizeFormatted: formatBytes(orphanDiskSizeBytes),
+      ghostRecordsCount: ghostsList.length,
+      folderBreakdown,
+      orphansList,
+      ghostsList,
+    };
+  }
+
+  // Purges unreferenced junk and orphan files directly from physical disk
+  static async cleanupDiskOrphans(actorUserId?: string) {
+    const audit = await this.getDiskAudit();
+    const uploadDir = resolveUploadDir();
+    let freedBytes = 0;
+    let deletedCount = 0;
+    const deletedFiles: string[] = [];
+
+    // Safety rule: protect files modified in last 15 minutes (in-flight uploads)
+    const fifteenMinsAgo = Date.now() - 15 * 60 * 1000;
+
+    for (const orphan of audit.orphansList) {
+      if (new Date(orphan.modifiedAt).getTime() > fifteenMinsAgo) {
+        continue;
+      }
+
+      const fullPath = path.join(uploadDir, ...orphan.path.split('/'));
+      try {
+        if (fs.existsSync(fullPath)) {
+          await fs.promises.unlink(fullPath);
+          freedBytes += orphan.sizeBytes;
+          deletedCount++;
+          deletedFiles.push(orphan.path);
+        }
+      } catch (err) {
+        console.warn(`[DiskCleanup] Failed to unlink ${orphan.path}:`, err);
+      }
+    }
+
+    if (actorUserId && deletedCount > 0) {
+      await writeAuditLog({
+        userId: actorUserId,
+        action: 'ADMIN_ACTION_CLEANUP_DISK_ORPHANS',
+        entityType: 'MEDIA',
+        entityId: 'DISK_CLEANUP',
+        status: 'SUCCESS',
+        newData: {
+          deletedCount,
+          freedBytes,
+          freedFormatted: formatBytes(freedBytes),
+          deletedFiles,
+        },
+      });
+    }
+
+    return {
+      success: true,
+      deletedCount,
+      freedBytes,
+      freedFormatted: formatBytes(freedBytes),
+      deletedFiles,
+      message: `Cleaned up ${deletedCount} orphan files from disk, reclaiming ${formatBytes(freedBytes)} of storage.`,
     };
   }
 }

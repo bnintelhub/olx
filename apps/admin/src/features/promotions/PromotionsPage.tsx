@@ -267,6 +267,7 @@ interface BannerData {
   mediaType: 'IMAGE' | 'VIDEO';
   desktopMediaUrl?: string | null;
   mobileMediaUrl?: string | null;
+  imageMediaAssetId?: string | null;
   locationText?: string | null;
   categoryText?: string | null;
   priority: number;
@@ -300,6 +301,7 @@ export function PromotionsPage() {
     mediaType: 'IMAGE' as 'IMAGE' | 'VIDEO',
     desktopMediaUrl: '',
     mobileMediaUrl: '',
+    imageMediaAssetId: null as string | null,
     locationText: '',
     categoryText: '',
     priority: 10,
@@ -336,6 +338,7 @@ export function PromotionsPage() {
       mediaType: 'IMAGE',
       desktopMediaUrl: '',
       mobileMediaUrl: '',
+      imageMediaAssetId: null,
       locationText: '',
       categoryText: '',
       priority: 10,
@@ -356,6 +359,7 @@ export function PromotionsPage() {
       mediaType: banner.mediaType || 'IMAGE',
       desktopMediaUrl: banner.desktopMediaUrl || '',
       mobileMediaUrl: banner.mobileMediaUrl || '',
+      imageMediaAssetId: banner.imageMediaAssetId || null,
       locationText: banner.locationText || '',
       categoryText: banner.categoryText || '',
       priority: banner.priority || 0,
@@ -394,11 +398,13 @@ export function PromotionsPage() {
       if (res.data?.success) {
         const uploadedUrl = res.data.url;
         const uploadedType = res.data.mediaType;
+        const mediaAssetId = res.data.mediaAssetId || res.data.mediaId || null;
 
         setForm((prev) => ({
           ...prev,
           mediaType: target === 'desktop' ? uploadedType : prev.mediaType,
           [target === 'desktop' ? 'desktopMediaUrl' : 'mobileMediaUrl']: uploadedUrl,
+          ...(target === 'desktop' && mediaAssetId ? { imageMediaAssetId: mediaAssetId } : {}),
         }));
         toast.success(`${target === 'desktop' ? 'Desktop' : 'Mobile'} creative uploaded!`);
       }
