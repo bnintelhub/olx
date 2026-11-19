@@ -52,15 +52,23 @@ export function AdminNotificationDropdown() {
     const ticketId = notif.data?.ticketId;
     if (ticketId) {
       navigate(`/support?ticketId=${ticketId}`);
+    } else if (notif.data?.orderId) {
+      navigate(`/payments?search=${encodeURIComponent(notif.data.orderId)}`);
     } else if (notif.data?.clickUrl) {
-      navigate(notif.data.clickUrl);
+      const targetUrl = notif.data.clickUrl === '/finance' ? '/payments' : notif.data.clickUrl;
+      navigate(targetUrl);
+    } else if (notif.title?.toLowerCase().includes('payment')) {
+      navigate('/payments');
     } else if (notif.type === 'SUPPORT_MESSAGE') {
       navigate('/support');
     }
   };
 
-  const getNotificationIcon = (type?: string) => {
-    switch (type) {
+  const getNotificationIcon = (notif: AdminNotificationItem) => {
+    if (notif.data?.orderId || notif.title?.toLowerCase().includes('payment')) {
+      return <CreditCard className="h-4 w-4 text-emerald-500" />;
+    }
+    switch (notif.type) {
       case 'SUPPORT_MESSAGE':
         return <Headphones className="h-4 w-4 text-teal-500" />;
       case 'PAYMENT_SUCCESS':
@@ -163,7 +171,7 @@ export function AdminNotificationDropdown() {
                   }`}
                 >
                   <div className="mt-0.5 shrink-0 h-8 w-8 rounded-lg bg-muted flex items-center justify-center">
-                    {getNotificationIcon(item.type)}
+                    {getNotificationIcon(item)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-1">

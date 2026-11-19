@@ -156,10 +156,14 @@ export const router = createBrowserRouter([
       {
         path: 'payments',
         element: (
-          <RoleGuard allowedRoles={['SUPER_ADMIN', 'FINANCE_ADMIN']}>
+          <RoleGuard allowedRoles={['SUPER_ADMIN', 'ADMIN', 'FINANCE_ADMIN']}>
             <PaymentsPage />
           </RoleGuard>
         ),
+      },
+      {
+        path: 'finance',
+        element: <Navigate to="/payments" replace />,
       },
       {
         path: 'promotions',

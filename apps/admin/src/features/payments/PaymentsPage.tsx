@@ -1,4 +1,5 @@
-import { useState, useDeferredValue } from 'react';
+import { useState, useDeferredValue, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuthStore } from '../../stores/auth.store';
 import {
   useRevenueOverviewQuery,
@@ -15,8 +16,12 @@ import { ReceiptModal } from './components/ReceiptModal';
 import { RefundAnalyticsSection } from './components/RefundAnalyticsSection';
 
 export function PaymentsPage() {
-  const [activeTab, setActiveTab] = useState<'TRANSACTIONS' | 'REFUNDS'>('TRANSACTIONS');
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('search') || searchParams.get('orderId') || '';
+  const initialView = searchParams.get('view') === 'refunds' ? 'REFUNDS' : 'TRANSACTIONS';
+
+  const [activeTab, setActiveTab] = useState<'TRANSACTIONS' | 'REFUNDS'>(initialView);
+  const [search, setSearch] = useState(initialSearch);
   const deferredSearch = useDeferredValue(search);
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [purposeFilter, setPurposeFilter] = useState('ALL');
@@ -24,6 +29,17 @@ export function PaymentsPage() {
   const [toDate, setToDate] = useState('');
   const [page, setPage] = useState(1);
   const limit = 15;
+
+  useEffect(() => {
+    const q = searchParams.get('search') || searchParams.get('orderId');
+    if (q) {
+      setSearch(q);
+      setActiveTab('TRANSACTIONS');
+    }
+    if (searchParams.get('view') === 'refunds') {
+      setActiveTab('REFUNDS');
+    }
+  }, [searchParams]);
 
   // Modals state
   const [selectedOrder, setSelectedOrder] = useState<PaymentOrderItem | null>(null);

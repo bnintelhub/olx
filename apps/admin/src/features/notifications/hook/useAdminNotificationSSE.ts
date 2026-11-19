@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../../stores/auth.store';
-import { playNotificationChime } from '../../../lib/sound';
+import { playNotificationChime, playPaymentChime } from '../../../lib/sound';
 import { NOTIFICATIONS_QUERY_KEY, UNREAD_COUNT_QUERY_KEY } from './useNotificationsQuery';
 
 export function useAdminNotificationSSE() {
@@ -89,7 +89,8 @@ export function useAdminNotificationSSE() {
           void queryClient.invalidateQueries({ queryKey: ['support-tickets'] });
         }
 
-        const clickUrl = data.data?.clickUrl || (ticketId ? `/support?ticketId=${ticketId}` : null);
+        const rawClickUrl = data.data?.clickUrl || (ticketId ? `/support?ticketId=${ticketId}` : null);
+        const clickUrl = rawClickUrl === '/finance' ? '/payments' : rawClickUrl;
 
         toast(data.title, {
           id: data.id,
@@ -145,6 +146,86 @@ export function useAdminNotificationSSE() {
         });
       } catch (err) {
         console.warn('[Admin SSE] Error processing support_activity:', err);
+      }
+    });
+
+    stream.addEventListener('payment_received', (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (!data?.id) return;
+
+        // Idempotency: skip already processed event IDs
+        if (seenIdsRef.current.has(data.id)) return;
+        seenIdsRef.current.add(data.id);
+        if (seenIdsRef.current.size > 100) {
+          const firstKey = seenIdsRef.current.values().next().value;
+          if (firstKey) seenIdsRef.current.delete(firstKey);
+        }
+
+        // Play payment chime with cross-tab deduplication
+        playPaymentChime(data.id);
+
+        // Invalidate queries so admin stats, finance ledger & notification bells refresh immediately
+        void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
+        void queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
+        void queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+        void queryClient.invalidateQueries({ queryKey: ['finance'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'finance'] });
+        void queryClient.invalidateQueries({ queryKey: ['revenue-stats'] });
+
+        const targetUrl = data.data?.orderId
+          ? `/payments?search=${encodeURIComponent(data.data.orderId)}`
+          : '/payments';
+
+        toast.success(data.title, {
+          id: data.id,
+          description: data.message,
+          duration: 8000,
+          action: {
+            label: 'View Payment',
+            onClick: () => navigate(targetUrl),
+          },
+        });
+      } catch (err) {
+        console.warn('[Admin SSE] Error processing payment_received:', err);
+      }
+    });
+
+    stream.addEventListener('payment_refund', (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (!data?.id) return;
+
+        if (seenIdsRef.current.has(data.id)) return;
+        seenIdsRef.current.add(data.id);
+        if (seenIdsRef.current.size > 100) {
+          const firstKey = seenIdsRef.current.values().next().value;
+          if (firstKey) seenIdsRef.current.delete(firstKey);
+        }
+
+        playNotificationChime();
+
+        void queryClient.invalidateQueries({ queryKey: NOTIFICATIONS_QUERY_KEY });
+        void queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
+        void queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+        void queryClient.invalidateQueries({ queryKey: ['finance'] });
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'finance'] });
+
+        const refundTargetUrl = data.data?.orderId
+          ? `/payments?search=${encodeURIComponent(data.data.orderId)}`
+          : '/payments';
+
+        toast.warning(data.title, {
+          id: data.id,
+          description: data.message,
+          duration: 8000,
+          action: {
+            label: 'View Refund',
+            onClick: () => navigate(refundTargetUrl),
+          },
+        });
+      } catch (err) {
+        console.warn('[Admin SSE] Error processing payment_refund:', err);
       }
     });
 

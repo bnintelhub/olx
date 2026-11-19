@@ -18,6 +18,7 @@ import { PaymentProvider } from './providers/payment-provider.interface';
 import { queuePaymentFulfillmentJob } from '../../jobs/payment-fulfillment.job';
 import { PayUWebhookService } from './providers/payu/payu.webhook';
 import { assertValidTransition } from './payment.state-machine';
+import { PaymentNotificationService } from './payment-notification.service';
 
 export class PaymentService {
   private static provider: PaymentProvider = new PayUProvider();
@@ -263,6 +264,18 @@ export class PaymentService {
         paidAt: new Date(),
       });
 
+      // Notify active staff and persist in DB
+      void PaymentNotificationService.notifyPaymentSuccess({
+        orderId: order.id,
+        merchantTransactionId: transaction.merchantTransactionId,
+        amount: Number(order.amount),
+        currency: order.currency,
+        userId: order.userId,
+        purpose: order.purpose,
+        providerTransactionId: verifyResult.providerTransactionId,
+        paymentMethod: verifyResult.paymentMethod,
+      }).catch((err) => console.error('[PaymentService] Notification error:', err));
+
       // Dispatch async fulfillment worker job
       await queuePaymentFulfillmentJob({
         paymentOrderId: order.id,
@@ -388,6 +401,20 @@ export class PaymentService {
         paidAt: new Date(),
       });
 
+      // Notify active staff and persist in DB
+      void PaymentNotificationService.notifyPaymentSuccess({
+        orderId: order.id,
+        merchantTransactionId: transaction.merchantTransactionId,
+        amount: expectedAmount,
+        currency: order.currency,
+        userId: order.userId,
+        payerName: (order as any).user?.profile?.name,
+        payerEmail: (order as any).user?.email,
+        purpose: order.purpose,
+        providerTransactionId: payload.mihpayid ? String(payload.mihpayid) : undefined,
+        paymentMethod: payload.mode,
+      }).catch((err) => console.error('[PaymentService] Webhook notification error:', err));
+
       // Dispatch fulfillment to worker
       await queuePaymentFulfillmentJob({
         paymentOrderId: order.id,
@@ -467,6 +494,20 @@ export class PaymentService {
             });
 
             order.status = PaymentStatus.SUCCESS;
+
+            // Notify active staff and persist in DB
+            void PaymentNotificationService.notifyPaymentSuccess({
+              orderId: order.id,
+              merchantTransactionId: transaction.merchantTransactionId,
+              amount: expectedAmount,
+              currency: order.currency,
+              userId: order.userId,
+              payerName: (order as any).user?.profile?.name,
+              payerEmail: (order as any).user?.email,
+              purpose: order.purpose,
+              providerTransactionId: payload.mihpayid ? String(payload.mihpayid) : undefined,
+              paymentMethod: payload.mode,
+            }).catch((err) => console.error('[PaymentService] Redirect notification error:', err));
 
             // Immediate inline fulfillment for instant balance update
             try {
@@ -567,6 +608,16 @@ export class PaymentService {
       refundReason: reason,
       providerResponse: refundResult.rawResponse,
     });
+
+    // Notify active staff of refund and persist in DB
+    void PaymentNotificationService.notifyPaymentRefund({
+      orderId: order.id,
+      merchantTransactionId: latestTxn.merchantTransactionId,
+      refundedAmount: amount,
+      currency: order.currency,
+      reason,
+      adminUserId,
+    }).catch((err) => console.error('[PaymentService] Refund notification error:', err));
 
     await writeAuditLog({
       userId: adminUserId,
