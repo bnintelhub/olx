@@ -35,6 +35,7 @@ async function startServer() {
             return callback(null, true);
           }
           const allowed = [
+            env.APP_URL,
             env.CLIENT_URL,
             'http://localhost',
             'http://localhost:5173',

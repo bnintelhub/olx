@@ -46,12 +46,17 @@ function setAuthCookies(reply: FastifyReply, tokens: AuthTokens, context: 'admin
     ? tokens.expiresInSeconds
     : 24 * 60 * 60; // 24 hours for staff sessions
 
+  // Domain scoping is only enabled in production when explicitly configured.
+  // In dev / localhost, setting a domain like .bnorbit.tech causes browsers to reject cookies.
+  const cookieDomain = isProd && env.COOKIE_DOMAIN ? env.COOKIE_DOMAIN.trim() : undefined;
+
   reply.setCookie(cookieNames.ACCESS, tokens.accessToken, {
     path: '/',
     httpOnly: true,
     secure: isProd,
     sameSite: 'lax',
     maxAge: accessMaxAge,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
   });
 
   reply.setCookie(cookieNames.REFRESH, tokens.refreshToken, {
@@ -60,15 +65,19 @@ function setAuthCookies(reply: FastifyReply, tokens: AuthTokens, context: 'admin
     secure: isProd,
     sameSite: 'lax',
     maxAge: 30 * 24 * 60 * 60,
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
   });
 }
 
 // Clears authentication cookies from the client browser on user logout.
 // Ensures expired or terminated sessions cannot be replayed from the browser.
 function clearAuthCookies(reply: FastifyReply, context: 'admin' | 'client' = 'client') {
+  const isProd = env.NODE_ENV === 'production';
   const cookieNames = context === 'admin' ? AUTH_COOKIE_NAMES.ADMIN : AUTH_COOKIE_NAMES.CLIENT;
-  reply.clearCookie(cookieNames.ACCESS, { path: '/' });
-  reply.clearCookie(cookieNames.REFRESH, { path: '/' });
+  const cookieDomain = isProd && env.COOKIE_DOMAIN ? env.COOKIE_DOMAIN.trim() : undefined;
+
+  reply.clearCookie(cookieNames.ACCESS, { path: '/', ...(cookieDomain ? { domain: cookieDomain } : {}) });
+  reply.clearCookie(cookieNames.REFRESH, { path: '/', ...(cookieDomain ? { domain: cookieDomain } : {}) });
 }
 
 export class AuthController {

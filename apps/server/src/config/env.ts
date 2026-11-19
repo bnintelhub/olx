@@ -36,12 +36,30 @@ if (process.env.REDIS_URL) {
   process.env.REDIS_URL = process.env.REDIS_URL.replace(/^REDIS_URL\s*=\s*/i, '').replace(/^['"]|['"]$/g, '').trim();
 }
 
+// Derive platform sub-paths automatically whenever APP_URL or SERVER_URL is provided in environment
+const rawAppUrl = (process.env.APP_URL || process.env.CLIENT_URL || process.env.SERVER_URL || '').replace(/\/+$/, '');
+
+if (rawAppUrl) {
+  process.env.APP_URL = process.env.APP_URL || rawAppUrl;
+  process.env.CLIENT_URL = process.env.CLIENT_URL || rawAppUrl;
+  process.env.SERVER_URL = process.env.SERVER_URL || rawAppUrl;
+  process.env.ADMIN_URL = process.env.ADMIN_URL || `${rawAppUrl}/admin`;
+  process.env.CORS_ORIGIN = process.env.CORS_ORIGIN || rawAppUrl;
+  process.env.MEDIA_PUBLIC_BASE_URL = process.env.MEDIA_PUBLIC_BASE_URL || `${rawAppUrl}/media`;
+  process.env.PAYU_SUCCESS_URL = process.env.PAYU_SUCCESS_URL || `${rawAppUrl}/api/v1/payments/payu/success`;
+  process.env.PAYU_FAILURE_URL = process.env.PAYU_FAILURE_URL || `${rawAppUrl}/api/v1/payments/payu/failure`;
+}
+
 const envSchema = z
   .object({
     NODE_ENV: z.enum(['development', 'staging', 'production', 'test']).default('development'),
     PORT: z.string().transform(Number).default('5000'),
+    APP_URL: z.string().default('http://localhost'),
+    SERVER_URL: z.string().default('http://localhost:5000'),
     CLIENT_URL: z.string().default('http://localhost:5173'),
     ADMIN_URL: z.string().optional(),
+    CORS_ORIGIN: z.string().optional(),
+    COOKIE_DOMAIN: z.string().optional(),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
     REDIS_URL: z.string().default('redis://127.0.0.1:6379'),
     JWT_ACCESS_SECRET: z.string().min(10, 'JWT_ACCESS_SECRET must be at least 10 chars'),

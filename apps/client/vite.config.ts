@@ -5,7 +5,14 @@ import path from 'path';
 export default defineConfig(({ mode }) => {
   const rootDir = path.resolve(import.meta.dirname || path.resolve(), '../../');
   const env = loadEnv(mode, rootDir, '');
-  const apiTarget = env.VITE_API_TARGET || process.env.VITE_API_TARGET || 'http://127.0.0.1:5000';
+  const apiTarget =
+    env.VITE_API_TARGET ||
+    process.env.VITE_API_TARGET ||
+    env.APP_URL ||
+    process.env.APP_URL ||
+    env.SERVER_URL ||
+    process.env.SERVER_URL ||
+    'http://127.0.0.1:5000';
 
   return {
     envDir: rootDir,
