@@ -28,9 +28,10 @@ import { ImageCropModal } from '@/components/ImageCropModal';
 import { getImageDimensions } from '@/lib/image-utils';
 import { SellPreviewStep } from '../components/SellPreviewStep';
 import { SellSuccessStep } from '../components/SellSuccessStep';
-import { PricingUpgradeModal } from '../components/PricingUpgradeModal';
+import { SellPricingPanel } from '../components/SellPricingPanel';
 import { SellHeaderBar } from '../components/SellHeaderBar';
 import { AttributeItem } from '@/features/ads/components/post-ad/PostAdDynamicFields';
+import { PaymentResultCard } from '@/features/payments/components/PaymentResultCard';
 
 export const SellPage: React.FC = () => {
   const navigate = useNavigate();
@@ -39,11 +40,11 @@ export const SellPage: React.FC = () => {
   const { user, openAuthModal } = useAuthStore();
 
   const isPlanningParam = searchParams.has('planning') || searchParams.has('plans');
-  const [showPricingModal, setShowPricingModal] = useState(isPlanningParam);
   const [paymentBanner, setPaymentBanner] = useState<{ type: 'success' | 'error'; message: string; txnId?: string } | null>(null);
 
   const paymentStatus = searchParams.get('status');
 
+  // Normalize PayU callback params immediately so success and failure never reopen planning UI.
   useEffect(() => {
     if (paymentStatus === 'success') {
       const txnId = searchParams.get('txnId') || undefined;
@@ -53,7 +54,6 @@ export const SellPage: React.FC = () => {
         message: callbackMessage || 'Payment completed successfully via PayU! Your listing credits have been activated.',
         txnId,
       });
-      setShowPricingModal(false);
       // Immediately refresh quota from backend
       apiClient.get('/revenue/quota').then((res) => {
         if (res.data?.success) setQuota(res.data.data);
@@ -77,19 +77,14 @@ export const SellPage: React.FC = () => {
       next.delete('status');
       next.delete('txnId');
       next.delete('orderId');
+      next.delete('planning');
+      next.delete('plans');
       const rest = next.toString();
       navigate({ pathname: '/sell', search: rest ? `?${rest}` : '' }, { replace: true });
     }
   }, [paymentStatus]);
 
-  useEffect(() => {
-    if (isPlanningParam) {
-      setShowPricingModal(true);
-    }
-  }, [isPlanningParam]);
-
   const openPricing = () => {
-    setShowPricingModal(true);
     const next = new URLSearchParams(searchParams);
     if (!next.has('planning')) {
       const base = next.toString();
@@ -98,7 +93,6 @@ export const SellPage: React.FC = () => {
   };
 
   const closePricing = () => {
-    setShowPricingModal(false);
     const next = new URLSearchParams(searchParams);
     next.delete('planning');
     next.delete('plans');
@@ -451,6 +445,16 @@ export const SellPage: React.FC = () => {
           onOpenPlans={openPricing}
         />
 
+        {isPlanningParam && (
+          <SellPricingPanel
+            quota={quota}
+            onClose={closePricing}
+            onPaymentSuccess={setQuota}
+          />
+        )}
+
+        {!isPlanningParam && (
+          <>
         {/* Wizard Steps Navigation (Visible in steps 1-4) */}
         {step < 5 && (
           <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-2xs">
@@ -467,36 +471,16 @@ export const SellPage: React.FC = () => {
 
         {/* Payment Result Notification */}
         {paymentBanner && (
-          <div
-            className={`flex items-center justify-between p-4 rounded-xl border text-xs animate-in fade-in duration-200 ${
-              paymentBanner.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : 'bg-rose-50 border-rose-200 text-rose-900'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              {paymentBanner.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
-              ) : (
-                <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
-              )}
-              <div>
-                <p className="font-bold">{paymentBanner.message}</p>
-                {paymentBanner.txnId && (
-                  <p className="text-[11px] text-emerald-700/80 mt-0.5 font-mono">
-                    Transaction ID: {paymentBanner.txnId}
-                  </p>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setPaymentBanner(null)}
-              className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 text-sm cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
+          <PaymentResultCard
+            type={paymentBanner.type}
+            title={paymentBanner.type === 'success' ? 'Payment completed successfully' : 'Payment could not be completed'}
+            message={paymentBanner.message}
+            txnId={paymentBanner.txnId}
+            onDismiss={() => setPaymentBanner(null)}
+            onContinue={paymentBanner.type === 'success' ? () => setPaymentBanner(null) : undefined}
+            onRetry={paymentBanner.type === 'error' ? openPricing : undefined}
+            compact
+          />
         )}
 
         {/* Error Notification */}
@@ -616,6 +600,8 @@ export const SellPage: React.FC = () => {
             />
           )}
         </div>
+          </>
+        )}
       </div>
 
       {/* Image Crop & Focal Point Modal */}
@@ -626,15 +612,6 @@ export const SellPage: React.FC = () => {
         onApply={handleApplyCrop}
       />
 
-      {/* Monetization / Extra Listings Upgrade Dialog */}
-      <PricingUpgradeModal
-        isOpen={showPricingModal}
-        onClose={closePricing}
-        quota={quota}
-        onPaymentSuccess={(updatedQuota) => {
-          setQuota(updatedQuota);
-        }}
-      />
     </div>
   );
 };

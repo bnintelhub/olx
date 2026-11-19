@@ -28,9 +28,30 @@ export const AppLayout: React.FC = () => {
   const { user, openAuthModal } = useAuthStore();
   const ui = useUIStore();
 
-  // Show main Navbar on all standard pages except full-screen chat
   const isChatPage = location.pathname.startsWith('/chat');
-  const showNavbar = !isChatPage;
+  const showNavbar = location.pathname === '/';
+
+  // Keep route transitions independent of the previous page's scroll position.
+  React.useLayoutEffect(() => {
+    const previousScrollRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+
+    return () => {
+      window.history.scrollRestoration = previousScrollRestoration;
+    };
+  }, []);
+
+  React.useLayoutEffect(() => {
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+
+    const frame = window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [location.pathname]);
 
   const handleOpenPostAd = () => {
     if (!user) {

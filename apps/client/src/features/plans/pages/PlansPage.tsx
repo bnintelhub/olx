@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { CheckoutStep, CheckoutPlan } from '@/features/sell/components/CheckoutStep';
+import { PaymentResultCard } from '@/features/payments/components/PaymentResultCard';
 
 export interface PlanItem extends CheckoutPlan {
   badge?: string;
@@ -226,37 +227,18 @@ export const PlansPage: React.FC = () => {
           )}
         </div>
 
+        {/* Payment callbacks use the same premium result card across sell and plans flows. */}
         {paymentBanner && (
-          <div
-            className={`flex items-center justify-between p-4 rounded-2xl border text-xs animate-in fade-in duration-200 ${
-              paymentBanner.type === 'success'
-                ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-                : 'bg-rose-50 border-rose-200 text-rose-900'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              {paymentBanner.type === 'success' ? (
-                <CheckCircle2 className="w-5 h-5 shrink-0 text-emerald-600" />
-              ) : (
-                <AlertCircle className="w-5 h-5 shrink-0 text-rose-600" />
-              )}
-              <div>
-                <p className="font-bold">{paymentBanner.message}</p>
-                {paymentBanner.txnId && (
-                  <p className="text-[11px] text-emerald-700/80 mt-0.5 font-mono">
-                    Transaction ID: {paymentBanner.txnId}
-                  </p>
-                )}
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setPaymentBanner(null)}
-              className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 text-sm cursor-pointer"
-            >
-              ✕
-            </button>
-          </div>
+          <PaymentResultCard
+            type={paymentBanner.type}
+            title={paymentBanner.type === 'success' ? 'Payment completed successfully' : 'Payment could not be completed'}
+            message={paymentBanner.message}
+            txnId={paymentBanner.txnId}
+            onDismiss={() => setPaymentBanner(null)}
+            onContinue={paymentBanner.type === 'success' ? () => setPaymentBanner(null) : undefined}
+            onRetry={paymentBanner.type === 'error' ? () => setIsCheckingOut(false) : undefined}
+            compact
+          />
         )}
 
         {/* Checkout View or Plans Grid */}

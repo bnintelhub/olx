@@ -6,6 +6,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { paymentsService } from '@/features/payments/service/payments.service';
 import { apiClient } from '@/lib/api-client';
+import { PaymentResultCard } from '@/features/payments/components/PaymentResultCard';
 
 export interface CheckoutPlan {
   id: string;
@@ -182,69 +183,20 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
   };
 
   if (completedOrder) {
+    // Reuse the shared transaction card for consistent payment feedback.
     return (
-      <div className="py-6 px-4 text-center space-y-5 animate-in zoom-in-95 fade-in duration-300">
-        {/* Animated Celebration Icon with Pulsing Halo */}
-        <div className="relative mx-auto w-20 h-20 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full bg-emerald-400/25 animate-ping duration-1000" />
-          <div className="absolute inset-1 rounded-full bg-emerald-500/15 animate-pulse duration-700" />
-          <div className="relative w-16 h-16 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30">
-            <CheckCircle2 className="w-8 h-8 stroke-[2.5]" />
-          </div>
-        </div>
-
-        {/* Success Headline */}
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-[11px] font-extrabold uppercase tracking-wider">
-            <Sparkles className="w-3 h-3 text-emerald-600" />
-            <span>Payment Verified & Confirmed</span>
-          </div>
-          <h3 className="text-2xl font-black text-[#002f34] tracking-tight">
-            Listing Credits Activated!
-          </h3>
-          <p className="text-xs text-slate-500 max-w-sm mx-auto">
-            ₹{completedOrder.amount} processed successfully via {completedOrder.method}.
-          </p>
-        </div>
-
-        {/* Receipt Card */}
-        <div className="max-w-md mx-auto bg-slate-50/90 border border-slate-200 rounded-2xl p-4 text-left text-xs space-y-2.5 shadow-2xs">
-          <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-            <span className="text-slate-500 font-medium">Activated Package</span>
-            <span className="font-extrabold text-slate-900 text-sm">{completedOrder.planName}</span>
-          </div>
-
-          <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
-            <span className="text-slate-500 font-medium">Balance Added</span>
-            <span className="font-extrabold text-emerald-700 bg-emerald-100/70 border border-emerald-300/80 px-2.5 py-0.5 rounded-full text-xs flex items-center gap-1">
-              <Check className="w-3 h-3 stroke-[3]" />
-              <span>+{completedOrder.adsCount} Available {completedOrder.adsCount === 1 ? 'Ad' : 'Ads'}</span>
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center">
-            <span className="text-slate-500 font-medium">Transaction ID</span>
-            <span className="font-mono font-bold text-slate-800 bg-white px-2 py-0.5 rounded border border-slate-200 text-[11px]">
-              {completedOrder.txnId}
-            </span>
-          </div>
-        </div>
-
-        {/* Primary Action Button */}
-        <div className="pt-1 max-w-md mx-auto space-y-1.5">
-          <Button
-            type="button"
-            onClick={onClose}
-            className="w-full bg-[#002f34] hover:bg-[#002f34]/90 text-white font-bold h-11 rounded-xl text-xs sm:text-sm transition-all duration-200 cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow-md"
-          >
-            <span>Continue to Publish Ad</span>
-            <ArrowRight className="w-4 h-4" />
-          </Button>
-          <p className="text-[10px] text-slate-400">
-            Your ad listing balance has been instantly updated.
-          </p>
-        </div>
-      </div>
+      <PaymentResultCard
+        type="success"
+        title="Listing credits activated!"
+        message="Your payment is confirmed and the listing balance has been updated instantly."
+        txnId={completedOrder.txnId}
+        amount={completedOrder.amount}
+        method={completedOrder.method}
+        planName={completedOrder.planName}
+        adsCount={completedOrder.adsCount}
+        onContinue={onClose}
+        compact
+      />
     );
   }
 
@@ -510,10 +462,14 @@ export const CheckoutStep: React.FC<CheckoutStepProps> = ({
       </div>
 
       {errorMessage && (
-        <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-start gap-2">
-          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{errorMessage}</span>
-        </div>
+        <PaymentResultCard
+          type="error"
+          title="Payment details need attention"
+          message={errorMessage}
+          onRetry={() => setErrorMessage(null)}
+          onDismiss={() => setErrorMessage(null)}
+          compact
+        />
       )}
 
       {/* Action Buttons */}
