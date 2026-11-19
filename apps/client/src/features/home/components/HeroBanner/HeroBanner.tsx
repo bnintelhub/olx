@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import {
@@ -112,148 +112,182 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
 
   return (
     <section className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-4 pb-2">
-      {/* 
-        Zero Layout Shift Hero Container:
-        Height is strictly locked (340px mobile, 390px tablet, 430px desktop)
-        This guarantees ZERO Cumulative Layout Shift (CLS = 0) when switching slides.
-      */}
-      <div
-        ref={containerRef}
-        onClick={handleBannerClick}
-        onMouseMove={handleMouseMove}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        className={`relative overflow-hidden rounded-3xl text-white border border-[#003e45]/80 shadow-2xl h-[340px] sm:h-[390px] lg:h-[430px] flex items-center ${
-          currentPromo.targetUrl ? 'cursor-pointer' : ''
-        }`}
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-stretch">
+        {/* Left Column: Hero Carousel Banner */}
+        <div className="lg:col-span-8 xl:col-span-9 flex flex-col">
+          <div
+            ref={containerRef}
+            onClick={handleBannerClick}
+            onMouseMove={handleMouseMove}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            className={`relative overflow-hidden rounded-3xl text-white border border-slate-700/50 shadow-xl h-[360px] sm:h-[400px] lg:h-[440px] flex items-center ${
+              currentPromo.targetUrl ? 'cursor-pointer' : ''
+            }`}
+          >
         {/* ========================================================
-            REUSABLE ANIMATED HERO BACKGROUND (Layers 1 to 5)
-            Continuous, persistent background motion behind every slide
+            BACKGROUND LAYER
+            Promotional image is set in the background, positioned right,
+            with a smooth dark gradient on the left for maximum text contrast.
+            If no promo media exists, falls back to AnimatedHeroBackground.
             ======================================================== */}
-        <AnimatedHeroBackground
-          parallaxX={mouseOffset.x}
-          parallaxY={mouseOffset.y}
-        />
+        {promoMediaUrl ? (
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            {isVideo ? (
+              <video
+                src={promoMediaUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="w-full h-full object-cover object-center sm:object-right transition-transform duration-700"
+              />
+            ) : (
+              <img
+                src={promoMediaUrl}
+                alt={currentPromo.title || 'Marketplace Promotion'}
+                className="w-full h-full object-cover object-center sm:object-right transition-transform duration-700"
+              />
+            )}
+            {/* Multi-stop gradient: solid dark on left for title/subtitle, fading to transparent on right so promo art shines */}
+            <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-transparent sm:w-[75%] lg:w-[65%]" />
+            <div className="absolute inset-0 bg-slate-950/20" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent sm:hidden" />
+          </div>
+        ) : (
+          <AnimatedHeroBackground
+            parallaxX={mouseOffset.x}
+            parallaxY={mouseOffset.y}
+          />
+        )}
 
         {/* ========================================================
-            FOREGROUND CONTENT (Layer 6: Admin Content)
-            Absolute overlay positioning eliminates all layout shifts
+            FOREGROUND CONTENT
+            Left-aligned hero content with large title, subtitle directly
+            underneath, badges, and CTA action buttons.
             ======================================================== */}
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           <motion.div
             key={currentPromo.id || activeBannerIndex}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.5, ease: 'easeInOut' }}
-            className="absolute inset-0 z-10 w-full h-full p-5 sm:p-8 lg:p-10 flex items-center"
+            initial={{ opacity: 0, x: -12 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 12 }}
+            transition={{ duration: 0.4, ease: 'easeOut' }}
+            className="absolute inset-0 z-10 w-full h-full p-6 sm:p-10 lg:p-14 flex items-center"
           >
-            <div className="w-full grid grid-cols-1 lg:grid-cols-12 items-center gap-4 lg:gap-8">
-              {/* Left Column: Details & CTA with GSAP text animation & 2-line title */}
-              <div
-                className={`${
-                  promoMediaUrl ? 'lg:col-span-7' : 'lg:col-span-12'
-                } flex flex-col justify-center text-left`}
-              >
-                <GsapHeroText
-                  bannerId={currentPromo.id}
-                  title={currentPromo.title}
-                  subtitle={currentPromo.subtitle}
-                  locationText={currentPromo.locationText}
-                  categoryText={currentPromo.categoryText}
-                  ctaText={currentPromo.ctaText}
-                  onBannerClick={handleBannerClick}
-                  onStartSelling={handleStartSelling}
-                />
-              </div>
-
-              {/* Right Column: Clean Display Showcase Card (Matches Reference Image) */}
-              {promoMediaUrl && (
-                <div className="lg:col-span-5 hidden sm:flex items-center justify-center lg:justify-end">
-                  <div className="relative group max-w-xs sm:max-w-sm lg:max-w-md w-full h-[200px] sm:h-[260px] lg:h-[310px] flex items-center justify-center">
-                    {/* Ambient Glow Halo behind the showcase card */}
-                    <div className="absolute -inset-3 bg-gradient-to-r from-emerald-400/25 via-lime-400/20 to-teal-400/15 rounded-3xl blur-2xl opacity-70 group-hover:opacity-100 transition duration-500 pointer-events-none" />
-
-                    {/* Clean Rounded Display Showcase Card */}
-                    <div className="relative w-[190px] h-[190px] sm:w-[250px] sm:h-[250px] lg:w-[290px] lg:h-[290px] rounded-3xl bg-white/95 backdrop-blur-sm p-3 sm:p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex items-center justify-center overflow-hidden border border-white/20 transition-transform duration-300 group-hover:scale-[1.02]">
-                      {isVideo ? (
-                        <video
-                          src={promoMediaUrl}
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                          className="w-full h-full object-contain rounded-2xl drop-shadow-md transition-transform duration-300 group-hover:scale-105"
-                        />
-                      ) : (
-                        <img
-                          src={promoMediaUrl}
-                          alt={currentPromo.title || 'Promotion Asset'}
-                          className="w-full h-full object-contain rounded-2xl drop-shadow-md transition-transform duration-300 group-hover:scale-105"
-                        />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
+            <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl flex flex-col justify-center text-left">
+              <GsapHeroText
+                bannerId={currentPromo.id}
+                title={currentPromo.title}
+                subtitle={currentPromo.subtitle}
+                locationText={currentPromo.locationText}
+                categoryText={currentPromo.categoryText}
+                ctaText={currentPromo.ctaText}
+                onBannerClick={handleBannerClick}
+                onStartSelling={handleStartSelling}
+              />
             </div>
           </motion.div>
         </AnimatePresence>
 
-        {/* Carousel Bottom Controls (Matches Reference Image) */}
+        {/* Top-Right Circular Navigation Controls */}
         {activeBanners.length > 1 && (
-          <>
-            {/* Bottom Left: Pill & Dot Slide Indicators */}
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="absolute bottom-3 left-4 sm:bottom-4 sm:left-8 z-20 flex items-center gap-1.5"
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute top-4 right-4 sm:top-6 sm:right-8 z-20 flex items-center gap-2"
+          >
+            <button
+              type="button"
+              onClick={() =>
+                setActiveBannerIndex(
+                  (prev) => (prev - 1 + activeBanners.length) % activeBanners.length
+                )
+              }
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-white/25 hover:border-white text-white/80 hover:text-white flex items-center justify-center bg-black/40 hover:bg-black/70 backdrop-blur-md transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+              title="Previous banner"
             >
-              {activeBanners.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => setActiveBannerIndex(idx)}
-                  className={`transition-all duration-300 rounded-full cursor-pointer ${
-                    idx === activeBannerIndex
-                      ? 'w-6 h-2 bg-[#b4f436] shadow-[0_0_8px_rgba(180,244,54,0.9)]'
-                      : 'w-2 h-2 bg-white/30 hover:bg-white/60'
-                  }`}
-                  title={`Go to slide ${idx + 1}`}
-                />
-              ))}
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                setActiveBannerIndex((prev) => (prev + 1) % activeBanners.length)
+              }
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-white/25 hover:border-white text-white/80 hover:text-white flex items-center justify-center bg-black/40 hover:bg-black/70 backdrop-blur-md transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+              title="Next banner"
+            >
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+
+        {/* Bottom-Left Slide Indicators */}
+        {activeBanners.length > 1 && (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-4 left-6 sm:bottom-5 sm:left-10 z-20 flex items-center gap-1.5"
+          >
+            {activeBanners.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setActiveBannerIndex(idx)}
+                className={`transition-all duration-300 rounded-full cursor-pointer ${
+                  idx === activeBannerIndex
+                    ? 'w-7 h-2 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
+                    : 'w-2 h-2 bg-white/30 hover:bg-white/60'
+                }`}
+                title={`Go to slide ${idx + 1}`}
+              />
+            ))}
+          </div>
+        )}
+          </div>
+        </div>
+
+        {/* Right Column: Quick Action Cards (Sell in 60s & BLX Verified) */}
+        <div className="lg:col-span-4 xl:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-col gap-4 justify-between h-auto lg:h-[440px]">
+          {/* Card 1: Sell in 60 seconds */}
+          <div className="rounded-3xl bg-[#FAF8F5] border border-slate-200/90 p-6 shadow-xs flex flex-col justify-between flex-1 transition-all hover:shadow-md">
+            <div>
+              <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+                Sell in 60 seconds
+              </h3>
+              <p className="text-sm text-slate-600 font-normal mt-1.5 leading-relaxed">
+                List your unused gadgets with zero fees
+              </p>
             </div>
 
-            {/* Bottom Right: Circular Navigation Buttons */}
-            <div
-              onClick={(e) => e.stopPropagation()}
-              className="absolute bottom-3 right-4 sm:bottom-4 sm:right-8 z-20 flex items-center gap-2"
+            <button
+              type="button"
+              onClick={handleStartSelling}
+              className="mt-5 w-full inline-flex items-center justify-center gap-1.5 rounded-2xl bg-[#002F34] hover:bg-[#003d44] active:bg-[#002428] text-white py-3.5 px-4 text-sm font-bold shadow-xs transition-all hover:scale-[1.01] active:scale-98 cursor-pointer"
             >
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveBannerIndex(
-                    (prev) => (prev - 1 + activeBanners.length) % activeBanners.length
-                  )
-                }
-                className="w-8 h-8 rounded-full border border-white/30 hover:border-white text-white/80 hover:text-white flex items-center justify-center bg-black/25 hover:bg-black/50 backdrop-blur-sm transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
-                title="Previous banner"
-              >
-                <ChevronLeft size={16} />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setActiveBannerIndex((prev) => (prev + 1) % activeBanners.length)
-                }
-                className="w-8 h-8 rounded-full border border-white/30 hover:border-white text-white/80 hover:text-white flex items-center justify-center bg-black/25 hover:bg-black/50 backdrop-blur-sm transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
-                title="Next banner"
-              >
-                <ChevronRight size={16} />
-              </button>
+              <span>+ Post Free Ad</span>
+            </button>
+          </div>
+
+          {/* Card 2: BLX Verified */}
+          <div className="rounded-3xl bg-gradient-to-br from-[#102A2E] via-[#0E2528] to-[#0A1A1C] border border-emerald-900/40 p-6 shadow-xs flex flex-col justify-between flex-1 transition-all hover:shadow-md">
+            <div>
+              <h3 className="text-2xl font-black text-[#D4AF37] tracking-tight">
+                BLX Verified
+              </h3>
+              <p className="text-sm text-slate-300/80 font-normal mt-1.5 leading-relaxed">
+                Quality-checked devices across India
+              </p>
             </div>
-          </>
-        )}
+
+            <button
+              type="button"
+              onClick={() => navigate('/search?verified=true')}
+              className="mt-5 inline-flex items-center gap-1.5 text-sm font-bold text-[#D4AF37] hover:text-[#f3cc5a] transition-colors cursor-pointer self-start group"
+            >
+              <span>Explore Verified</span>
+              <ArrowRight size={15} strokeWidth={2.5} className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </div>
+        </div>
       </div>
     </section>
   );

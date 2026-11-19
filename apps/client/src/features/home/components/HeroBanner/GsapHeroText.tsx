@@ -232,15 +232,15 @@ export const GsapHeroText: React.FC<GsapHeroTextProps> = ({
 
       {/* 
         TITLE PATTERN DESIGN
-        - Italic, font-black, condensed marketplace energy
-        - Line 1: Pure White
-        - Line 2: Vibrant Neon Lime with Curved Underline Swoosh
+        - Clean, large, bold typography with high contrast
+        - Line 1: Crisp Pure White
+        - Line 2: Vibrant Warm Amber/Gold highlight
         - Max 2 lines strictly enforced with line-clamp-2 & text-ellipsis
         - Reserved min-height prevents layout shifts (CLS = 0)
       */}
-      <div className="relative min-h-[3rem] sm:min-h-[4.5rem] lg:min-h-[5.8rem] flex flex-col justify-center">
+      <div className="relative min-h-[3.6rem] sm:min-h-[5.5rem] lg:min-h-[7.2rem] flex flex-col justify-center">
         <h1
-          className="text-3xl sm:text-5xl lg:text-[3.5rem] font-black italic tracking-tight leading-[1.1] text-white drop-shadow-md line-clamp-2 overflow-hidden text-ellipsis"
+          className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.08] text-white drop-shadow-lg line-clamp-2 overflow-hidden text-ellipsis"
           style={{
             display: '-webkit-box',
             WebkitLineClamp: 2,
@@ -255,13 +255,13 @@ export const GsapHeroText: React.FC<GsapHeroTextProps> = ({
             {displayedLine1 || (!displayedLine2 ? line1 : '')}
           </span>
           {line2 && ' '}
-          {/* Line 2: Neon Lime Highlight with Swoosh */}
+          {/* Line 2: Warm Amber/Gold Highlight */}
           {line2 && (
-            <span className="relative inline-block text-[#b4f436] drop-shadow-[0_0_12px_rgba(180,244,54,0.35)]">
+            <span className="relative inline-block text-[#FFD54A] drop-shadow-[0_0_16px_rgba(255,213,74,0.35)]">
               {displayedLine2 || line2}
-              {/* Dynamic Curved Underline Swoosh from reference design */}
+              {/* Dynamic Curved Underline Swoosh */}
               <svg
-                className={`absolute -bottom-1.5 sm:-bottom-2.5 left-0 w-32 sm:w-48 h-2 sm:h-3 text-[#b4f436] pointer-events-none transition-opacity duration-300 ${
+                className={`absolute -bottom-1.5 sm:-bottom-2.5 left-0 w-32 sm:w-48 h-2 sm:h-3 text-[#FFD54A] pointer-events-none transition-opacity duration-300 ${
                   isTypingComplete || displayedLine2 ? 'opacity-90' : 'opacity-0'
                 }`}
                 viewBox="0 0 180 12"
@@ -279,12 +279,12 @@ export const GsapHeroText: React.FC<GsapHeroTextProps> = ({
       </div>
 
       {/* 
-        SUBTITLE
-        Max 2 lines, crisp light silver text
+        SUBTITLE (Placed directly beneath the Title, NOT at the bottom of the banner)
+        Clean, highly legible text
       */}
       {subtitle && (
         <p
-          className="mt-2 sm:mt-3 text-xs sm:text-base lg:text-lg text-slate-200/90 font-medium leading-relaxed max-w-xl drop-shadow-xs line-clamp-2 overflow-hidden text-ellipsis"
+          className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg text-slate-200/90 font-medium leading-relaxed max-w-xl drop-shadow-xs line-clamp-2 overflow-hidden text-ellipsis"
           style={{
             display: '-webkit-box',
             WebkitLineClamp: 2,
@@ -299,20 +299,20 @@ export const GsapHeroText: React.FC<GsapHeroTextProps> = ({
 
       {/* 
         CTA ACTION BUTTONS
-        - Primary: Amber-Yellow Pill "Explore Now →"
-        - Secondary: Play icon in circle "Post an ad for free"
+        - Primary: Warm Gold Pill "Shop Deals →"
+        - Secondary: Play icon in circle "Post Free Ad"
       */}
-      <div className="mt-4 sm:mt-6 flex flex-wrap items-center gap-3 sm:gap-5">
+      <div className="mt-6 sm:mt-8 flex flex-wrap items-center gap-4 sm:gap-5">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             onBannerClick();
           }}
-          className="inline-flex items-center gap-2 rounded-full bg-[#f5a623] hover:bg-[#ffb53f] active:bg-[#e09419] px-6 py-2.5 sm:px-7 sm:py-3 text-xs sm:text-sm font-black text-slate-950 shadow-lg shadow-amber-500/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          className="inline-flex items-center gap-2.5 rounded-full bg-[#FFD54A] hover:bg-[#f5c62d] active:bg-[#e6b925] px-7 py-3 text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
         >
-          <span>{ctaText || 'Explore Now'}</span>
-          <ArrowRight size={15} strokeWidth={2.5} />
+          <span>{ctaText || 'Shop Deals'}</span>
+          <ArrowRight size={16} strokeWidth={2.5} />
         </button>
 
         <button
@@ -320,10 +320,10 @@ export const GsapHeroText: React.FC<GsapHeroTextProps> = ({
           onClick={onStartSelling}
           className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white transition-colors cursor-pointer group"
         >
-          <span className="w-6 h-6 rounded-full border border-white/60 group-hover:border-white group-hover:bg-white/10 flex items-center justify-center transition-all">
+          <span className="w-7 h-7 rounded-full border border-white/40 group-hover:border-white group-hover:bg-white/10 flex items-center justify-center transition-all">
             <Play size={10} className="fill-white text-white translate-x-0.5" />
           </span>
-          <span className="underline underline-offset-4">Post an ad for free</span>
+          <span className="underline underline-offset-4">Post Free Ad</span>
         </button>
       </div>
     </div>
