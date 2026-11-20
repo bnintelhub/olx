@@ -1194,6 +1194,22 @@ export class AdminMediaService {
           freedBytes += orphan.sizeBytes;
           deletedCount++;
           deletedFiles.push(orphan.path);
+
+          // Prune empty parent directories recursively up to uploadDir
+          let currentDir = path.dirname(fullPath);
+          while (currentDir !== uploadDir && currentDir.startsWith(uploadDir)) {
+            try {
+              const entries = await fs.promises.readdir(currentDir);
+              if (entries.length === 0) {
+                await fs.promises.rmdir(currentDir);
+                currentDir = path.dirname(currentDir);
+              } else {
+                break;
+              }
+            } catch {
+              break;
+            }
+          }
         }
       } catch (err) {
         console.warn(`[DiskCleanup] Failed to unlink ${orphan.path}:`, err);

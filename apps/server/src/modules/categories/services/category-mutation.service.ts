@@ -1,6 +1,11 @@
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../../../config/prisma';
 import { AppError } from '../../../shared/errors/app-error';
 import { delCache } from '../../../config/redis';
+import { deletePhysicalMedia } from '../../admin/admin.media.service';
+import { resolveUploadDir } from '../../../integrations/storage/storage.adapter';
+import { cleanStorageKey, isExternalUrl } from '../../../shared/utils/media-url.util';
 import {
   CreateCategoryInput,
   UpdateCategoryInput,
@@ -324,10 +329,32 @@ export class CategoryMutationService {
       );
     }
 
+    const mediaToDelete = category.imageMediaAsset;
+    const mediaAssetId = category.imageMediaAssetId;
+    const iconUrl = category.iconUrl;
+
     await prisma.$transaction(async (tx) => {
       await tx.categoryAttribute.deleteMany({ where: { categoryId: id } });
       await tx.category.delete({ where: { id } });
+      if (mediaAssetId) {
+        await tx.mediaAsset.delete({ where: { id: mediaAssetId } }).catch(() => {});
+      }
     });
+
+    // Clean up physical media files and variants from disk/storage
+    if (mediaToDelete) {
+      await deletePhysicalMedia(mediaToDelete).catch(() => {});
+    }
+
+    // Clean up standalone icon file if stored locally
+    if (iconUrl && !isExternalUrl(iconUrl)) {
+      const uploadDir = resolveUploadDir();
+      const clean = cleanStorageKey(iconUrl);
+      const localPath = path.isAbsolute(clean) ? clean : path.join(uploadDir, ...clean.split('/'));
+      if (fs.existsSync(localPath)) {
+        await fs.promises.unlink(localPath).catch(() => {});
+      }
+    }
 
     await delCache('categories:all:public', 'categories:all:admin', 'categories:tree:public', 'categories:tree:admin');
     return category;
