@@ -220,10 +220,10 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
       <div
         ref={drawerRef}
         onClick={(e) => e.stopPropagation()}
-        className="fixed inset-y-0 right-0 w-full sm:w-[440px] bg-white shadow-2xl flex flex-col border-l border-gray-200 z-50 select-none"
+        className="fixed inset-y-0 right-0 w-full max-w-full sm:w-[440px] bg-white shadow-2xl flex flex-col border-l border-gray-200 z-50 select-none"
       >
         {/* Header Bar */}
-        <div className="px-6 py-4.5 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+        <div className="px-3 py-3 sm:px-6 sm:py-4.5 border-b border-gray-100 flex items-center justify-between bg-white shrink-0 gap-2">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-bold text-gray-900 tracking-tight">
               Notifications
@@ -235,7 +235,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {/* Only Show Unread Toggle Switch */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500 font-medium hidden sm:inline">
@@ -292,7 +292,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
         ) : (
           <>
             {/* Horizontal Tabs with Underline Active Indicator */}
-            <div className="px-6 border-b border-gray-100 flex items-center gap-5 bg-white shrink-0 overflow-x-auto no-scrollbar">
+            <div className="px-3 sm:px-6 border-b border-gray-100 flex items-center gap-5 bg-white shrink-0 overflow-x-auto no-scrollbar">
               {[
                 { id: 'ALL', label: 'All' },
                 { id: 'SUPPORT', label: 'Support' },
@@ -317,7 +317,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
             </div>
 
             {/* Section Header */}
-            <div className="px-6 pt-3 pb-1 bg-white">
+            <div className="px-3 sm:px-6 pt-3 pb-1 bg-white">
               <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">
                 Latest
               </span>
@@ -372,7 +372,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
             </div>
 
             {/* Bottom Footer Action Bar */}
-            <div className="px-6 py-3.5 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between text-xs text-gray-500 shrink-0">
+            <div className="px-3 sm:px-6 py-3 border-t border-gray-100 bg-gray-50/60 flex items-center justify-between gap-2 text-xs text-gray-500 shrink-0">
               <span className="font-medium">{filteredNotifications.length} items shown</span>
               <button
                 type="button"

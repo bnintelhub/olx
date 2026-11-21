@@ -125,11 +125,11 @@ export const AdCard: React.FC<AdCardProps> = ({
       </div>
 
       {/* Content */}
-      <div className="p-4 flex flex-col flex-1 justify-between gap-3">
+      <div className="p-2.5 sm:p-4 flex flex-col flex-1 justify-between gap-2 sm:gap-3">
         <div>
           {/* Price & Negotiation */}
           <div className="flex items-baseline justify-between gap-2">
-            <span className="text-xl font-bold text-slate-900 tracking-tight tabular-nums font-heading">
+            <span className="text-base sm:text-xl font-bold text-slate-900 tracking-tight tabular-nums font-heading">
               {formatCurrency(ad.price)}
             </span>
             {ad.isNegotiable && (

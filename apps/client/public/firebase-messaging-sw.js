@@ -21,7 +21,7 @@ const setupMessaging = (config) => {
     }
     const messaging = firebase.messaging();
 
-    // Background push notification handler (WhatsApp style)
+    // Background push notification handler
     messaging.onBackgroundMessage((payload) => {
       console.log('[SW] Received background push message:', payload);
 

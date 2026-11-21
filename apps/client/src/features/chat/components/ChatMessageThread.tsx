@@ -451,7 +451,7 @@ export const ChatMessageThread: React.FC<ChatMessageThreadProps> = React.memo(({
         </div>
       )}
 
-      {/* Input Box Bar - WhatsApp Style */}
+      {/* Message input bar */}
       <div className="p-2.5 sm:p-3 bg-[#f0f2f5] border-t border-gray-200 flex-shrink-0">
         {imagePreviewUrl && (
           <div className="mb-2 relative inline-block">

@@ -11,12 +11,15 @@ import { UserFeatureModal } from '../UserFeatureModal';
 import { ReportAdModal } from '../ReportAdModal';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { useUIStore } from '@/stores/useUIStore';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ADS_QUERY_KEYS } from '@/features/ads/hook/useAdsQuery';
 import { useChatNotificationListener } from '@/features/chat/hooks/useChatNotificationListener';
 import { PushNotificationPrompt } from '@/features/notifications/components/PushNotificationPrompt';
 import { usePushNotifications } from '@/features/notifications/usePushNotifications';
 import { useNotificationSSE } from '@/features/notifications/useNotificationSSE';
+import { NotificationModal } from '../NotificationModal';
+import { Bell } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export const AppLayout: React.FC = () => {
   useChatNotificationListener();
@@ -30,6 +33,19 @@ export const AppLayout: React.FC = () => {
 
   const isChatPage = location.pathname.startsWith('/chat');
   const showNavbar = location.pathname === '/';
+  const showPageHeader = location.pathname !== '/' && !isChatPage;
+  const notification = useUIStore();
+
+  const { data: notifData } = useQuery<{ count: number }>({
+    queryKey: ['notifications-unread-count', user?.id],
+    queryFn: async () => {
+      const res = await apiClient.get('/notifications/unread-count');
+      return res.data;
+    },
+    enabled: Boolean(user?.id),
+    staleTime: 5000,
+  });
+  const unreadNotifications = notifData?.count || 0;
 
   // Keep route transitions independent of the previous page's scroll position.
   React.useLayoutEffect(() => {
@@ -94,8 +110,52 @@ export const AppLayout: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex flex-col bg-[#F5F7F8] ${isChatPage ? 'h-screen overflow-hidden' : ''}`}>
-      {/* WhatsApp-style Push Notification Permission Prompt */}
+      {/* Push Notification Permission Prompt */}
       <PushNotificationPrompt />
+
+      {showPageHeader && (
+        <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto flex h-12 max-w-[1500px] items-center justify-between px-4 sm:px-6 lg:px-8">
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 text-sm font-bold text-[#002f34] transition hover:text-teal-700"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#002f34] text-xs font-black text-white">
+                BLX
+              </span>
+              <span className="hidden sm:inline">BLX Orbit</span>
+            </button>
+
+            {user && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (notification.isNotificationOpen) notification.closeNotification();
+                  else notification.openNotification();
+                }}
+                className="relative flex h-9 w-9 items-center justify-center rounded-full text-[#002f34] transition hover:bg-slate-100"
+                aria-label="Open notifications"
+                title="Notifications"
+              >
+                <Bell className="h-5 w-5" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -right-0.5 -top-0.5 flex min-w-[18px] h-[18px] items-center justify-center rounded-full bg-[#00a49f] px-1 text-[10px] font-bold text-white">
+                    {unreadNotifications > 99 ? '99+' : unreadNotifications}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        </header>
+      )}
+
+      {showPageHeader && user && (
+        <NotificationModal
+          isOpen={notification.isNotificationOpen}
+          onClose={notification.closeNotification}
+        />
+      )}
 
       {/* Navbar (Rendered across the application except full-screen chat) */}
       {showNavbar && (

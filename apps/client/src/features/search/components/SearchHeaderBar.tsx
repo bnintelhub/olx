@@ -34,9 +34,9 @@ export const SearchHeaderBar: React.FC<SearchHeaderBarProps> = ({
   return (
     <div className="bg-white border-b border-[#E5EAED] sticky top-0 z-30 shadow-xs">
       <div className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 py-2.5">
-        <div className="flex items-center justify-between gap-4 sm:gap-6">
+        <div className="flex items-center justify-between gap-2 sm:gap-6">
           {/* Left: Home / Category breadcrumb */}
-          <div className="flex items-center gap-2 text-sm min-w-0">
+          <div className="hidden sm:flex items-center gap-2 text-sm min-w-0">
             <button
               type="button"
               onClick={() => navigate('/')}
@@ -50,8 +50,8 @@ export const SearchHeaderBar: React.FC<SearchHeaderBarProps> = ({
           </div>
 
           {/* Right: Pill Search Bar matching OLX style */}
-          <form onSubmit={onSearchSubmit} className="flex items-center gap-2 shrink-0">
-            <div className="relative w-48 xs:w-60 sm:w-72 md:w-80 lg:w-96">
+          <form onSubmit={onSearchSubmit} className="flex w-full sm:w-auto items-center gap-2">
+            <div className="relative flex-1 sm:w-72 md:w-80 lg:w-96">
               <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <Input
                 value={localQuery}
@@ -62,7 +62,7 @@ export const SearchHeaderBar: React.FC<SearchHeaderBarProps> = ({
             </div>
             <Button
               type="submit"
-              className="h-9 px-5 text-xs sm:text-sm font-bold rounded-full bg-[#002f34] hover:bg-[#003f46] text-white shrink-0 cursor-pointer shadow-none transition"
+              className="h-9 px-3 sm:px-5 text-xs sm:text-sm font-bold rounded-full bg-[#002f34] hover:bg-[#003f46] text-white shrink-0 cursor-pointer shadow-none transition"
             >
               Search
             </Button>

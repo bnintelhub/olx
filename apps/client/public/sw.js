@@ -184,7 +184,7 @@ try {
   console.warn('[SW] Firebase messaging initialization skipped or offline:', err);
 }
 
-// Notification Click Handler (WhatsApp style: focuses active tab or opens new chat window)
+// Notification click handler: focuses active tab or opens a new chat window
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const clickAction = event.notification.data?.click_action || '/chat';

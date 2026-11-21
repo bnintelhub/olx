@@ -158,9 +158,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80">
-      <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8 py-2.5">
+      <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-2 px-3 sm:flex-nowrap sm:gap-4 sm:px-6 lg:px-8 py-2.5">
         {/* Brand Logo */}
-        <div className="flex items-center gap-3">
+        <div className="hidden sm:flex items-center gap-3">
           <button
             onClick={() => {
               if (onLogoClick) onLogoClick();
@@ -191,7 +191,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ORBIT
               </span>
             </div>
-            <span className="hidden sm:inline-block rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+            <span className="hidden lg:inline-block rounded bg-slate-100 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
               India
             </span>
           </button>
@@ -210,18 +210,20 @@ export const Navbar: React.FC<NavbarProps> = ({
         />
 
         {/* Global Search Bar with Live Suggestions */}
-        <NavbarSearchBar
-          keyword={keyword}
-          onKeywordChange={setKeyword}
-          onSubmit={handleSearchSubmit}
-          onSelectSuggestion={handleSelectSuggestion}
-          suggestions={suggestions}
-          isSuggestionsOpen={isSuggestionsOpen}
-          setIsSuggestionsOpen={setIsSuggestionsOpen}
-        />
+        <div className="order-3 basis-full sm:order-none sm:basis-auto sm:flex-1 sm:max-w-2xl">
+          <NavbarSearchBar
+            keyword={keyword}
+            onKeywordChange={setKeyword}
+            onSubmit={handleSearchSubmit}
+            onSelectSuggestion={handleSelectSuggestion}
+            suggestions={suggestions}
+            isSuggestionsOpen={isSuggestionsOpen}
+            setIsSuggestionsOpen={setIsSuggestionsOpen}
+          />
+        </div>
 
         {/* User Navigation / Quick Actions */}
-        <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
+        <div className="ml-auto flex items-center gap-1 sm:ml-0 sm:gap-2.5 lg:gap-4 shrink-0">
           {/* Notifications & Inquiries */}
           {user && (
             <>
@@ -276,7 +278,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onOpenWishlist}
-            className="relative p-2 text-[#002f34] hover:bg-gray-100 rounded-full transition cursor-pointer"
+            className="relative hidden p-2 text-[#002f34] hover:bg-gray-100 rounded-full transition cursor-pointer sm:block"
             title="Favourites"
           >
             <Heart size={20} />
@@ -307,7 +309,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={() => openAuthModal()}
-              className="text-sm font-bold text-[#002f34] hover:underline underline-offset-4 cursor-pointer px-2 py-1"
+                className="hidden text-sm font-bold text-[#002f34] hover:underline underline-offset-4 cursor-pointer px-2 py-1 sm:block"
             >
               Login
             </button>
@@ -317,10 +319,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             type="button"
             onClick={onOpenPostAd}
-            className="group relative flex items-center gap-1.5 rounded-lg bg-[#FFCE32] hover:bg-[#eec128] px-4 py-2 text-xs font-semibold text-[#002F34] transition-colors active:scale-98 cursor-pointer shadow-xs"
+            className="group relative flex items-center gap-1.5 rounded-lg bg-[#FFCE32] hover:bg-[#eec128] px-2.5 sm:px-4 py-2 text-xs font-semibold text-[#002F34] transition-colors active:scale-98 cursor-pointer shadow-xs"
           >
             <Plus size={15} />
-            <span>Sell</span>
+            <span className="hidden sm:inline">Sell</span>
           </button>
         </div>
       </div>

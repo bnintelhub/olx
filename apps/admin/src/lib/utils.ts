@@ -23,8 +23,14 @@ export function formatDate(date: string | Date): string {
 export function formatMediaUrl(url?: string | null): string {
   if (!url) return '';
   const trimmed = url.trim();
+  if (!trimmed || trimmed === '/' || /^\/(?:media|uploads)\/?$/i.test(trimmed)) {
+    return '';
+  }
   if (trimmed.startsWith('/') || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
     return trimmed;
+  }
+  if (!trimmed.includes('/') && !/\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(trimmed)) {
+    return '';
   }
   return `/media/${trimmed}`;
 }

@@ -104,6 +104,16 @@ export const NavbarCityDropdown: React.FC<NavbarCityDropdownProps> = ({
 
   return (
     <>
+      <button
+        type="button"
+        onClick={() => setIsModalOpen(true)}
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#003F46] text-[#102A33] md:hidden"
+        title={`Location: ${selectedCity}`}
+        aria-label={`Location: ${selectedCity}`}
+      >
+        <MapPin size={17} />
+      </button>
+
       <div ref={dropdownRef} className="relative hidden md:block w-56 lg:w-64">
         <button
           type="button"

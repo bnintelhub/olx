@@ -58,9 +58,9 @@ export const CategoryGrid: React.FC = () => {
     return (
       <section className="mx-auto max-w-[1500px] px-4 sm:px-6 lg:px-8 pt-8">
         <div className="h-6 bg-slate-200 rounded w-48 mb-4 animate-pulse" />
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="flex sm:grid sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 overflow-x-auto no-scrollbar pb-1">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-white rounded-2xl p-3 border border-slate-200/70 h-28 animate-pulse" />
+            <div key={i} className="min-w-[calc(50%-6px)] sm:min-w-0 bg-white rounded-2xl p-3 border border-slate-200/70 h-28 animate-pulse" />
           ))}
         </div>
       </section>
@@ -95,7 +95,7 @@ export const CategoryGrid: React.FC = () => {
       </div>
 
       {/* Grid: max 2 rows, compact cards with small images */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+      <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 snap-x snap-mandatory sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 md:grid-cols-4 lg:grid-cols-6 sm:gap-4">
         {visibleCategories.map((cat) => {
           const totalRealAds = calculateTotalAds(cat);
           const imgUrl = getServerImageUrl(cat);
@@ -104,7 +104,7 @@ export const CategoryGrid: React.FC = () => {
             <div
               key={cat.id}
               onClick={() => handleCategoryClick(cat)}
-              className="group bg-white rounded-2xl p-3 border border-slate-200/80 hover:border-teal-600/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col items-center justify-between text-center min-h-[120px]"
+              className="group min-w-[calc(50%-6px)] snap-start bg-white rounded-2xl p-3 border border-slate-200/80 hover:border-teal-600/40 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 cursor-pointer flex flex-col items-center justify-between text-center min-h-[120px] sm:min-w-0"
             >
               {/* Category Image - Compact to fit screen without scrolling */}
               <div className="w-full h-16 sm:h-20 flex items-center justify-center p-1.5 rounded-xl bg-slate-50/70 group-hover:bg-slate-100/60 transition-colors overflow-hidden">

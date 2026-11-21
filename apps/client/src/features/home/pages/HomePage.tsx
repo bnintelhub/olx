@@ -59,7 +59,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenPostAd }) => {
 
         {/* Loading State */}
         {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
@@ -108,7 +108,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onOpenPostAd }) => {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5 sm:gap-5">
                 {ads.map((ad) => (
                   <div key={ad.id} className="h-full">
                     <AdCard ad={ad} />

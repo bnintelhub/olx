@@ -77,7 +77,7 @@ export function useChatNotificationListener(): void {
       const notificationBody =
         burstCount > 1 ? `${burstCount} new messages: "${text.slice(0, 50)}"` : text;
 
-      // 1. Browser Native Notification (WhatsApp style)
+      // 1. Browser native notification
       if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
         try {
           const options: any = {

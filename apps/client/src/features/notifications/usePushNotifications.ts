@@ -34,7 +34,7 @@ export function usePushNotifications() {
     });
   }, [user, permission]);
 
-  // Handle foreground notifications with WhatsApp-like toast banner & chime
+  // Handle foreground notifications with a toast banner and chime
   useEffect(() => {
     if (!user || !isFirebaseConfigured()) return;
 
@@ -83,13 +83,13 @@ export function usePushNotifications() {
       setPermission(result);
 
       if (result === 'granted') {
-        toast.success('WhatsApp-style chat notifications enabled!');
+        toast.success('Chat notifications enabled!');
 
         // Instant audio & desktop notification confirmation
         try {
           playNewMessageSound();
           new Notification('BLX Orbit — Chat Alerts Active', {
-            body: 'WhatsApp-style instant notifications enabled! You will be notified of new messages.',
+            body: 'Instant notifications enabled! You will be notified of new messages.',
             icon: '/icon-192.svg',
             badge: '/icon-192.svg',
           });

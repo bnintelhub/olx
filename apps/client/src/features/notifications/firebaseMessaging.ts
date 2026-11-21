@@ -146,7 +146,7 @@ export async function requestAndRegisterPushToken(): Promise<string | null> {
 }
 
 /**
- * Foreground message handler (WhatsApp style)
+ * Foreground message handler
  */
 export async function setupForegroundPushListener(
   onForegroundMessage: (payload: any) => void

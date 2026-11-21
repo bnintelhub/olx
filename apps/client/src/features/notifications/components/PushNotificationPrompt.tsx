@@ -45,7 +45,7 @@ export const PushNotificationPrompt: React.FC = () => {
                 Instant Chat Alerts
               </h4>
               <span className="bg-emerald-500/20 text-emerald-400 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-emerald-500/30">
-                WhatsApp-style
+                Instant alerts
               </span>
             </div>
             <p className="text-[11px] text-gray-300 font-medium leading-tight mt-0.5">
@@ -65,7 +65,7 @@ export const PushNotificationPrompt: React.FC = () => {
       </div>
 
       <div className="mt-3 text-xs text-gray-200 leading-relaxed font-body">
-        Enable instant WhatsApp-style push notifications for new chat messages.
+        Enable instant push notifications for new chat messages.
       </div>
 
       <div className="mt-4 flex items-center justify-end gap-2 pt-2 border-t border-white/10">

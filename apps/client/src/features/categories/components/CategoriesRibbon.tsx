@@ -55,14 +55,14 @@ export const CategoriesRibbon: React.FC = () => {
     <div className="bg-white border-b border-slate-200/80 select-none text-xs relative">
       <div className="mx-auto flex max-w-[1500px] items-center px-4 sm:px-6 lg:px-8 py-2">
         {/* All Categories Dropdown Trigger */}
-        <div className="relative shrink-0 pr-4 sm:pr-6 border-r border-slate-200" ref={dropdownRef}>
+        <div className="relative shrink-0 pr-2 sm:pr-6 border-r border-slate-200" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setIsDropdownOpen((prev) => !prev)}
             className="flex items-center gap-1.5 font-semibold text-slate-800 hover:text-[#002F34] transition-colors cursor-pointer"
           >
             <LayoutGrid size={13} className="text-slate-500" />
-            <span>All categories</span>
+            <span className="hidden sm:inline">All categories</span>
             <ChevronDown
               size={13}
               className={`transition-transform duration-200 text-slate-400 ${isDropdownOpen ? 'rotate-180' : ''}`}
@@ -78,7 +78,7 @@ export const CategoriesRibbon: React.FC = () => {
               />
 
               {/* High z-index dropdown */}
-              <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl z-[60] text-slate-800">
+              <div className="absolute left-0 top-full mt-2 w-[calc(100vw-24px)] sm:w-96 rounded-xl border border-slate-200 bg-white p-2.5 shadow-xl z-[60] text-slate-800">
                 <button
                   type="button"
                   onClick={() => handleSelectCategory('')}
@@ -135,7 +135,7 @@ export const CategoriesRibbon: React.FC = () => {
         </div>
 
         {/* Horizontal Category Items (with horizontal scrolling) */}
-        <div className="flex-1 flex items-center gap-6 sm:gap-7 px-4 sm:px-6 overflow-x-auto scrollbar-none flex-nowrap shrink-0">
+        <div className="flex-1 flex items-center gap-5 sm:gap-7 px-3 sm:px-6 overflow-x-auto no-scrollbar flex-nowrap min-w-0">
           {categories.slice(0, 12).map((cat) => {
             const isActive = currentCategory === cat.slug;
             return (
