@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
 import { delCache } from '../../config/redis';
 import { UpdateProfileInput } from './users.schema';
+import { formatAdImages } from '../listings/listings.service';
 
 export class UsersService {
   static async getProfile(userId: string) {
@@ -81,7 +82,10 @@ export class UsersService {
           include: {
             category: { select: { id: true, name: true, slug: true } },
             location: { select: { id: true, name: true, slug: true } },
-            images: { orderBy: { sortOrder: 'asc' }, take: 1 },
+            images: {
+              include: { mediaAsset: true },
+              orderBy: [{ isCover: 'desc' }, { sortOrder: 'asc' }],
+            },
           },
         },
       },
@@ -89,6 +93,7 @@ export class UsersService {
 
     return favourites.map((f) => ({
       ...f.ad,
+      images: formatAdImages(f.ad.images),
       favouritedAt: f.createdAt,
     }));
   }

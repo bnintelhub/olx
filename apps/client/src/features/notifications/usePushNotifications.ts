@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/useAuth';
 import { apiClient } from '@/lib/api-client';
-import { playNewMessageSound } from '@/features/chat/utils/chatSound';
+import { playNotificationSound } from '@/lib/soundService';
 import {
   isFirebaseConfigured,
   requestAndRegisterPushToken,
@@ -40,7 +40,7 @@ export function usePushNotifications() {
 
     let unsubscribe: (() => void) | null = null;
     void setupForegroundPushListener((payload) => {
-      playNewMessageSound();
+      playNotificationSound();
 
       const title = payload.notification?.title || payload.data?.title || payload.data?.senderName || 'New Message';
       const body = payload.notification?.body || payload.data?.body || payload.data?.messageText || 'Sent a new message';
@@ -87,7 +87,7 @@ export function usePushNotifications() {
 
         // Instant audio & desktop notification confirmation
         try {
-          playNewMessageSound();
+          playNotificationSound();
           new Notification('BLX Orbit — Chat Alerts Active', {
             body: 'Instant notifications enabled! You will be notified of new messages.',
             icon: '/icon-192.svg',

@@ -178,27 +178,6 @@ export const AdSellerCard: React.FC<AdSellerCardProps> = ({
               </Button>
             )}
           </div>
-
-          {/* Mobile Action Buttons inside Seller Details */}
-          <div className="lg:hidden space-y-2.5 pt-1">
-            <Button
-              type="button"
-              onClick={() => setIsOfferOpen(true)}
-              variant="sell"
-              className="w-full text-sm font-bold shadow-xs py-4"
-            >
-              Make an Offer
-            </Button>
-            <Button
-              type="button"
-              onClick={() => onStartChat()}
-              variant="default"
-              className="w-full text-sm font-bold gap-2 py-4"
-            >
-              <MessageCircle className="w-4 h-4 shrink-0" />
-              <span>Chat with Seller</span>
-            </Button>
-          </div>
         </CardContent>
       </Card>
 

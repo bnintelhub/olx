@@ -198,8 +198,11 @@ export const MyAdsModal: React.FC<{
             <div className="space-y-4">
               {filteredAds.map((ad) => {
                 const coverImage =
+                  ad.images?.find((i) => i.isCover)?.url ||
                   ad.images?.[0]?.url ||
                   ad.images?.[0]?.thumbnailUrl ||
+                  ad.images?.[0]?.displayUrl ||
+                  (ad.images?.[0] as any)?.mediaAsset?.storageKey ||
                   null;
                 const isItemUpdating = updatingId === ad.id;
 

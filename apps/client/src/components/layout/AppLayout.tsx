@@ -150,13 +150,6 @@ export const AppLayout: React.FC = () => {
         </header>
       )}
 
-      {showPageHeader && user && (
-        <NotificationModal
-          isOpen={notification.isNotificationOpen}
-          onClose={notification.closeNotification}
-        />
-      )}
-
       {/* Navbar (Rendered across the application except full-screen chat) */}
       {showNavbar && (
         <Navbar
@@ -206,6 +199,13 @@ export const AppLayout: React.FC = () => {
         onClose={ui.closeWishlist}
         onSelectAd={(ad) => navigate(`/ad/${ad.id}`)}
       />
+
+      {user && (
+        <NotificationModal
+          isOpen={ui.isNotificationOpen}
+          onClose={ui.closeNotification}
+        />
+      )}
 
       <UserProfileModal
         isOpen={ui.isProfileOpen}

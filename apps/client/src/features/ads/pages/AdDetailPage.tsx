@@ -7,7 +7,6 @@ import {
   MapPin,
   ArrowLeft,
   Sparkles,
-  MessageCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAdDetailQuery, useSimilarAdsQuery } from '../hook/useAdsQuery';
@@ -17,9 +16,8 @@ import { AdLocationMap } from '../components/AdLocationMap';
 import { AdSpecifications } from '../components/AdSpecifications';
 import { AdSellerCard } from '../components/AdSellerCard';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
-import { formatCurrency, formatPostingDate } from '@/lib/utils';
+import { formatPostingDate } from '@/lib/utils';
 import { isAdWishlisted, toggleWishlist, WISHLIST_EVENT } from '@/utils/wishlist';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { useUIStore } from '@/stores/useUIStore';
@@ -206,16 +204,8 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
             {/* Smooth Shadcn Carousel with Advance Image Preloading */}
             <AdImageGallery images={ad.images || []} title={ad.title} />
 
-            {/* Mobile Price & Details Card (hidden on desktop) */}
-            <div className="lg:hidden bg-white p-5 rounded-2xl border border-[#E5EAED] shadow-sm space-y-4">
-              <div className="flex items-baseline justify-between">
-                <span className="text-3xl font-extrabold text-[#002f34]">
-                  {formatCurrency(ad.price)}
-                </span>
-                {ad.isNegotiable && (
-                  <Badge variant="success">Price Negotiable</Badge>
-                )}
-              </div>
+            {/* Mobile Title & Details Card (hidden on desktop; price, make offer & chat are sticky at bottom) */}
+            <div className="lg:hidden bg-white p-5 rounded-2xl border border-[#E5EAED] shadow-sm space-y-3">
               <h1 className="text-lg font-bold text-gray-900 leading-snug">{ad.title}</h1>
               <div className="flex items-center justify-between text-xs text-gray-500 pt-2 border-t border-gray-100">
                 <div className="flex items-center gap-1">
@@ -223,27 +213,6 @@ export const AdDetailPage: React.FC<AdDetailPageProps> = ({ onOpenChat }) => {
                   <span>{locationText}</span>
                 </div>
                 <span>Posted {formatPostingDate(ad.createdAt)}</span>
-              </div>
-
-              {/* Action buttons for mobile */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <Button
-                  type="button"
-                  onClick={() => setIsOfferOpen(true)}
-                  variant="sell"
-                  className="w-full text-sm font-bold shadow-xs py-4"
-                >
-                  Make an Offer
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => handleStartChat()}
-                  variant="default"
-                  className="w-full text-sm font-bold gap-2 py-4"
-                >
-                  <MessageCircle className="w-4 h-4 shrink-0" />
-                  <span>Chat with Seller</span>
-                </Button>
               </div>
             </div>
 

@@ -151,3 +151,26 @@ FIREBASE_STORAGE_BUCKET=your_project.firebasestorage.app
 FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 FIREBASE_APP_ID=your_app_id
 ```
+
+---
+
+## 6. Sound & Audio Notification Engine
+
+The client web application utilizes a unified, zero-latency Web Audio API engine (`apps/client/src/lib/soundService.ts`) with dual audio assets and edge-case handling.
+
+### 1. Sound Assets & Roles
+
+| Audio Asset | Public Route | Event Context & Trigger |
+| :--- | :--- | :--- |
+| **`NotificationSound.mp3`** | `/sounds/NotificationSound.mp3` | **General Notifications & Outside Conversation Alerts**:<br/>• SSE platform events (support ticket replies, admin broadcasts)<br/>• Foreground Web Push notifications<br/>• New incoming chat messages when the user is **OUTSIDE** that conversation thread or when the browser tab is **in the background / minimized** (`document.hidden === true`). |
+| **`ConversationSound.mp3`** | `/sounds/ConversationSound.mp3` | **In-Conversation Chat Messages**:<br/>• New incoming chat message when the user is **actively viewing** that exact conversation thread (`isCurrentActive === true && document.visibilityState === 'visible'`). |
+
+### 2. Audio Engine Design (`soundService.ts`)
+
+- **Zero-Latency Buffer Preloading**: On user initialization, both MP3 files are fetched and decoded into `AudioBuffer` objects in memory. Subsequent playbacks trigger instantly (0ms latency) via `AudioBufferSourceNode`.
+- **Dual-Tier Fallback**: If Web Audio API is unavailable or decoding fails, preloaded HTML5 `<audio>` elements serve as seamless fallbacks.
+- **Autoplay Policy Auto-Unlock**: Listens for the user's first interaction (`click`, `keydown`, `touchstart`) and immediately resumes the suspended `AudioContext` so background alerts play freely without browser blocking.
+- **Multi-Tab Coordination Lock**: Synchronizes playback across multiple open browser tabs using a shared timestamp lock in `localStorage`. Only the focused/visible tab plays audio, completely preventing jarring multi-tab sound echoes.
+- **Burst & Rapid-Message Throttling**: Enforces a minimum 250ms cooldown per sound type to avoid audio distortion or buzzing during fast typing floods.
+- **Self-Message Suppression**: Evaluates `senderId !== currentUserId` to strictly prevent playing notification sounds for messages sent by the logged-in user.
+

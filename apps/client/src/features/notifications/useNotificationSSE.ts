@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { apiClient } from '@/lib/api-client';
-import { playNewMessageSound } from '@/features/chat/utils/chatSound';
+import { playNotificationSound } from '@/lib/soundService';
 
 export interface SSENotificationPayload {
   id: string;
@@ -160,7 +160,7 @@ export function useNotificationSSE() {
         }
 
         // Play audio chime
-        playNewMessageSound();
+        playNotificationSound();
 
         // Display in-app Sonner toast with deep-linking & deterministic dedup ID
         const ticketId = data.data?.ticketId;

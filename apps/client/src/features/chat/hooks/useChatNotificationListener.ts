@@ -4,7 +4,7 @@ import type { Socket } from 'socket.io-client';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/features/auth/stores/useAuthStore';
 import { useChatUnreadStore } from '../stores/useChatUnreadStore';
-import { playNewMessageSound } from '../utils/chatSound';
+import { playNotificationSound } from '@/lib/soundService';
 import { getChatSocket } from '../services/chatSocket.service';
 
 export function useChatNotificationListener(): void {
@@ -61,7 +61,7 @@ export function useChatNotificationListener(): void {
         return; // User is already inside this conversation; suppress push and toast
       }
 
-      playNewMessageSound();
+      playNotificationSound();
       useChatUnreadStore.getState().incrementUnread(1);
 
       const senderName = msg.sender?.profile?.name || 'New Message';

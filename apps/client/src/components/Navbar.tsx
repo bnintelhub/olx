@@ -12,7 +12,6 @@ import { CategoriesRibbon } from './CategoriesRibbon';
 import { NavbarCityDropdown } from './navbar/NavbarCityDropdown';
 import { NavbarSearchBar, SuggestionItem } from './navbar/NavbarSearchBar';
 import { NavbarUserMenu } from './navbar/NavbarUserMenu';
-import { NotificationModal } from './NotificationModal';
 import { useChatUnreadStore } from '@/features/chat/stores/useChatUnreadStore';
 
 interface NavbarProps {
@@ -250,12 +249,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 )}
               </button>
-
-              {/* Right Slide-Over Notification Drawer */}
-              <NotificationModal
-                isOpen={isNotificationOpen}
-                onClose={closeNotification}
-              />
             </>
           )}
 

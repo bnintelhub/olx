@@ -8,7 +8,7 @@ import { ChatConversationList, ConversationItem } from '../components/ChatConver
 import { ChatMessageThread, MessageItem } from '../components/ChatMessageThread';
 import { ChatErrorBoundary } from '../components/ChatErrorBoundary';
 import { ChatAuthRequired } from '../components/ChatAuthRequired';
-import { playNewMessageSound } from '../utils/chatSound';
+import { playNotificationSound, playConversationSound } from '@/lib/soundService';
 import { useChatUnreadStore } from '../stores/useChatUnreadStore';
 import { getChatSocket } from '../services/chatSocket.service';
 
@@ -97,7 +97,11 @@ export const ChatPage: React.FC = () => {
       const isFromMe = msg.senderId === user?.id;
 
       if (!isFromMe) {
-        playNewMessageSound();
+        if (isCurrentActive && document.visibilityState === 'visible') {
+          playConversationSound();
+        } else {
+          playNotificationSound();
+        }
       }
 
       if (isCurrentActive) {

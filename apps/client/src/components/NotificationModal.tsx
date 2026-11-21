@@ -54,6 +54,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
         void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count', user.id] });
       }
     } else if (shouldRender) {
+      setSelectedNotification(null);
       handleCloseAnimation();
     }
   }, [isOpen, user?.id]);
@@ -141,7 +142,6 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
   };
 
   const handleUserClose = () => {
-    handleCloseAnimation();
     onClose();
   };
 
@@ -193,14 +193,19 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
     if (ticketId) {
       void queryClient.invalidateQueries({ queryKey: ['client', 'support', 'ticket', ticketId] });
       void queryClient.invalidateQueries({ queryKey: ['client', 'support', 'tickets'] });
-      handleCloseAnimation();
-      navigate(`/support?ticketId=${ticketId}`);
-      return;
     }
 
-    if (notif.data?.clickUrl) {
-      handleCloseAnimation();
-      navigate(notif.data.clickUrl);
+    const targetUrl =
+      notif.data?.clickUrl ||
+      notif.data?.url ||
+      notif.data?.link ||
+      (ticketId ? `/support?ticketId=${ticketId}` : null) ||
+      (notif.data?.adId ? `/ad/${notif.data.adId}` : null) ||
+      (notif.data?.listingId ? `/ad/${notif.data.listingId}` : null);
+
+    if (targetUrl) {
+      onClose();
+      navigate(targetUrl);
       return;
     }
 
@@ -285,7 +290,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
             notification={selectedNotification}
             onBack={() => setSelectedNotification(null)}
             onOpenTicket={(tId) => {
-              handleCloseAnimation();
+              onClose();
               navigate(`/support?ticketId=${tId}`);
             }}
           />
@@ -377,7 +382,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
               <button
                 type="button"
                 onClick={() => {
-                  handleUserClose();
+                  onClose();
                   navigate('/support');
                 }}
                 className="text-[#002f34] font-bold hover:underline flex items-center gap-1.5 cursor-pointer"
