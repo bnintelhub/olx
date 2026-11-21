@@ -267,7 +267,7 @@ sequenceDiagram
         SocketServer->>BullMQ: Enqueue "push-notification" job
         BullMQ->>Worker: Consume push dispatch job
         Worker->>DB: Look up Seller FCM tokens & notification settings
-        Worker->>Seller: Dispatch WhatsApp-style Web Push Notification
+        Worker->>Seller: Dispatch web push notification
     end
 ```
 

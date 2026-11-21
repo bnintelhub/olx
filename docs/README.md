@@ -113,7 +113,7 @@ olx/
 - **Home & Catalog**: Hero banner with localized imagery, category ribbons, and algorithmic recommendation feeds.
 - **Search & Filters**: Multi-faceted search by keyword, price range, state, city, and dynamic category attributes.
 - **Ad Publishing (`PostAdModal`)**: Multi-step wizard supporting client-side image compression, attribute validation, and location tagging.
-- **Chat & Messaging (`/chat`)**: WhatsApp-style conversational thread supporting real-time presence indicators, delivered/read checkmarks, image attachments, and quick negotiation prompts.
+- **Chat & Messaging (`/chat`)**: Conversational thread supporting real-time presence indicators, delivered/read checkmarks, image attachments, and quick negotiation prompts.
 - **User Dashboard**: Listings manager ("My Ads"), status updates (Mark Sold, Renew), and personal wishlist.
 
 ### Administrative Portal (`apps/admin`)
