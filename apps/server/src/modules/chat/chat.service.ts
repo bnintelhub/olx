@@ -236,7 +236,7 @@ export class ChatService {
       };
     });
 
-    // Multi-level WhatsApp-style ordering:
+    // Multi-level conversation ordering:
     // 1. isPinned DESC: Pinned chats sit above unpinned chats
     // 2. pinnedAt DESC: Orders pinned chats so the most recently pinned sits at the very top
     // 3. lastActivityAt DESC: Places the newest chat or latest message right at the top of the unpinned list
@@ -618,7 +618,7 @@ export class ChatService {
     return { success: true, reportId: report.id, priority };
   }
 
-  // Pin or unpin a conversation for the user (WhatsApp style)
+  // Pin or unpin a conversation for the user
   static async togglePinConversation(userId: string, conversationId: string, isPinned?: boolean) {
     const conversation = await prisma.conversation.findUnique({
       where: { id: conversationId },

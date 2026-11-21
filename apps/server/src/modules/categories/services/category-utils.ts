@@ -39,6 +39,19 @@ export function formatCategoryImage(category: any) {
     };
   }
   if (category.iconUrl) {
+    const legacyIcon = category.iconUrl.trim();
+
+    // Ensure legacy iconUrl is an actual URL, relative path, or image file (not plain text or icon class)
+    const looksLikeMediaUrl =
+      /^https?:\/\//i.test(legacyIcon) || // Full HTTP/HTTPS URL
+      /^\/?(media|uploads)\//i.test(legacyIcon) || // Local media/uploads folder path
+      /[/?#]/.test(legacyIcon) || // Contains path/query/hash separators
+      /\.(avif|bmp|gif|jpe?g|png|svg|webp)$/i.test(legacyIcon); // Ends with a valid image extension
+
+    if (!looksLikeMediaUrl) {
+      return null;
+    }
+
     return {
       mediaId: null,
       url: toPublicMediaUrl(category.iconUrl),
