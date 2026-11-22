@@ -7,6 +7,11 @@
   "scripts": {
     "build": "tsc && tsc --noEmit -p prisma/tsconfig.json",
     "db:generate": "node scripts/prisma-cli.js generate",
+    "db:migrate:dev": "node scripts/prisma-cli.js migrate dev",
+    "db:migrate:deploy": "node scripts/prisma-cli.js migrate deploy",
+    "db:migrate:status": "node scripts/prisma-cli.js migrate status",
+    "db:migrate:resolve": "node scripts/prisma-cli.js migrate resolve",
+    "db:deploy": "node scripts/prisma-cli.js migrate deploy",
     "db:push": "node scripts/prisma-cli.js db push",
     "db:reset": "node scripts/prisma-cli.js db push --force-reset",
     "db:studio": "node scripts/prisma-cli.js studio",

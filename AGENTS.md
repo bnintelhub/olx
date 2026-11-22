@@ -198,12 +198,21 @@ pnpm dev:client    # Client web app on port 5173
 pnpm dev:workers   # Background workers on port 8081
 ```
 
-### Database & Seeding
+### Database & Migrations
 ```bash
 # Generate Prisma Client
 pnpm db:generate
 
-# Push schema changes to database
+# Apply pending migrations in production / staging
+pnpm db:migrate:deploy
+
+# Create new migrations during development
+pnpm db:migrate:dev
+
+# Check migration status
+pnpm db:migrate:status
+
+# Push schema changes to database (local prototyping only)
 pnpm db:push
 
 # Open Prisma Studio GUI
