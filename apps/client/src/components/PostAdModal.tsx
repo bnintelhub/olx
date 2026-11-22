@@ -16,8 +16,8 @@ import { PostAdDynamicFields, AttributeItem } from '@/features/ads/components/po
 import { PostAdMediaStep, ImageUploadItem } from '@/features/ads/components/post-ad/PostAdMediaStep';
 import { PostAdSuccessStep } from '@/features/ads/components/post-ad/PostAdSuccessStep';
 import { LocationPickerModal } from '../features/locations/components/LocationPickerModal';
-import { ImageCropModal } from '@/components/ImageCropModal';
-import { getImageDimensions } from '@/lib/image-utils';
+import { ImageCropModal, AspectRatioMode } from '@/components/ImageCropModal';
+import { getImageDimensions, autoSafeScaleImage } from '@/lib/image-utils';
 
 function numberToIndianWords(num: number): string {
   if (!num || isNaN(num) || num <= 0) return '';
@@ -57,8 +57,11 @@ export const PostAdModal: React.FC<{
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [isLocPickerOpen, setIsLocPickerOpen] = useState(false);
 
-  // Media
+  // Media & Dimension Cropping
   const [images, setImages] = useState<ImageUploadItem[]>([]);
+  const [preferredRatio, setPreferredRatio] = useState<AspectRatioMode>('4:3');
+  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  const [cropQueueIndex, setCropQueueIndex] = useState<number>(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const [cropModalState, setCropModalState] = useState<{
     isOpen: boolean;
@@ -148,43 +151,19 @@ export const PostAdModal: React.FC<{
       return;
     }
 
-    const oversizedFiles: File[] = [];
-    const normalFiles: File[] = [];
-
-    for (const file of validFiles) {
-      try {
-        const dims = await getImageDimensions(file);
-        if (dims.width > 5000 || dims.height > 5000) {
-          oversizedFiles.push(file);
-        } else {
-          normalFiles.push(file);
-        }
-      } catch {
-        normalFiles.push(file);
-      }
-    }
-
-    if (normalFiles.length > 0) {
-      const newItems: ImageUploadItem[] = normalFiles.map((file, idx) => ({
-        file,
-        previewUrl: URL.createObjectURL(file),
-        isCover: images.length === 0 && idx === 0,
-      }));
-      setImages((prev) => [...prev, ...newItems]);
-    }
-
-    if (oversizedFiles.length > 0) {
-      const first = oversizedFiles[0];
-      toast.info(`Image "${first.name}" exceeds 5000px. Adjust crop and focal point to fit.`);
-      setCropModalState({
-        isOpen: true,
-        file: first,
-      });
-    }
+    // Open Dimension & Crop modal directly for selected files
+    setCropQueue(validFiles);
+    setCropQueueIndex(0);
+    setCropModalState({
+      isOpen: true,
+      file: validFiles[0],
+      imageIndex: undefined,
+    });
   };
 
   const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
     if (cropModalState.imageIndex !== undefined) {
+      // Editing an existing image
       setImages((prev) =>
         prev.map((item, idx) =>
           idx === cropModalState.imageIndex
@@ -192,17 +171,90 @@ export const PostAdModal: React.FC<{
             : item
         )
       );
+      setCropModalState({ isOpen: false, file: null });
+      toast.success('Crop and format updated!');
+      return;
+    }
+
+    // Adding cropped file from queue
+    setImages((prev) => [
+      ...prev,
+      {
+        file: croppedFile,
+        previewUrl: newPreviewUrl,
+        isCover: prev.length === 0,
+      },
+    ]);
+
+    // Advance to next image in queue if multiple photos were selected
+    const nextIdx = cropQueueIndex + 1;
+    if (nextIdx < cropQueue.length) {
+      setCropQueueIndex(nextIdx);
+      setCropModalState({
+        isOpen: true,
+        file: cropQueue[nextIdx],
+        imageIndex: undefined,
+      });
     } else {
+      setCropModalState({ isOpen: false, file: null });
+      setCropQueue([]);
+      toast.success('All photos formatted and added successfully!');
+    }
+  };
+
+  // Skip cropping current image (adds as original, scaled safely if exceeding server limits)
+  const handleSkipCrop = async () => {
+    if (cropModalState.imageIndex !== undefined) {
+      setCropModalState({ isOpen: false, file: null });
+      return;
+    }
+
+    const currentFile = cropQueue[cropQueueIndex];
+    if (currentFile) {
+      const safeFile = await autoSafeScaleImage(currentFile, 4000);
+      const previewUrl = URL.createObjectURL(safeFile);
       setImages((prev) => [
         ...prev,
         {
-          file: croppedFile,
-          previewUrl: newPreviewUrl,
+          file: safeFile,
+          previewUrl,
           isCover: prev.length === 0,
         },
       ]);
     }
-    toast.success('Crop and focal point applied successfully!');
+
+    const nextIdx = cropQueueIndex + 1;
+    if (nextIdx < cropQueue.length) {
+      setCropQueueIndex(nextIdx);
+      setCropModalState({
+        isOpen: true,
+        file: cropQueue[nextIdx],
+        imageIndex: undefined,
+      });
+    } else {
+      setCropModalState({ isOpen: false, file: null });
+      setCropQueue([]);
+      toast.success('Photo added as original.');
+    }
+  };
+
+  // Add all remaining photos without cropping (scaled safely if exceeding server limits)
+  const handleSkipAllCrop = async () => {
+    const remaining = cropQueue.slice(cropQueueIndex);
+    const scaledItems: ImageUploadItem[] = await Promise.all(
+      remaining.map(async (file, idx) => {
+        const safeFile = await autoSafeScaleImage(file, 4000);
+        return {
+          file: safeFile,
+          previewUrl: URL.createObjectURL(safeFile),
+          isCover: images.length === 0 && idx === 0,
+        };
+      })
+    );
+    setImages((prev) => [...prev, ...scaledItems]);
+    setCropModalState({ isOpen: false, file: null });
+    setCropQueue([]);
+    toast.success(`${remaining.length} photos added.`);
   };
 
   const handleRemoveImage = (index: number) => {
@@ -461,6 +513,8 @@ export const PostAdModal: React.FC<{
               {/* Media Uploads */}
               <PostAdMediaStep
                 images={images}
+                preferredRatio={preferredRatio}
+                onRatioChange={setPreferredRatio}
                 onAddFiles={handleAddFiles}
                 onRemoveImage={handleRemoveImage}
                 onSetCoverImage={handleSetCoverImage}
@@ -559,8 +613,17 @@ export const PostAdModal: React.FC<{
       <ImageCropModal
         isOpen={cropModalState.isOpen}
         file={cropModalState.file}
-        onClose={() => setCropModalState({ isOpen: false, file: null })}
+        currentIndex={cropQueueIndex}
+        totalQueue={cropModalState.imageIndex !== undefined ? 1 : cropQueue.length}
+        defaultRatio={preferredRatio}
+        onRatioChange={setPreferredRatio}
+        onClose={() => {
+          setCropModalState({ isOpen: false, file: null });
+          setCropQueue([]);
+        }}
         onApply={handleApplyCrop}
+        onSkip={handleSkipCrop}
+        onSkipAll={handleSkipAllCrop}
       />
     </div>
   );

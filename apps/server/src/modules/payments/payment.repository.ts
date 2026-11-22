@@ -228,5 +228,96 @@ export class PaymentRepository {
       return { order, transaction };
     });
   }
+
+  // Queries paginated payment orders for a specific user with transactions & listing metadata
+  static async findUserOrders(params: {
+    userId: string;
+    page?: number;
+    limit?: number;
+    status?: PaymentStatus | 'ALL';
+    purpose?: string;
+  }) {
+    const page = Math.max(1, params.page || 1);
+    const limit = Math.min(50, Math.max(1, params.limit || 10));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.PaymentOrderWhereInput = {
+      userId: params.userId,
+    };
+
+    if (params.status && params.status !== 'ALL') {
+      where.status = params.status as PaymentStatus;
+    }
+
+    if (params.purpose && params.purpose !== 'ALL') {
+      where.purpose = params.purpose as PaymentPurpose;
+    }
+
+    const [totalItems, orders, aggregates, statusCounts] = await Promise.all([
+      prisma.paymentOrder.count({ where }),
+      prisma.paymentOrder.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          listing: {
+            select: {
+              id: true,
+              title: true,
+              price: true,
+              images: {
+                take: 1,
+                include: { mediaAsset: true },
+                orderBy: { isCover: 'desc' },
+              },
+            },
+          },
+          transactions: {
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+      }),
+      prisma.paymentOrder.aggregate({
+        where: {
+          userId: params.userId,
+          status: PaymentStatus.SUCCESS,
+        },
+        _sum: {
+          amount: true,
+        },
+        _count: {
+          id: true,
+        },
+      }),
+      prisma.paymentOrder.groupBy({
+        by: ['status'],
+        where: { userId: params.userId },
+        _count: { id: true },
+      }),
+    ]);
+
+    const statusMap: Record<string, number> = {};
+    for (const sc of statusCounts) {
+      statusMap[sc.status] = sc._count.id;
+    }
+
+    return {
+      items: orders,
+      metrics: {
+        totalSpent: Number(aggregates._sum.amount || 0),
+        successfulOrdersCount: aggregates._count.id || 0,
+        statusCounts: statusMap,
+      },
+      pagination: {
+        page,
+        limit,
+        totalItems,
+        totalPages: Math.ceil(totalItems / limit),
+        hasNext: page * limit < totalItems,
+        hasPrev: page > 1,
+      },
+    };
+  }
 }
 

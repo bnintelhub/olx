@@ -90,7 +90,13 @@ export function buildMediaPath(params: MediaPathParams): string {
   if (isSingleFileResource(params.resource, params.mediaType)) {
     if (params.variant) {
       const variant = cleanSegment(params.variant);
+      if (params.mediaId) {
+        return `${resource}/${resourceId}/${mediaType}/${cleanSegment(params.mediaId)}/${variant}.${format}`;
+      }
       return `${resource}/${resourceId}/${mediaType}/${variant}.${format}`;
+    }
+    if (params.mediaId) {
+      return `${resource}/${resourceId}/${mediaType}/${cleanSegment(params.mediaId)}.${format}`;
     }
     return `${resource}/${resourceId}/${mediaType}.${format}`;
   }

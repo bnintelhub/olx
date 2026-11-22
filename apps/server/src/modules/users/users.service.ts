@@ -1,8 +1,10 @@
+import path from 'path';
 import { prisma } from '../../config/prisma';
 import { AppError } from '../../shared/errors/app-error';
 import { delCache } from '../../config/redis';
 import { UpdateProfileInput } from './users.schema';
 import { formatAdImages } from '../listings/listings.service';
+import { defaultStorage } from '../../integrations/storage/storage.adapter';
 
 export class UsersService {
   static async getProfile(userId: string) {
@@ -42,6 +44,39 @@ export class UsersService {
       });
     }
 
+    // If avatarUrl changed or was removed: delete previous avatar to keep disk clean
+    const currentProfile = await prisma.profile.findUnique({
+      where: { userId },
+      select: { avatarUrl: true },
+    });
+
+    if (
+      currentProfile?.avatarUrl &&
+      avatarUrl !== undefined &&
+      currentProfile.avatarUrl !== avatarUrl
+    ) {
+      const oldMatch = currentProfile.avatarUrl.match(/med_[a-zA-Z0-9]+/);
+      if (oldMatch) {
+        const oldAssets = await prisma.mediaAsset.findMany({
+          where: {
+            OR: [
+              { id: oldMatch[0] },
+              { storageKey: { contains: oldMatch[0] } },
+            ],
+          },
+        });
+        for (const old of oldAssets) {
+          if (old.storageKey) {
+            await defaultStorage.deleteMediaDirectory(path.dirname(old.storageKey)).catch(() => {});
+            const fullFile = path.join(defaultStorage.getUploadDir(), ...old.storageKey.split('/'));
+            await defaultStorage.deleteFile(fullFile).catch(() => {});
+          }
+          await defaultStorage.deleteMediaFiles(old.id).catch(() => {});
+          await prisma.mediaAsset.delete({ where: { id: old.id } }).catch(() => {});
+        }
+      }
+    }
+
     await prisma.profile.upsert({
       where: { userId },
       create: {
@@ -58,6 +93,25 @@ export class UsersService {
         ...(businessName !== undefined ? { businessName } : {}),
       },
     });
+
+    // Ensure the associated media asset is explicitly mapped to USER entity type
+    if (avatarUrl) {
+      const match = avatarUrl.match(/med_[a-zA-Z0-9]+/);
+      if (match) {
+        await prisma.mediaAsset.updateMany({
+          where: {
+            OR: [
+              { id: match[0] },
+              { storageKey: { contains: match[0] } },
+            ],
+          },
+          data: {
+            entityType: 'USER',
+            entityId: userId,
+          },
+        }).catch(() => {});
+      }
+    }
 
     await delCache(`user:${userId}`);
 

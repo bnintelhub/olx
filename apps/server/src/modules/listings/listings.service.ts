@@ -269,6 +269,8 @@ export class ListingsService {
                 name: true,
                 avatarUrl: true,
                 bio: true,
+                accountType: true,
+                businessName: true,
                 ratingAverage: true,
                 ratingCount: true,
                 isIdentityVerified: true,

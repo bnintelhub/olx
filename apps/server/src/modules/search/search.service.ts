@@ -370,6 +370,7 @@ export class SearchService {
         title: cat.name,
         categorySubtitle: cat.name.toUpperCase(),
         categorySlug: cat.slug,
+        imageUrl: null,
         type: 'CATEGORY' as const,
       }));
     }
@@ -415,6 +416,13 @@ export class SearchService {
         id: true,
         title: true,
         price: true,
+        images: {
+          take: 3,
+          include: {
+            mediaAsset: true,
+          },
+          orderBy: [{ isCover: 'desc' }, { sortOrder: 'asc' }],
+        },
         category: {
           select: {
             id: true,
@@ -434,6 +442,8 @@ export class SearchService {
       categorySubtitle?: string;
       categorySlug?: string;
       adId?: string;
+      imageUrl?: string | null;
+      price?: number;
       type: 'CATEGORY' | 'PRODUCT';
     }> = [];
 
@@ -443,6 +453,7 @@ export class SearchService {
         title: cat.name,
         categorySubtitle: (cat.parent?.name || cat.name).toUpperCase(),
         categorySlug: cat.slug,
+        imageUrl: null,
         type: 'CATEGORY',
       });
     }
@@ -454,12 +465,35 @@ export class SearchService {
       if (!seenTitles.has(lower)) {
         seenTitles.add(lower);
         const catName = ad.category?.parent?.name || ad.category?.name || 'ALL CATEGORIES';
+
+        let imageUrl: string | null = null;
+        for (const img of ad.images || []) {
+          const asset = img.mediaAsset as any;
+          const variants = (asset?.variants as any) || (asset?.variantsJson as any) || {};
+          const storageKey = asset?.storageKey || '';
+          const rawKey =
+            variants.thumbnail ||
+            variants.card ||
+            variants.url ||
+            variants.image ||
+            storageKey ||
+            (img as any).url ||
+            (img as any).originalUrl ||
+            '';
+          if (rawKey) {
+            imageUrl = toPublicMediaUrl(rawKey);
+            break;
+          }
+        }
+
         suggestions.push({
           id: `ad-${ad.id}`,
           title: cleanTitle,
           categorySubtitle: catName.toUpperCase(),
           categorySlug: ad.category?.slug,
           adId: ad.id,
+          imageUrl,
+          price: Number(ad.price),
           type: 'PRODUCT',
         });
       }

@@ -106,7 +106,7 @@ export const NavbarUserMenu: React.FC<NavbarUserMenuProps> = ({
             <button
               onClick={() => {
                 setIsOpen(false);
-                if (onOpenProfile) onOpenProfile();
+                navigate('/profile');
               }}
               className="flex w-full items-center gap-3 px-4 py-2.5 text-gray-700 hover:bg-gray-50 font-medium cursor-pointer"
             >
@@ -184,7 +184,7 @@ export const NavbarUserMenu: React.FC<NavbarUserMenuProps> = ({
             <button
               onClick={() => {
                 setIsOpen(false);
-                if (onOpenFeature) onOpenFeature('BILLING');
+                navigate('/billing');
               }}
               className="flex w-full items-center gap-3 px-4 py-2 text-gray-700 hover:bg-gray-50 cursor-pointer"
             >

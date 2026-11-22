@@ -23,7 +23,15 @@ export const adminOrdersQuerySchema = z.object({
   search: z.string().optional(),
 });
 
+export const userOrdersQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(50).default(10),
+  status: z.enum(['ALL', 'CREATED', 'INITIATED', 'PENDING', 'SUCCESS', 'FAILED', 'EXPIRED', 'REFUND_REQUESTED', 'REFUNDED']).default('ALL'),
+  purpose: z.string().optional(),
+});
+
 export type CreatePaymentOrderBody = z.infer<typeof createPaymentOrderSchema>;
 export type RefundPaymentBody = z.infer<typeof refundPaymentSchema>;
 export type AdminOrdersQuery = z.infer<typeof adminOrdersQuerySchema>;
+export type UserOrdersQuery = z.infer<typeof userOrdersQuerySchema>;
 

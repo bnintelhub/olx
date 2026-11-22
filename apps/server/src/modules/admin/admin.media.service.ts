@@ -209,7 +209,7 @@ export class AdminMediaService {
     // Scope-level disk consumption breakdown for storage graphs
     const scopeLabels: Record<string, { label: string; color: string }> = {
       LISTING: { label: 'Ad Listings', color: '#3b82f6' },
-      USER: { label: 'User Avatars', color: '#10b981' },
+      USER: { label: 'User Profiles', color: '#10b981' },
       CATEGORY: { label: 'Categories', color: '#f59e0b' },
       BANNER: { label: 'Banners', color: '#8b5cf6' },
       CHAT: { label: 'Chat Attachments', color: '#ec4899' },
@@ -290,7 +290,7 @@ export class AdminMediaService {
           fileSize: Number(m.sizeBytes),
           fileSizeFormatted: formatBytes(Number(m.sizeBytes)),
           status: m.status,
-          scope: m.entityType,
+          scope: m.entityType === 'USER' ? 'PROFILE' : m.entityType,
           thumbnailUrl: variants.thumbnail || variants.card || variants.large || null,
           createdAt: m.createdAt,
         };
@@ -307,6 +307,33 @@ export class AdminMediaService {
       await this.syncBannerMediaAssets().catch(() => {});
     }
 
+    // Auto-heal any media asset that is actively used as a user profile avatar
+    try {
+      const activeAvatars = await prisma.profile.findMany({
+        where: { avatarUrl: { not: null } },
+        select: { userId: true, avatarUrl: true },
+      });
+      for (const p of activeAvatars) {
+        if (!p.avatarUrl) continue;
+        const match = p.avatarUrl.match(/med_[a-zA-Z0-9]+/);
+        if (match) {
+          await prisma.mediaAsset.updateMany({
+            where: {
+              OR: [
+                { id: match[0] },
+                { storageKey: { contains: match[0] } },
+              ],
+              entityType: 'LISTING',
+            },
+            data: {
+              entityType: 'USER',
+              entityId: p.userId,
+            },
+          });
+        }
+      }
+    } catch {}
+
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -317,7 +344,8 @@ export class AdminMediaService {
       if ((scope as string) === 'UNATTACHED') {
         where.entityId = null;
       } else {
-        where.entityType = scope;
+        const targetScope = (scope as string) === 'PROFILE' ? 'USER' : scope;
+        where.entityType = targetScope;
       }
     }
     if (mimeType) {
@@ -382,7 +410,7 @@ export class AdminMediaService {
         status: effectiveStatus,
         isZeroByte,
         failureReason: effectiveFailureReason,
-        scope: m.entityType,
+        scope: m.entityType === 'USER' ? 'PROFILE' : m.entityType,
         isAttached: Boolean(m.entityId),
         attachedToId: m.entityId,
         diskPath: m.storageKey,
@@ -465,7 +493,7 @@ export class AdminMediaService {
       width: media.width,
       height: media.height,
       status: media.status,
-      scope: media.entityType,
+      scope: media.entityType === 'USER' ? 'PROFILE' : media.entityType,
       isAttached: Boolean(media.entityId),
       attachedToId: media.entityId,
       diskPath: media.storageKey,
@@ -497,11 +525,12 @@ export class AdminMediaService {
       throw new AppError(404, 'MEDIA_NOT_FOUND', `Media record "${id}" was not found`);
     }
 
+    const targetEntityType = (input.scope as string) === 'PROFILE' ? 'USER' : input.scope;
     const updated = await prisma.mediaAsset.update({
       where: { id },
       data: {
         originalName: input.originalName !== undefined ? input.originalName : existing.originalName,
-        entityType: input.scope !== undefined ? input.scope : existing.entityType,
+        entityType: targetEntityType !== undefined ? targetEntityType : existing.entityType,
         entityId: input.attachedToId !== undefined ? input.attachedToId : existing.entityId,
         status: input.status !== undefined ? input.status : existing.status,
       },

@@ -19,6 +19,7 @@ import { queuePaymentFulfillmentJob } from '../../jobs/payment-fulfillment.job';
 import { PayUWebhookService } from './providers/payu/payu.webhook';
 import { assertValidTransition } from './payment.state-machine';
 import { PaymentNotificationService } from './payment-notification.service';
+import { toPublicMediaUrl } from '../../shared/utils/media-url.util';
 
 export class PaymentService {
   private static provider: PaymentProvider = new PayUProvider();
@@ -731,6 +732,69 @@ export class PaymentService {
 
     return {
       items: formattedItems,
+      pagination: result.pagination,
+    };
+  }
+
+  // Returns paginated payment orders & metrics for the authenticated user
+  static async getUserPaymentHistory(
+    userId: string,
+    params: {
+      page?: number;
+      limit?: number;
+      status?: PaymentStatus | 'ALL';
+      purpose?: string;
+    }
+  ) {
+    const result = await PaymentRepository.findUserOrders({
+      userId,
+      ...params,
+    });
+
+    const formattedItems = result.items.map((order) => {
+      const latestTxn = order.transactions[0];
+      const product = PRODUCT_CATALOG[order.productId];
+
+      let listingCoverUrl: string | null = null;
+      if (order.listing?.images?.[0]?.mediaAsset) {
+        const asset = order.listing.images[0].mediaAsset;
+        const variants = (asset?.variants as any) || {};
+        const rawKey = variants.url || variants.image || asset.storageKey || '';
+        listingCoverUrl = toPublicMediaUrl(rawKey);
+      }
+
+      return {
+        id: order.id,
+        invoiceNumber: `INV-${new Date(order.createdAt).getFullYear()}-${order.id.slice(-6).toUpperCase()}`,
+        purpose: order.purpose,
+        productId: order.productId,
+        productName: product?.name || order.productId.replace(/_/g, ' '),
+        amount: Number(order.amount),
+        currency: order.currency,
+        status: order.status,
+        expiresAt: order.expiresAt,
+        createdAt: order.createdAt,
+        paidAt: latestTxn?.paidAt || null,
+        merchantTransactionId: latestTxn?.merchantTransactionId || null,
+        providerTransactionId: latestTxn?.providerTransactionId || null,
+        provider: latestTxn?.provider || 'PAYU',
+        paymentMethod: latestTxn?.paymentMethod || null,
+        refundedAmount: latestTxn?.refundedAmount ? Number(latestTxn.refundedAmount) : null,
+        refundReason: latestTxn?.refundReason || null,
+        listing: order.listing
+          ? {
+              id: order.listing.id,
+              title: order.listing.title,
+              price: Number(order.listing.price),
+              coverImage: listingCoverUrl,
+            }
+          : null,
+      };
+    });
+
+    return {
+      items: formattedItems,
+      metrics: result.metrics,
       pagination: result.pagination,
     };
   }

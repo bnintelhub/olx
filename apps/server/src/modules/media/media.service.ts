@@ -98,6 +98,64 @@ export class MediaService {
 
     const imagePath = buildMediaPath({ resource, resourceId, mediaType, mediaId, variant: 'image', format: 'webp' });
 
+    // When updating profile avatar: delete previous avatar file and record to keep storage clean
+    if ((resource === 'users' || (resource as string) === 'profile') && (mediaType === 'avatar' || mediaType === 'cover')) {
+      try {
+        // 1. Find existing avatar media assets belonging to this user
+        const oldAvatars = await prisma.mediaAsset.findMany({
+          where: {
+            ownerId: userId,
+            entityType: 'USER',
+          },
+        });
+
+        // 2. Also check if the user profile has an avatarUrl pointing to a media asset
+        const userProfile = await prisma.profile.findUnique({
+          where: { userId },
+          select: { avatarUrl: true },
+        });
+
+        const extraIds: string[] = [];
+        if (userProfile?.avatarUrl) {
+          const match = userProfile.avatarUrl.match(/med_[a-zA-Z0-9]+/);
+          if (match) extraIds.push(match[0]);
+        }
+
+        const allOld = [
+          ...oldAvatars,
+          ...(extraIds.length > 0
+            ? await prisma.mediaAsset.findMany({ where: { id: { in: extraIds } } })
+            : []),
+        ];
+
+        // Deduplicate by ID
+        const uniqueOld = Array.from(new Map(allOld.map((a) => [a.id, a])).values());
+
+        for (const old of uniqueOld) {
+          if (old.storageKey) {
+            await defaultStorage.deleteMediaDirectory(path.dirname(old.storageKey)).catch(() => {});
+            const fullFile = path.join(defaultStorage.getUploadDir(), ...old.storageKey.split('/'));
+            await defaultStorage.deleteFile(fullFile).catch(() => {});
+          }
+          await defaultStorage.deleteMediaFiles(old.id).catch(() => {});
+          await prisma.mediaAsset.delete({ where: { id: old.id } }).catch(() => {});
+        }
+
+        // Also clean the user avatar directory on disk directly
+        const userAvatarDir = path.join(defaultStorage.getUploadDir(), 'users', userId, 'avatar');
+        if (fs.existsSync(userAvatarDir)) {
+          await fs.promises.rm(userAvatarDir, { recursive: true, force: true }).catch(() => {});
+        }
+      } catch (cleanErr) {
+        console.warn('[MediaService] Purging previous avatar warning:', cleanErr);
+      }
+    }
+
+    // Ensure no colliding record exists with identical storageKey before insertion
+    await prisma.mediaAsset.deleteMany({
+      where: { storageKey: imagePath },
+    }).catch(() => {});
+
     const host = baseUrl || process.env.MEDIA_PUBLIC_BASE_URL || '';
     const cleanHost = host.endsWith('/') ? host.slice(0, -1) : host;
 
@@ -105,7 +163,14 @@ export class MediaService {
       url: imagePath,
     };
 
-    const entityType = resource === 'chats' ? 'CHAT' : resource === 'categories' ? 'CATEGORY' : resource === 'users' ? 'USER' : 'LISTING';
+    const entityType =
+      resource === 'chats'
+        ? 'CHAT'
+        : resource === 'categories'
+        ? 'CATEGORY'
+        : resource === 'users' || (resource as string) === 'profile' || (resource as string) === 'user'
+        ? 'USER'
+        : 'LISTING';
 
     // Create database record with clean relative paths (NEVER store hardcoded protocol/host URLs in DB)
     await prisma.mediaAsset.create({

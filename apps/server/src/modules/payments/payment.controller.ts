@@ -5,6 +5,7 @@ import {
   paymentIdParamSchema,
   refundPaymentSchema,
   adminOrdersQuerySchema,
+  userOrdersQuerySchema,
 } from './payment.schema';
 import { PayUCallbackPayload } from './payment.types';
 
@@ -96,6 +97,14 @@ export class PaymentController {
       data: result,
       message: result.message,
     });
+  }
+
+  // GET /api/v1/payments/history or /my-orders (Authenticated User)
+  static async getUserOrders(request: FastifyRequest, reply: FastifyReply) {
+    const query = userOrdersQuerySchema.parse(request.query);
+    const userId = request.user!.id;
+    const data = await PaymentService.getUserPaymentHistory(userId, query);
+    return reply.status(200).send({ success: true, data });
   }
 
   // GET /api/v1/payments/admin/overview

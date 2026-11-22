@@ -9,6 +9,10 @@ import {
   DollarSign,
   User,
   Flag,
+  Store,
+  Building2,
+  Star,
+  FileText,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +26,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
-import { formatCurrency, formatPostingDate } from '@/lib/utils';
+import { formatCurrency, formatPostingDate, formatMediaUrl } from '@/lib/utils';
 import { adsService } from '../service/ads.service';
 import { useUIStore } from '@/stores/useUIStore';
 import { toast } from 'sonner';
@@ -46,6 +50,25 @@ export const AdSellerCard: React.FC<AdSellerCardProps> = ({
   const [isRevealingPhone, setIsRevealingPhone] = useState(false);
   const [internalOfferOpen, setInternalOfferOpen] = useState(false);
   const [offerPrice, setOfferPrice] = useState('');
+  const [avatarError, setAvatarError] = useState(false);
+
+  const seller = ad?.seller;
+  const profile = seller?.profile;
+  const sellerName = profile?.name || seller?.maskedPhone || 'Verified Marketplace Seller';
+  const nameForInitial = profile?.name || profile?.businessName || 'Seller';
+  const fallbackInitial = nameForInitial.trim().charAt(0).toUpperCase() || 'S';
+  const avatarUrl = profile?.avatarUrl ? formatMediaUrl(profile.avatarUrl) : null;
+  const bio = profile?.bio?.trim();
+  const businessName = profile?.businessName?.trim();
+  const isIdentityVerified = Boolean(profile?.isIdentityVerified);
+  const accountType = profile?.accountType;
+  const adsCount = seller?.adsCount;
+  const ratingAverage = profile?.ratingAverage ? Number(profile.ratingAverage) : 0;
+  const ratingCount = profile?.ratingCount || 0;
+
+  const memberSinceText = seller?.createdAt
+    ? new Date(seller.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : '2026';
 
   const isOfferOpen = externalOfferOpen !== undefined ? externalOfferOpen : internalOfferOpen;
   const setIsOfferOpen = externalSetIsOfferOpen || setInternalOfferOpen;
@@ -124,33 +147,91 @@ export const AdSellerCard: React.FC<AdSellerCardProps> = ({
 
       {/* Seller Profile Card */}
       <Card className="rounded-2xl shadow-sm border-[#E5EAED]">
-        <CardContent className="p-6 space-y-5">
-          <h3 className="text-sm font-bold uppercase tracking-wider text-gray-400">
-            Seller Details
-          </h3>
+        <CardContent className="p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              Seller Details
+            </h3>
+            {isIdentityVerified && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                <span>Verified Seller</span>
+              </span>
+            )}
+          </div>
 
-          <div className="flex items-center gap-3.5">
-            <div className="w-14 h-14 rounded-full bg-teal-800 text-white flex items-center justify-center font-bold text-lg shrink-0 shadow-sm">
-              {ad.seller?.profile?.name?.[0]?.toUpperCase() || <User className="w-6 h-6" />}
-            </div>
-            <div className="overflow-hidden">
-              <h4 className="font-bold text-gray-900 text-base truncate">
-                {ad.seller?.profile?.name || 'Verified Marketplace Seller'}
+          <div className="flex items-start gap-3.5">
+            {avatarUrl && !avatarError ? (
+              <div className="w-14 h-14 sm:w-16 sm:h-16 min-w-[56px] min-h-[56px] sm:min-w-[64px] sm:min-h-[64px] rounded-2xl overflow-hidden shrink-0 shadow-xs border border-slate-200/90 bg-slate-100 flex items-center justify-center">
+                <img
+                  src={avatarUrl}
+                  alt={sellerName}
+                  onError={() => setAvatarError(true)}
+                  className="w-full h-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+            ) : (
+              <div className="w-14 h-14 sm:w-16 sm:h-16 min-w-[56px] min-h-[56px] sm:min-w-[64px] sm:min-h-[64px] rounded-2xl bg-gradient-to-tr from-[#002f34] to-[#005f63] text-teal-300 font-black text-xl sm:text-2xl flex items-center justify-center shrink-0 shadow-xs border border-teal-900/20 uppercase select-none">
+                {fallbackInitial}
+              </div>
+            )}
+
+            <div className="flex-1 min-w-0">
+              <h4 className="font-bold text-[#002f34] text-base leading-snug truncate">
+                {sellerName}
               </h4>
-              <p className="text-xs text-gray-500">
-                Member since{' '}
-                {ad.seller?.createdAt
-                  ? new Date(ad.seller.createdAt).getFullYear()
-                  : '2026'}
-              </p>
-              {ad.seller?.profile?.isIdentityVerified && (
-                <div className="flex items-center gap-1 text-emerald-700 text-xs font-semibold mt-0.5">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>ID Verified</span>
+
+              {businessName && (
+                <div className="flex items-center gap-1.5 text-xs text-teal-800 font-medium truncate mt-0.5">
+                  <Store className="w-3.5 h-3.5 text-teal-600 shrink-0" />
+                  <span className="truncate">{businessName}</span>
                 </div>
               )}
+
+              <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 mt-1">
+                <span>Member since {memberSinceText}</span>
+                {typeof adsCount === 'number' && adsCount > 0 && (
+                  <>
+                    <span className="text-gray-300">•</span>
+                    <span className="text-teal-700 font-medium">
+                      {adsCount} Active {adsCount === 1 ? 'Ad' : 'Ads'}
+                    </span>
+                  </>
+                )}
+              </div>
+
+              {/* Status / Type Pills */}
+              <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                {accountType === 'BUSINESS' && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
+                    <Building2 className="w-3 h-3 text-blue-600 shrink-0" />
+                    <span>Business Account</span>
+                  </span>
+                )}
+                {ratingAverage > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200/80">
+                    <Star className="w-3 h-3 fill-amber-400 text-amber-400 shrink-0" />
+                    <span>
+                      {ratingAverage.toFixed(1)}
+                      {ratingCount > 0 ? ` (${ratingCount})` : ''}
+                    </span>
+                  </span>
+                )}
+              </div>
             </div>
           </div>
+
+          {/* Bio Description */}
+          {bio && (
+            <div className="p-3 sm:p-3.5 bg-slate-50 rounded-xl border border-slate-200/70 text-xs text-slate-700 leading-relaxed">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1.5">
+                <FileText className="w-3 h-3 text-slate-400" />
+                <span>About Seller</span>
+              </div>
+              <p className="whitespace-pre-line line-clamp-4 text-slate-600">{bio}</p>
+            </div>
+          )}
 
           <Separator />
 

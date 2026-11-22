@@ -10,6 +10,8 @@ export async function paymentRoutes(fastify: FastifyInstance) {
   // 1. Authenticated User Payment Endpoints
   fastify.post('/orders', auth, PaymentController.createOrder);
   fastify.get('/orders/:id', auth, PaymentController.getOrder);
+  fastify.get('/history', auth, PaymentController.getUserOrders);
+  fastify.get('/my-orders', auth, PaymentController.getUserOrders);
   fastify.post('/:id/verify', auth, PaymentController.verifyPayment);
 
   // Backward-compatible alias endpoints

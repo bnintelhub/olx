@@ -25,7 +25,9 @@ export class MediaController {
     const query = (request.query as any) || {};
     const defaultResource =
       request.url.includes('/ads') || request.url.includes('/listings') ? 'ads' : undefined;
-    const resource = query.resource || defaultResource;
+    const rawResource = query.resource || defaultResource;
+    // Map profile / user aliases to 'users'
+    const resource = rawResource === 'profile' || rawResource === 'user' ? 'users' : rawResource;
 
     if (!resource) {
       throw new AppError(
@@ -35,7 +37,7 @@ export class MediaController {
       );
     }
 
-    const validResources = ['ads', 'users', 'categories', 'brands', 'chats', 'verification', 'system'];
+    const validResources = ['ads', 'users', 'categories', 'brands', 'chats', 'verification', 'system', 'profile', 'user'];
     if (!validResources.includes(resource)) {
       throw new AppError(
         400,

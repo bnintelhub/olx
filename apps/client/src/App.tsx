@@ -9,6 +9,8 @@ import { MyAdsPage } from './features/ads/pages/MyAdsPage';
 import { PlansPage } from './features/plans/pages/PlansPage';
 import { ChatPage } from './features/chat/pages/ChatPage';
 import { SupportDeskPage } from './features/support/pages/SupportDeskPage';
+import { BillingPage } from './features/billing/pages/BillingPage';
+import { ProfilePage } from './features/profile/pages/ProfilePage';
 
 interface OutletContextType {
   onOpenPostAd: () => void;
@@ -64,6 +66,9 @@ export const App: React.FC = () => {
         <Route path="chat/:conversationId" element={<ChatPage />} />
         <Route path="my-ads" element={<MyAdsPage />} />
         <Route path="ads" element={<MyAdsPage />} />
+        <Route path="billing" element={<BillingPage />} />
+        <Route path="invoices" element={<BillingPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="accept-invite" element={<AcceptInviteRedirect />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

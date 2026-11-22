@@ -472,7 +472,7 @@ export function MediaPage() {
           {[
             { id: 'ALL', label: 'All Scopes' },
             { id: 'LISTING', label: 'Listing Ads' },
-            { id: 'USER', label: 'Avatars' },
+            { id: 'USER', label: 'Profile' },
             { id: 'CATEGORY', label: 'Categories' },
             { id: 'BANNER', label: 'Banners' },
             { id: 'CHAT', label: 'Chats' },
@@ -764,7 +764,7 @@ export function MediaPage() {
 
                 <div className="flex items-center justify-between pt-1 border-t text-[11px] text-muted-foreground">
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0">
-                    {item.scope}
+                    {item.scope === 'USER' ? 'PROFILE' : item.scope}
                   </Badge>
                   <span>{item.storageLocation}</span>
                 </div>
@@ -885,7 +885,7 @@ export function MediaPage() {
                   {visibleColumns.scope && (
                     <td className="p-3">
                       <Badge variant="outline" className="text-[10px]">
-                        {item.scope}
+                        {item.scope === 'USER' ? 'PROFILE' : item.scope}
                       </Badge>
                     </td>
                   )}
@@ -1267,7 +1267,7 @@ export function MediaPage() {
                 className="w-full h-8 rounded-md border border-input bg-background px-2.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
               >
                 <option value="LISTING">Listing Ad Image (LISTING)</option>
-                <option value="USER">User Avatar (USER)</option>
+                <option value="USER">User Profile Avatar (PROFILE)</option>
                 <option value="CATEGORY">Category Icon / Banner (CATEGORY)</option>
                 <option value="BANNER">Platform Banner (BANNER)</option>
                 <option value="CHAT">Chat Attachment (CHAT)</option>

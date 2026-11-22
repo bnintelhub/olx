@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { Camera, Trash2, Upload, Star, Crop } from 'lucide-react';
+import { Camera, Trash2, Upload, Star, Crop, Sparkles } from 'lucide-react';
+import { AspectRatioMode } from '@/components/ImageCropModal';
 
 export interface ImageUploadItem {
   file: File;
@@ -9,6 +10,8 @@ export interface ImageUploadItem {
 
 interface PostAdMediaStepProps {
   images: ImageUploadItem[];
+  preferredRatio?: AspectRatioMode;
+  onRatioChange?: (ratio: AspectRatioMode) => void;
   onAddFiles: (files: FileList | File[]) => void;
   onRemoveImage: (index: number) => void;
   onSetCoverImage: (index: number) => void;
@@ -17,8 +20,18 @@ interface PostAdMediaStepProps {
   setIsDragOver: (over: boolean) => void;
 }
 
+const RATIO_PRESETS: Array<{ mode: AspectRatioMode; label: string; badge?: string; desc: string }> = [
+  { mode: '4:3', label: '4:3 Standard', badge: 'Recommended', desc: 'Default for marketplace cards' },
+  { mode: '1:1', label: '1:1 Square', desc: 'Square product focus' },
+  { mode: '16:9', label: '16:9 Wide', desc: 'Vehicles & Real Estate' },
+  { mode: '3:4', label: '3:4 Portrait', desc: 'Fashion & Clothing' },
+  { mode: 'free', label: 'Free', desc: 'Original aspect' },
+];
+
 export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
   images,
+  preferredRatio = '4:3',
+  onRatioChange,
   onAddFiles,
   onRemoveImage,
   onSetCoverImage,
@@ -29,13 +42,52 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="space-y-3 pt-3 border-t border-gray-100">
+    <div className="space-y-4 pt-3 border-t border-gray-100">
       <div className="flex items-center justify-between">
         <label className="text-xs font-bold uppercase tracking-wider text-[#002f34] flex items-center gap-1.5">
           <Camera className="w-4 h-4 text-teal-700" />
           <span>Upload Photos ({images.length}/8)</span>
         </label>
         <span className="text-[11px] text-gray-400">PNG, JPG, WebP up to 10MB</span>
+      </div>
+
+      {/* Target Dimension / Format Selector */}
+      <div className="bg-slate-50 border border-slate-200/90 rounded-2xl p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold text-[#002f34] flex items-center gap-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>Target Listing Format</span>
+          </span>
+          <span className="text-[11px] text-gray-400">
+            Selected photos will open in this aspect ratio
+          </span>
+        </div>
+
+        <div className="flex flex-wrap gap-1.5">
+          {RATIO_PRESETS.map((preset) => {
+            const isSelected = preferredRatio === preset.mode;
+            return (
+              <button
+                key={preset.mode}
+                type="button"
+                onClick={() => onRatioChange?.(preset.mode)}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer ${
+                  isSelected
+                    ? 'bg-[#002f34] text-white shadow-xs ring-2 ring-[#002f34]/30'
+                    : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
+                }`}
+                title={preset.desc}
+              >
+                <span>{preset.label}</span>
+                {preset.badge && !isSelected && (
+                  <span className="text-[9px] bg-amber-100 text-amber-800 px-1 py-0.2 rounded font-semibold">
+                    ★
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Drop Zone */}
@@ -60,7 +112,7 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp"
+          accept="image/jpeg,image/png,image/webp,image/jpg"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -72,10 +124,10 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
         </div>
         <div>
           <p className="text-xs font-bold text-gray-800">
-            Click to upload or drag & drop images
+            Click to choose photos or drag & drop here
           </p>
           <p className="text-[11px] text-gray-400 mt-0.5">
-            The first photo will be used as the listing cover photo
+            Select photos to crop & frame in {preferredRatio} format (1st photo is cover)
           </p>
         </div>
       </div>
@@ -105,7 +157,7 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
 
               {/* Cover Photo Badge */}
               {item.isCover ? (
-                <span className="absolute top-1.5 left-1.5 bg-[#002f34] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1">
+                <span className="absolute top-1.5 left-1.5 bg-[#002f34] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs flex items-center gap-1 z-10">
                   <Star className="w-2.5 h-2.5 fill-amber-400 text-amber-400" />
                   <span>Cover</span>
                 </span>
@@ -113,21 +165,22 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
                 <button
                   type="button"
                   onClick={() => onSetCoverImage(idx)}
-                  className="absolute top-1.5 left-1.5 bg-black/60 hover:bg-black/80 text-white text-[9px] font-medium px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition cursor-pointer"
+                  className="absolute top-1.5 left-1.5 bg-black/60 hover:bg-black/80 text-white text-[9px] font-medium px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition cursor-pointer z-10"
                 >
                   Set Cover
                 </button>
               )}
 
-              {/* Crop & Focal Point Button */}
+              {/* Persistent Mobile-Friendly Crop Pill Button */}
               {onCropImage && (
                 <button
                   type="button"
                   onClick={() => onCropImage(idx)}
-                  className="absolute top-1.5 right-8 bg-black/60 hover:bg-[#002f34] text-white p-1 rounded-full transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                  className="absolute bottom-1.5 left-1.5 bg-black/75 hover:bg-[#002f34] text-white text-[9px] font-bold px-1.5 py-0.5 rounded backdrop-blur-xs shadow flex items-center gap-1 transition cursor-pointer z-10"
                   title="Crop & Set Focal Point"
                 >
-                  <Crop className="w-3.5 h-3.5" />
+                  <Crop className="w-3 h-3 text-teal-300" />
+                  <span>Crop</span>
                 </button>
               )}
 
@@ -135,7 +188,7 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
               <button
                 type="button"
                 onClick={() => onRemoveImage(idx)}
-                className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-rose-600 text-white p-1 rounded-full transition opacity-0 group-hover:opacity-100 cursor-pointer"
+                className="absolute top-1.5 right-1.5 bg-black/60 hover:bg-rose-600 text-white p-1 rounded-full transition opacity-0 group-hover:opacity-100 cursor-pointer z-10"
                 title="Remove photo"
               >
                 <Trash2 className="w-3.5 h-3.5" />
@@ -147,4 +200,3 @@ export const PostAdMediaStep: React.FC<PostAdMediaStepProps> = ({
     </div>
   );
 };
-

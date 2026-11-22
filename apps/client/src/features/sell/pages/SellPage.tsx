@@ -24,8 +24,8 @@ import { ADS_QUERY_KEYS } from '@/features/ads/hook/useAdsQuery';
 import { SellCategoryStep } from '../components/SellCategoryStep';
 import { SellDetailsStep } from '../components/SellDetailsStep';
 import { SellMediaStep, SellImageItem } from '../components/SellMediaStep';
-import { ImageCropModal } from '@/components/ImageCropModal';
-import { getImageDimensions } from '@/lib/image-utils';
+import { ImageCropModal, AspectRatioMode } from '@/components/ImageCropModal';
+import { getImageDimensions, autoSafeScaleImage } from '@/lib/image-utils';
 import { SellPreviewStep } from '../components/SellPreviewStep';
 import { SellSuccessStep } from '../components/SellSuccessStep';
 import { SellPricingPanel } from '../components/SellPricingPanel';
@@ -124,8 +124,11 @@ export const SellPage: React.FC = () => {
   const [selectedLocationId, setSelectedLocationId] = useState('');
   const [locality, setLocality] = useState('');
 
-  // Media
+  // Media & Dimension Cropping
   const [images, setImages] = useState<SellImageItem[]>([]);
+  const [preferredRatio, setPreferredRatio] = useState<AspectRatioMode>('4:3');
+  const [cropQueue, setCropQueue] = useState<File[]>([]);
+  const [cropQueueIndex, setCropQueueIndex] = useState<number>(0);
   const [cropModalState, setCropModalState] = useState<{
     isOpen: boolean;
     file: File | null;
@@ -228,56 +231,23 @@ export const SellPage: React.FC = () => {
     return true;
   };
 
-  // Step 3: Photos Management
+  // Step 3: Photos Management with Dimension Crop Queue
   const handleAddFiles = async (filesList: FileList | File[]) => {
-    const valid = Array.from(filesList).filter((f) => ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(f.type));
+    const valid = Array.from(filesList).filter((f) =>
+      ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(f.type)
+    );
     if (!valid.length) return toast.error('Invalid image format (use JPEG, PNG, or WebP)');
     if (images.length + valid.length > 8) return toast.error('Maximum 8 photos allowed');
-    setStagedImages([]); // Reset staged uploads when images change
+    setStagedImages([]);
 
-    // Check for images exceeding 5000px limit
-    const oversizedFiles: File[] = [];
-    const normalFiles: File[] = [];
-
-    for (const file of valid) {
-      try {
-        const dims = await getImageDimensions(file);
-        if (dims.width > 5000 || dims.height > 5000) {
-          oversizedFiles.push(file);
-        } else {
-          normalFiles.push(file);
-        }
-      } catch {
-        normalFiles.push(file);
-      }
-    }
-
-    if (normalFiles.length > 0) {
-      const newItems: SellImageItem[] = normalFiles.map((file, idx) => ({
-        file,
-        previewUrl: URL.createObjectURL(file),
-        isCover: images.length === 0 && idx === 0,
-      }));
-      setImages((prev) => [...prev, ...newItems]);
-
-      normalFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          if (reader.result) setImages((prev) => prev.map((item) => (item.file === file ? { ...item, previewUrl: reader.result as string } : item)));
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-
-    // Automatically trigger crop and focal point selector for oversized image
-    if (oversizedFiles.length > 0) {
-      const firstOversized = oversizedFiles[0];
-      toast.info(`Image "${firstOversized.name}" exceeds 5000px. Adjust crop and focal point to fit.`);
-      setCropModalState({
-        isOpen: true,
-        file: firstOversized,
-      });
-    }
+    // Open Dimension & Crop modal directly for selected files
+    setCropQueue(valid);
+    setCropQueueIndex(0);
+    setCropModalState({
+      isOpen: true,
+      file: valid[0],
+      imageIndex: undefined,
+    });
   };
 
   const handleApplyCrop = (croppedFile: File, newPreviewUrl: string) => {
@@ -290,19 +260,91 @@ export const SellPage: React.FC = () => {
             : item
         )
       );
+      setCropModalState({ isOpen: false, file: null });
+      toast.success('Crop and format updated!');
+      return;
+    }
+
+    // Adding cropped file from queue
+    setImages((prev) => [
+      ...prev,
+      {
+        file: croppedFile,
+        previewUrl: newPreviewUrl,
+        isCover: prev.length === 0,
+      },
+    ]);
+
+    // Advance to next image in queue if multiple photos were selected
+    const nextIdx = cropQueueIndex + 1;
+    if (nextIdx < cropQueue.length) {
+      setCropQueueIndex(nextIdx);
+      setCropModalState({
+        isOpen: true,
+        file: cropQueue[nextIdx],
+        imageIndex: undefined,
+      });
     } else {
-      // Cropped a newly added oversized image
+      setCropModalState({ isOpen: false, file: null });
+      setCropQueue([]);
+      toast.success('All photos formatted and added successfully!');
+    }
+    setStagedImages([]);
+  };
+
+  // Skip cropping current image (adds as original, scaled safely if exceeding server limits)
+  const handleSkipCrop = async () => {
+    if (cropModalState.imageIndex !== undefined) {
+      setCropModalState({ isOpen: false, file: null });
+      return;
+    }
+
+    const currentFile = cropQueue[cropQueueIndex];
+    if (currentFile) {
+      const safeFile = await autoSafeScaleImage(currentFile, 4000);
+      const previewUrl = URL.createObjectURL(safeFile);
       setImages((prev) => [
         ...prev,
         {
-          file: croppedFile,
-          previewUrl: newPreviewUrl,
+          file: safeFile,
+          previewUrl,
           isCover: prev.length === 0,
         },
       ]);
     }
-    setStagedImages([]);
-    toast.success('Crop and focal point applied successfully!');
+
+    const nextIdx = cropQueueIndex + 1;
+    if (nextIdx < cropQueue.length) {
+      setCropQueueIndex(nextIdx);
+      setCropModalState({
+        isOpen: true,
+        file: cropQueue[nextIdx],
+        imageIndex: undefined,
+      });
+    } else {
+      setCropModalState({ isOpen: false, file: null });
+      setCropQueue([]);
+      toast.success('Photo added as original.');
+    }
+  };
+
+  // Add all remaining photos without cropping (scaled safely if exceeding server limits)
+  const handleSkipAllCrop = async () => {
+    const remaining = cropQueue.slice(cropQueueIndex);
+    const scaledItems: SellImageItem[] = await Promise.all(
+      remaining.map(async (file, idx) => {
+        const safeFile = await autoSafeScaleImage(file, 4000);
+        return {
+          file: safeFile,
+          previewUrl: URL.createObjectURL(safeFile),
+          isCover: images.length === 0 && idx === 0,
+        };
+      })
+    );
+    setImages((prev) => [...prev, ...scaledItems]);
+    setCropModalState({ isOpen: false, file: null });
+    setCropQueue([]);
+    toast.success(`${remaining.length} photos added.`);
   };
 
   const handleRemoveImage = (index: number) => {
@@ -545,6 +587,8 @@ export const SellPage: React.FC = () => {
             <div className="space-y-6">
               <SellMediaStep
                 images={images}
+                preferredRatio={preferredRatio}
+                onRatioChange={setPreferredRatio}
                 onAddFiles={handleAddFiles}
                 onRemoveImage={handleRemoveImage}
                 onSetCoverImage={handleSetCoverImage}
@@ -608,8 +652,17 @@ export const SellPage: React.FC = () => {
       <ImageCropModal
         isOpen={cropModalState.isOpen}
         file={cropModalState.file}
-        onClose={() => setCropModalState({ isOpen: false, file: null })}
+        currentIndex={cropQueueIndex}
+        totalQueue={cropModalState.imageIndex !== undefined ? 1 : cropQueue.length}
+        defaultRatio={preferredRatio}
+        onRatioChange={setPreferredRatio}
+        onClose={() => {
+          setCropModalState({ isOpen: false, file: null });
+          setCropQueue([]);
+        }}
         onApply={handleApplyCrop}
+        onSkip={handleSkipCrop}
+        onSkipAll={handleSkipAllCrop}
       />
 
     </div>
