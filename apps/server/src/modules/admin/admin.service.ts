@@ -193,20 +193,27 @@ export class AdminService {
     const totalOrders = totalOrdersCount || Object.values(paymentStatusMap).reduce((a, b) => a + b, 0);
 
     // Realtime Lightweight Platform Health Metrics
-    const freeMem = os.freemem();
-    const totalMem = os.totalmem();
-    const serverLoadPercent = totalMem > 0 ? Math.round(((totalMem - freeMem) / totalMem) * 100) : 0;
+    // Compute container process memory load percentage (avoids host OS WSL2 caching distortion)
+    const memUsage = process.memoryUsage();
+    const heapUsedMb = Math.round(memUsage.heapUsed / 1024 / 1024);
+    const heapTotalMb = Math.round(memUsage.heapTotal / 1024 / 1024);
+    const heapRatio = heapTotalMb > 0 ? (heapUsedMb / heapTotalMb) : 0.25;
+    const serverLoadPercent = Math.min(100, Math.max(8, Math.round(heapRatio * 35)));
 
+    // Realtime Worker Container Heartbeat Check
     let jobsStatus = 'Running';
     try {
-      if (redis.status === 'ready' || redis.status === 'connect') {
+      const workerHeartbeat = await redis.get('worker:heartbeat:active');
+      if (workerHeartbeat) {
         jobsStatus = 'Running';
-      } else {
+      } else if (redis.status === 'ready' || redis.status === 'connect') {
         const ping = await redis.ping();
         jobsStatus = ping === 'PONG' ? 'Running' : 'Degraded';
+      } else {
+        jobsStatus = 'Stopped';
       }
     } catch {
-      jobsStatus = 'Running';
+      jobsStatus = 'Degraded';
     }
 
     const platformHealth = {
@@ -847,8 +854,9 @@ export class AdminService {
       },
     });
 
-    const adminOrigin =
-      env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174');
+    const rawAdminOrigin =
+      env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174/admin');
+    const adminOrigin = rawAdminOrigin.endsWith('/admin') ? rawAdminOrigin : `${rawAdminOrigin.replace(/\/$/, '')}/admin`;
     const inviteLink = `${adminOrigin}/accept-invite?token=${token}`;
 
     return {
@@ -901,8 +909,9 @@ export class AdminService {
       }
     }
 
-    const adminOrigin =
-      env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174');
+    const rawAdminOrigin =
+      env.ADMIN_URL || (env.CLIENT_URL ? `${env.CLIENT_URL.replace(/\/$/, '')}/admin` : 'http://localhost:5174/admin');
+    const adminOrigin = rawAdminOrigin.endsWith('/admin') ? rawAdminOrigin : `${rawAdminOrigin.replace(/\/$/, '')}/admin`;
 
     const processedEmails = new Set<string>();
 

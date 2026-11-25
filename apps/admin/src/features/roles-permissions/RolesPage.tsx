@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { authService, StaffInvitationItem, CreateStaffInvitationPayload } from '../auth/service/auth.service';
+import { authService, StaffInvitationItem } from '../auth/service/auth.service';
 import { AdminRole } from '../../types';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../components/ui/card';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../../components/ui/table';
@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Badge } from '../../components/ui/badge';
 import { Dialog, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../../components/ui/dialog';
+import { CreateStaffDialog } from './components/CreateStaffDialog';
 import {
   ShieldCheck,
   Lock,
@@ -15,16 +16,13 @@ import {
   Mail,
   Copy,
   Check,
-  Ban,
-  Clock,
-  Sparkles,
+  RotateCcw,
+  ShieldAlert,
   Loader2,
   Share2,
   CheckCircle2,
-  Link2,
-  ShieldAlert,
+  Ban,
   AlertTriangle,
-  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuthStore } from '../../stores/auth.store';
@@ -74,23 +72,6 @@ const ADMIN_ROLES_MATRIX = [
   },
 ];
 
-const INVITABLE_ROLES: { role: AdminRole; label: string; desc: string }[] = [
-  { role: 'ADMIN', label: 'Admin', desc: 'Platform operations, categories, users, and media.' },
-  { role: 'MODERATOR', label: 'Moderator', desc: 'Listing reviews, safety flags, and user moderation queue.' },
-  { role: 'CUSTOMER_SUPPORT', label: 'Customer Support', desc: 'Tickets, user queries, and customer disputes.' },
-  { role: 'FINANCE_ADMIN', label: 'Finance Admin', desc: 'Transactions ledger, escrow settlements, and refunds.' },
-  { role: 'CONTENT_MANAGER', label: 'Content Manager', desc: 'Campaign banners, taxonomy tree, and content CMS.' },
-  { role: 'ANALYST', label: 'Analyst', desc: 'Business intelligence and performance metric reports.' },
-];
-
-const EXPIRY_OPTIONS = [
-  { value: '2_DAYS', label: '2 Days (48 Hours - Default)' },
-  { value: '3_DAYS', label: '3 Days (72 Hours)' },
-  { value: '7_DAYS', label: '7 Days (1 Week)' },
-  { value: 'NO_EXPIRY', label: 'No Expiry (Never Expires)' },
-  { value: 'CUSTOM', label: 'Manual Date / Time Set' },
-];
-
 // Computes a human-readable validity text and flags for lifetime or expired states
 function formatExpiryDisplay(expiresAt: string, isLifetimeFlag?: boolean) {
   if (isLifetimeFlag || !expiresAt || new Date(expiresAt).getFullYear() >= 2099) {
@@ -116,49 +97,16 @@ export function RolesPage() {
   const logout = useAuthStore((s) => s.logout);
 
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<AdminRole>('MODERATOR');
-  const [expiryType, setExpiryType] = useState<'2_DAYS' | '3_DAYS' | '7_DAYS' | 'NO_EXPIRY' | 'CUSTOM'>('2_DAYS');
-  const [customExpiresAt, setCustomExpiresAt] = useState('');
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [createdInviteResult, setCreatedInviteResult] = useState<{ email: string; link: string; role: AdminRole; expiresText: string } | null>(null);
 
   // Staff ID Suspension Modal State
   const [suspendingStaff, setSuspendingStaff] = useState<StaffInvitationItem | null>(null);
   const [suspendReason, setSuspendReason] = useState('');
 
-  // 1. Fetch Staff Invitations
+  // 1. Fetch Staff Accounts & Invitations
   const { data: invitations = [], isLoading } = useQuery<StaffInvitationItem[]>({
     queryKey: ['staff-invitations'],
     queryFn: () => authService.getStaffInvitations(),
-  });
-
-  // 2. Create Staff Invitation Mutation
-  const inviteMutation = useMutation({
-    mutationFn: (payload: CreateStaffInvitationPayload) =>
-      authService.createStaffInvitation(payload),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['staff-invitations'] });
-      const exp = formatExpiryDisplay(data.invitation.expiresAt, data.invitation.isLifetime);
-
-      setCreatedInviteResult({
-        email: data.invitation.email,
-        link: data.inviteLink,
-        role: data.invitation.role,
-        expiresText: exp.label,
-      });
-
-      toast.success(`Invitation generated for ${data.invitation.email}!`);
-
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(data.inviteLink);
-        toast.info('Link copied to clipboard. Ready to share.');
-      }
-    },
-    onError: (err: any) => {
-      const msg = err.response?.data?.message || err.message || 'Failed to send invitation';
-      toast.error(msg);
-    },
   });
 
   // 3. Revoke Staff Invitation Mutation
@@ -203,44 +151,13 @@ export function RolesPage() {
   // Temporarily highlights the copied button state for instant visual feedback.
   const handleCopyLink = (token: string, id: string) => {
     const origin = window.location.origin;
-    const isUnderAdminPath = window.location.pathname.startsWith('/admin');
-    const adminPrefix = isUnderAdminPath ? '/admin' : '';
+    const base = (import.meta.env.BASE_URL || '/admin/').replace(/\/$/, '');
+    const adminPrefix = base.startsWith('/') ? base : `/${base}`;
     const link = `${origin}${adminPrefix}/accept-invite?token=${token}`;
     navigator.clipboard.writeText(link);
     setCopiedId(id);
     toast.success('Invitation link copied to clipboard');
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  // Validates target email, expiry settings, and triggers staff invitation generation.
-  // Supports presets (2 days, 3 days, 7 days, no expiry) or custom future date selection.
-  const handleSendInvite = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteEmail.trim()) {
-      toast.error('Please enter a valid work email');
-      return;
-    }
-    if (expiryType === 'CUSTOM' && !customExpiresAt) {
-      toast.error('Please select a valid custom expiry date & time');
-      return;
-    }
-
-    inviteMutation.mutate({
-      email: inviteEmail.trim(),
-      role: inviteRole,
-      expiryType,
-      customExpiresAt: expiryType === 'CUSTOM' ? new Date(customExpiresAt).toISOString() : null,
-    });
-  };
-
-  // Resets invitation dialog state to prepare for a fresh invitation entry.
-  // Closes dialog and cleans up any generated invite result from view.
-  const handleCloseDialog = () => {
-    setIsInviteDialogOpen(false);
-    setCreatedInviteResult(null);
-    setInviteEmail('');
-    setCustomExpiresAt('');
-    setExpiryType('2_DAYS');
   };
 
   return (
@@ -255,14 +172,11 @@ export function RolesPage() {
         </div>
 
         <Button
-          onClick={() => {
-            setCreatedInviteResult(null);
-            setIsInviteDialogOpen(true);
-          }}
+          onClick={() => setIsInviteDialogOpen(true)}
           className="gap-2 bg-primary text-primary-foreground font-semibold shadow-sm cursor-pointer"
         >
           <UserPlus className="h-4 w-4" />
-          <span>Invite Staff Member</span>
+          <span>Add Staff Member</span>
         </Button>
       </div>
 
@@ -511,176 +425,8 @@ export function RolesPage() {
         </CardContent>
       </Card>
 
-      {/* Invite Staff Dialog with Expiration Config & Persistent Active Link View */}
-      <Dialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen}>
-        {createdInviteResult ? (
-          <div className="space-y-4 p-1">
-            <DialogHeader>
-              <DialogTitle className="text-base font-bold flex items-center gap-2 text-emerald-500">
-                <CheckCircle2 className="h-5 w-5" />
-                <span>Invitation Link Ready to Share!</span>
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                Assigned <strong className="text-foreground">{createdInviteResult.role}</strong> access to <strong className="text-foreground">{createdInviteResult.email}</strong> ({createdInviteResult.expiresText}).
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 py-2">
-              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
-                <label className="text-[11px] font-semibold text-primary flex items-center gap-1.5">
-                  <Link2 className="h-3.5 w-3.5" />
-                  <span>Onboarding Link (Active)</span>
-                </label>
-                <div className="flex gap-2">
-                  <Input
-                    readOnly
-                    value={createdInviteResult.link}
-                    className="h-9 text-xs font-mono bg-background select-all"
-                  />
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      navigator.clipboard.writeText(createdInviteResult.link);
-                      toast.success('Invitation link copied to clipboard');
-                    }}
-                    className="h-9 px-3 text-xs gap-1.5 shrink-0 bg-primary text-primary-foreground font-semibold cursor-pointer"
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                    <span>Copy</span>
-                  </Button>
-                </div>
-              </div>
-
-              <p className="text-[11px] text-muted-foreground">
-                Tip: This link remains active in your dashboard table and can be re-copied or shared with your team anytime before expiration.
-              </p>
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                onClick={handleCloseDialog}
-                className="text-xs font-semibold cursor-pointer w-full"
-              >
-                Done
-              </Button>
-            </DialogFooter>
-          </div>
-        ) : (
-          <form onSubmit={handleSendInvite} className="space-y-4">
-            <DialogHeader>
-              <DialogTitle className="text-base font-bold flex items-center gap-2">
-                <UserPlus className="h-4 w-4 text-primary" />
-                <span>Invite New Staff Member</span>
-              </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
-                Generate a secure onboarding link. The invitee will set their name and password to join.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-3 py-2">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-foreground">Staff Work Email *</label>
-                <Input
-                  type="email"
-                  placeholder="staff.member@blxorbit.in"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  required
-                  className="h-9 text-xs"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-foreground">Assigned Operational Role *</label>
-                <select
-                  value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as AdminRole)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-2xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
-                >
-                  {INVITABLE_ROLES.map((r) => (
-                    <option key={r.role} value={r.role}>
-                      {r.label} ({r.role})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-[11px] text-muted-foreground pt-0.5">
-                  {INVITABLE_ROLES.find((r) => r.role === inviteRole)?.desc}
-                </p>
-              </div>
-
-              {/* Expiration Configuration Option */}
-              <div className="space-y-1.5 pt-1">
-                <label className="text-xs font-medium text-foreground flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5 text-primary" />
-                  <span>Invitation Validity & Expiration *</span>
-                </label>
-                <select
-                  value={expiryType}
-                  onChange={(e) => setExpiryType(e.target.value as any)}
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-xs shadow-2xs focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
-                >
-                  {EXPIRY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-
-                {expiryType === 'CUSTOM' && (
-                  <div className="space-y-1 pt-1.5">
-                    <label className="text-[11px] font-medium text-muted-foreground">Select Manual Expiration Date & Time *</label>
-                    <Input
-                      type="datetime-local"
-                      value={customExpiresAt}
-                      min={new Date(Date.now() + 60 * 1000).toISOString().slice(0, 16)}
-                      onChange={(e) => setCustomExpiresAt(e.target.value)}
-                      required
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                )}
-
-                <p className="text-[11px] text-muted-foreground pt-0.5">
-                  {expiryType === 'NO_EXPIRY'
-                    ? 'Link will remain permanently valid until manually revoked.'
-                    : expiryType === 'CUSTOM'
-                    ? 'Link will automatically deactivate at your specified date and time.'
-                    : 'Link will automatically deactivate once the validity window passes.'}
-                </p>
-              </div>
-            </div>
-
-            <DialogFooter className="gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCloseDialog}
-                className="text-xs cursor-pointer"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={inviteMutation.isPending}
-                className="text-xs font-semibold gap-1.5 cursor-pointer bg-primary text-primary-foreground"
-              >
-                {inviteMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    <span>Generating Link...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="h-3.5 w-3.5" />
-                    <span>Create & Get Share Link</span>
-                  </>
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        )}
-      </Dialog>
+      {/* Unified Staff Creation Dialog: Supports Permanent Direct Assign & Short-Term Invite Tokens */}
+      <CreateStaffDialog open={isInviteDialogOpen} onOpenChange={setIsInviteDialogOpen} />
 
       {/* Staff ID Suspension Confirmation Dialog */}
       <Dialog open={!!suspendingStaff} onOpenChange={(open) => !open && setSuspendingStaff(null)}>

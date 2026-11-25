@@ -230,8 +230,15 @@ export async function evictFailedAndOrphanedMedia(maxAgeHours: number = 2): Prom
         banners: { none: {} },
         messages: { none: {} },
         NOT: {
-          entityType: 'CHAT',
-          entityId: { not: null },
+          OR: [
+            {
+              entityType: 'CHAT',
+              entityId: { not: null },
+            },
+            {
+              entityType: 'USER',
+            },
+          ],
         },
       },
       take: 200,

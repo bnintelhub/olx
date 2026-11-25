@@ -33,6 +33,9 @@ export default defineConfig(({ mode }) => {
         : true,
       watch: {
         usePolling: true,
+        interval: 1000,
+        binaryInterval: 2000,
+        ignored: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/coverage/**'],
       },
       proxy: {
         '/api': {

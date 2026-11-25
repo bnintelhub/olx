@@ -602,15 +602,22 @@ export class LocationsService {
   }
 
   static async nearby(params: NearbyLocationParams) {
-    const radius = params.radiusKm || 15;
-    const limit = Math.min(50, params.limit || 20);
+    const userLat = Number(params.latitude);
+    const userLng = Number(params.longitude);
+    const requestedRadius = params.radiusKm && Number(params.radiusKm) > 0 ? Number(params.radiusKm) : 25;
+    const limit = Math.max(1, Math.min(50, Number(params.limit) || 20));
 
-    const locations = await prisma.location.findMany({
+    // Dynamic case-insensitive type filtering
+    const typeFilter = params.type
+      ? { type: { equals: String(params.type).trim(), mode: 'insensitive' as const } }
+      : {};
+
+    let locations = await prisma.location.findMany({
       where: {
         isActive: true,
         latitude: { not: null },
         longitude: { not: null },
-        ...(params.type ? { type: params.type.toLowerCase() } : {}),
+        ...typeFilter,
       },
       select: {
         id: true,
@@ -624,22 +631,59 @@ export class LocationsService {
       },
     });
 
-    const nearbyList = locations
+    if (locations.length === 0 && params.type) {
+      locations = await prisma.location.findMany({
+        where: {
+          isActive: true,
+          latitude: { not: null },
+          longitude: { not: null },
+        },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          type: true,
+          depth: true,
+          latitude: true,
+          longitude: true,
+          parentId: true,
+        },
+      });
+    }
+
+    if (locations.length === 0) {
+      return [];
+    }
+
+    // Dynamic Haversine proximity calculation
+    const mapped = locations
       .map((loc) => {
         const distanceKm = this.calculateHaversineDistanceKm(
-          params.latitude,
-          params.longitude,
+          userLat,
+          userLng,
           loc.latitude!,
           loc.longitude!
         );
         return {
           ...loc,
           distanceKm: Math.round(distanceKm * 10) / 10,
+          isExpandedRadius: false,
         };
       })
-      .filter((loc) => loc.distanceKm <= radius)
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .slice(0, limit);
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+
+    // Initial filter by requested radius
+    let nearbyList = mapped.filter((loc) => loc.distanceKm <= requestedRadius);
+
+    // Automatic dynamic fallback: if no location is within requested radius, return nearest available
+    if (nearbyList.length === 0 && mapped.length > 0) {
+      nearbyList = mapped.slice(0, Math.min(limit, 5)).map((loc) => ({
+        ...loc,
+        isExpandedRadius: true,
+      }));
+    } else {
+      nearbyList = nearbyList.slice(0, limit);
+    }
 
     return Promise.all(
       nearbyList.map(async (loc) => {

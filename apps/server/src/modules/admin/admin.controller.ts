@@ -1,11 +1,13 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { AdminService } from './admin.service';
+import { StaffService } from './staff.service';
 import {
   userActionSchema,
   updateUserStatusSchema,
   updateAdminProfileSchema,
   changeAdminPasswordSchema,
   createInvitationSchema,
+  createDirectStaffSchema,
   auditLogQuerySchema,
   updateStaffStatusSchema,
 } from './admin.schema';
@@ -230,55 +232,25 @@ export class AdminController {
     return reply.status(200).send({ success: true, data: result });
   }
 
+  // Directly provisions permanent staff accounts with an assigned operational role and immediate credentials.
+  static async createDirectStaff(request: FastifyRequest, reply: FastifyReply) {
+    const input = createDirectStaffSchema.parse(request.body);
+    const result = await StaffService.createDirectStaff(input, request.user!.id, request);
+    return reply.status(201).send({ success: true, data: result });
+  }
+
   // Issues a configurable-lifespan onboarding token for new staff members.
   // Records audit trail with assigned role, expiry window, and optional reason/ticket.
   static async createStaffInvitation(request: FastifyRequest, reply: FastifyReply) {
-    const { email, role, expiryType, customExpiresAt, reason, ticketReference } = createInvitationSchema.parse(request.body);
-
-    try {
-      const result = await AdminService.createStaffInvitation(request.user!.id, email, role, {
-        expiryType,
-        customExpiresAt,
-      });
-
-      await writeAuditLog({
-        userId: request.user!.id,
-        action: 'STAFF_INVITATION_SENT',
-        entityType: 'INVITATION',
-        entityId: result.invitation.id,
-        status: 'SUCCESS',
-        reason,
-        ticketReference,
-        newData: {
-          email,
-          role,
-          expiryType,
-          expiresAt: result.invitation.expiresAt,
-        },
-        request,
-      });
-
-      return reply.status(201).send({ success: true, data: result });
-    } catch (err: any) {
-      await writeAuditLog({
-        userId: request.user!.id,
-        action: 'STAFF_INVITATION_SENT_FAILED',
-        entityType: 'INVITATION',
-        entityId: email,
-        status: 'FAILED',
-        reason: err.message,
-        newData: { email, role, expiryType },
-        request,
-      });
-
-      throw err;
-    }
+    const input = createInvitationSchema.parse(request.body);
+    const result = await StaffService.createStaffInvitation(input, request.user!.id, request);
+    return reply.status(201).send({ success: true, data: result });
   }
 
-  // Lists all staff invitations showing current status, invited role, and expiration.
-  // Enables super admins to track pending team onboarding and spot pending invitations.
+  // Lists all staff accounts and invitations showing current status, invited role, and expiration.
+  // Enables super admins to track team onboarding with dynamically derived URLs.
   static async getStaffInvitations(request: FastifyRequest, reply: FastifyReply) {
-    const list = await AdminService.getStaffInvitations();
+    const list = await StaffService.getStaffList(request);
     return reply.status(200).send({ success: true, data: list });
   }
 

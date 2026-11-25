@@ -9,7 +9,7 @@ services:
     env_file:
       - .env.development
     ports:
-      - "${DB_PORT:-5433}:5432"
+       - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -34,7 +34,7 @@ services:
     env_file:
       - .env.development
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -42,6 +42,17 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - bharatmarket_net
+
+  redis-insight:
+    image: redis/redisinsight:latest
+    container_name: bharatmarket_redis_insight
+    restart: unless-stopped
+    ports:
+      - "8001:5540"
+    depends_on:
+      - redis
     networks:
       - bharatmarket_net
 

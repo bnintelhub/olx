@@ -67,20 +67,20 @@ export function AcceptInvitePage() {
 
   if (!token) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 text-zinc-100">
-        <Card className="max-w-md w-full bg-zinc-900 border-zinc-800 text-zinc-100">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 text-foreground">
+        <Card className="max-w-md w-full bg-card border-border text-card-foreground shadow-xl">
           <CardHeader className="text-center">
             <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-500 mb-2">
               <AlertCircle className="w-5 h-5" />
             </div>
-            <CardTitle className="text-lg text-white">Missing Invitation Token</CardTitle>
-            <CardDescription className="text-zinc-400 text-xs">
+            <CardTitle className="text-lg text-foreground">Missing Invitation Token</CardTitle>
+            <CardDescription className="text-muted-foreground text-xs">
               No invitation token was provided in the URL link.
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <Link to="/login">
-              <Button variant="outline" className="w-full border-zinc-800 text-zinc-300 hover:text-white">
+              <Button variant="outline" className="w-full text-foreground hover:bg-muted">
                 Back to Sign In
               </Button>
             </Link>
@@ -92,10 +92,10 @@ export function AcceptInvitePage() {
 
   if (isCheckingInvite) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 text-zinc-100">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 text-foreground">
         <div className="text-center space-y-3">
-          <Loader2 className="w-8 h-8 animate-spin text-[#22c55e] mx-auto" />
-          <p className="text-xs text-zinc-400">Validating staff invitation token...</p>
+          <Loader2 className="w-8 h-8 animate-spin text-emerald-500 mx-auto" />
+          <p className="text-xs text-muted-foreground">Validating staff invitation token...</p>
         </div>
       </div>
     );
@@ -104,23 +104,23 @@ export function AcceptInvitePage() {
   if (inviteError || !invite) {
     const errorMsg = (inviteError as any)?.response?.data?.message || 'Invalid or expired invitation token';
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4 text-zinc-100">
-        <Card className="max-w-md w-full bg-zinc-900 border-zinc-800 text-zinc-100">
+      <div className="min-h-screen bg-background flex items-center justify-center p-4 text-foreground">
+        <Card className="max-w-md w-full bg-card border-border text-card-foreground shadow-xl">
           <CardHeader className="text-center">
             <div className="mx-auto w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-500 mb-2">
               <AlertCircle className="w-5 h-5" />
             </div>
-            <CardTitle className="text-lg text-white">Invitation Unavailable</CardTitle>
-            <CardDescription className="text-zinc-400 text-xs mt-1">
+            <CardTitle className="text-lg text-foreground">Invitation Unavailable</CardTitle>
+            <CardDescription className="text-muted-foreground text-xs mt-1">
               {errorMsg}
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <p className="text-xs text-zinc-500 mb-4">
+            <p className="text-xs text-muted-foreground mb-4">
               Please contact your platform Super Admin to request a fresh invitation link.
             </p>
             <Link to="/login">
-              <Button variant="outline" className="w-full border-zinc-800 text-zinc-300 hover:text-white">
+              <Button variant="outline" className="w-full text-foreground hover:bg-muted">
                 Return to Sign In
               </Button>
             </Link>
@@ -131,35 +131,35 @@ export function AcceptInvitePage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col justify-center items-center p-4 sm:p-6">
+    <div className="min-h-screen bg-background text-foreground flex flex-col justify-center items-center p-4 sm:p-6">
       <div className="w-full max-w-md space-y-6">
         {/* Brand Header */}
         <div className="flex items-center justify-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white text-black font-black text-sm">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-sm shadow-xs">
             <Command className="h-4 w-4" />
           </div>
-          <span className="font-extrabold text-base tracking-tight text-white">BLX Orbit Operations Console</span>
+          <span className="font-extrabold text-base tracking-tight text-foreground">BLX Orbit Operations Console</span>
         </div>
 
         {/* Invitation Welcome Card */}
-        <Card className="bg-zinc-900 border-zinc-800 text-zinc-100 shadow-2xl">
-          <CardHeader className="space-y-1 pb-4 border-b border-zinc-800/80">
+        <Card className="bg-card border-border text-card-foreground shadow-2xl">
+          <CardHeader className="space-y-1 pb-4 border-b border-border">
             <div className="flex items-center justify-between">
-              <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-[10px] font-mono">
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-[10px] font-mono">
                 Staff Invitation
               </Badge>
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[10px] text-muted-foreground">
                 {invite.isLifetime || !invite.expiresAt || new Date(invite.expiresAt).getFullYear() >= 2099
                   ? 'No Expiry (Lifetime)'
                   : `Expires ${new Date(invite.expiresAt).toLocaleDateString()}`}
               </span>
             </div>
-            <CardTitle className="text-xl text-white font-bold pt-2">
+            <CardTitle className="text-xl text-foreground font-bold pt-2">
               Complete Your Staff Account
             </CardTitle>
-            <CardDescription className="text-zinc-400 text-xs">
-              You were invited by <strong className="text-zinc-200">{invite.invitedBy}</strong> to join as a{' '}
-              <Badge variant="outline" className="ml-1 border-blue-500/40 text-blue-400 bg-blue-500/10 font-bold text-[10px]">
+            <CardDescription className="text-muted-foreground text-xs">
+              You were invited by <strong className="text-foreground">{invite.invitedBy}</strong> to join as a{' '}
+              <Badge variant="outline" className="ml-1 border-blue-500/40 text-blue-600 dark:text-blue-400 bg-blue-500/10 font-bold text-[10px]">
                 {invite.role}
               </Badge>
             </CardDescription>
@@ -169,43 +169,43 @@ export function AcceptInvitePage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Email (Read-only) */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-400">Assigned Work Email</label>
+                <label className="text-xs font-semibold text-muted-foreground">Assigned Work Email</label>
                 <Input
                   type="email"
                   value={invite.email}
                   disabled
-                  className="h-9 bg-zinc-950 border-zinc-800 text-zinc-400 cursor-not-allowed text-xs font-mono"
+                  className="h-9 bg-muted/50 border-input text-muted-foreground cursor-not-allowed text-xs font-mono"
                 />
               </div>
 
               {/* Full Name */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-200">Full Name *</label>
+                <label className="text-xs font-semibold text-foreground">Full Name *</label>
                 <Input
                   type="text"
                   placeholder="e.g. Rahul Sharma"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="h-9 bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-600 focus-visible:ring-emerald-500 text-xs"
+                  className="h-9 bg-background border-input text-foreground focus-visible:ring-emerald-500 text-xs"
                 />
               </div>
 
               {/* Phone (Optional) */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-200">Phone Number (Optional)</label>
+                <label className="text-xs font-semibold text-foreground">Phone Number (Optional)</label>
                 <Input
                   type="tel"
                   placeholder="+91 98765 43210"
                   value={phoneNumber}
                   onChange={(e) => setPhoneNumber(e.target.value)}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-600 focus-visible:ring-emerald-500 text-xs"
+                  className="h-9 bg-background border-input text-foreground focus-visible:ring-emerald-500 text-xs"
                 />
               </div>
 
               {/* Password */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-200">Set Account Password *</label>
+                <label className="text-xs font-semibold text-foreground">Set Account Password *</label>
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -213,13 +213,13 @@ export function AcceptInvitePage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-600 focus-visible:ring-emerald-500 text-xs"
+                  className="h-9 bg-background border-input text-foreground focus-visible:ring-emerald-500 text-xs"
                 />
               </div>
 
               {/* Confirm Password */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-zinc-200">Confirm Password *</label>
+                <label className="text-xs font-semibold text-foreground">Confirm Password *</label>
                 <Input
                   type="password"
                   placeholder="••••••••"
@@ -227,7 +227,7 @@ export function AcceptInvitePage() {
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   minLength={6}
-                  className="h-9 bg-zinc-950 border-zinc-800 text-white placeholder:text-zinc-600 focus-visible:ring-emerald-500 text-xs"
+                  className="h-9 bg-background border-input text-foreground focus-visible:ring-emerald-500 text-xs"
                 />
               </div>
 
@@ -235,7 +235,7 @@ export function AcceptInvitePage() {
               <Button
                 type="submit"
                 disabled={acceptMutation.isPending}
-                className="w-full h-10 font-bold bg-[#22c55e] hover:bg-[#16a34a] text-black transition mt-4 cursor-pointer gap-2"
+                className="w-full h-10 font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition mt-4 cursor-pointer gap-2"
               >
                 {acceptMutation.isPending ? (
                   <>
@@ -253,9 +253,9 @@ export function AcceptInvitePage() {
           </CardContent>
         </Card>
 
-        <p className="text-center text-[11px] text-zinc-500">
+        <p className="text-center text-[11px] text-muted-foreground">
           Already have an account?{' '}
-          <Link to="/login" className="text-emerald-400 hover:underline">
+          <Link to="/login" className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline">
             Sign In
           </Link>
         </p>

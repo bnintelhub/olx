@@ -1,6 +1,7 @@
 import './load_env';
 
 import { PrismaClient, AttributeType } from '@prisma/client';
+import { seedAllStates } from './seed_all_states';
 
 const prisma = new PrismaClient();
 
@@ -32,6 +33,9 @@ async function main() {
       await prisma.location.create({ data: loc });
     }
   }
+
+  // 1b. Seed All 28 States & 8 Union Territories with hierarchical cities
+  await seedAllStates();
 
   // 2. Seed Nested Categories & Attributes
   const categoriesHierarchy = [

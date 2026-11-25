@@ -77,6 +77,13 @@ export async function adminRoutes(fastify: FastifyInstance) {
   fastify.put('/profile', auth, AdminController.updateProfile);
   fastify.put('/change-password', auth, AdminController.changePassword);
 
+  // Direct Permanent Staff Provisioning (Super Admin only)
+  fastify.post(
+    '/staff',
+    { preHandler: [fastify.authenticate, requirePermission(Permissions.ADMINS_MANAGE)] },
+    AdminController.createDirectStaff
+  );
+
   // Staff Invitations Workflow (Super Admin only)
   fastify.post(
     '/invitations',

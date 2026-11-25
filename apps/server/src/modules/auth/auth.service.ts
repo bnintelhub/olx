@@ -152,6 +152,7 @@ export class AuthService {
     const tokens = this.generateTokens(tokenPayload);
     const tokenHash = HashUtil.sha256(tokens.refreshToken);
 
+    await setCache(`auth:refresh:client:${tokenHash}`, { userId: user.id, role: user.role }, 30 * 24 * 60 * 60);
     await AuthRepository.updateUserTokens(user.id, tokenHash);
 
     return {
@@ -505,6 +506,7 @@ export class AuthService {
     const tokens = this.generateTokens(tokenPayload);
     const tokenHash = HashUtil.sha256(tokens.refreshToken);
 
+    await setCache(`auth:refresh:client:${tokenHash}`, { userId: user.id, role: user.role }, 30 * 24 * 60 * 60);
     await AuthRepository.updateUserTokens(user.id, tokenHash);
 
     return {
@@ -520,10 +522,30 @@ export class AuthService {
   }
 
   // Rotates the refresh token and issues a new access token for active sessions.
-  // Updates the token hash in PostgreSQL to ensure single-use token rotation.
-  static async refreshTokens(refreshToken: string) {
+  // Employs Redis multi-session context isolation and a 30-second grace window to protect against race conditions.
+  static async refreshTokens(refreshToken: string, context: 'admin' | 'client' = 'client') {
     const tokenHash = HashUtil.sha256(refreshToken);
-    const user = await AuthRepository.findUserByRefreshTokenHash(tokenHash);
+
+    // 1. Look up active refresh session in Redis under current app context
+    const cachedSession = await getCache<{ userId: string; role: any }>(`auth:refresh:${context}:${tokenHash}`);
+    let user = null;
+    if (cachedSession?.userId) {
+      user = await AuthRepository.findUserById(cachedSession.userId);
+    }
+
+    // 2. Primary database fallback for cold start or single-session recovery
+    if (!user) {
+      user = await AuthRepository.findUserByRefreshTokenHash(tokenHash);
+    }
+
+    // 3. Cross-context fallback in case session was established in alternate context
+    if (!user) {
+      const altContext = context === 'admin' ? 'client' : 'admin';
+      const altCached = await getCache<{ userId: string; role: any }>(`auth:refresh:${altContext}:${tokenHash}`);
+      if (altCached?.userId) {
+        user = await AuthRepository.findUserById(altCached.userId);
+      }
+    }
 
     if (!user) {
       throw new AppError(401, 'INVALID_REFRESH_TOKEN', 'Session expired. Please log in again.');
@@ -541,6 +563,12 @@ export class AuthService {
     };
     const tokens = this.generateTokens(tokenPayload);
     const newHash = HashUtil.sha256(tokens.refreshToken);
+
+    // Persist new refresh token in Redis for 30 days
+    await setCache(`auth:refresh:${context}:${newHash}`, { userId: user.id, role: user.role }, 30 * 24 * 60 * 60);
+
+    // Safety grace period: maintain old token hash for 30s so parallel tabs & concurrent requests succeed
+    await setCache(`auth:refresh:${context}:${tokenHash}`, { userId: user.id, role: user.role }, 30);
 
     await AuthRepository.updateUserTokens(user.id, newHash);
     return tokens;
@@ -592,11 +620,9 @@ export class AuthService {
       passwordMatches = await HashUtil.comparePassword(cleanPassword, adminUser.passwordHash);
     }
     if (!passwordMatches) {
-      passwordMatches =
-        cleanPassword === 'rahul@123' ||
-        (env.ADMIN_PASSWORD_HASH
-          ? await HashUtil.comparePassword(cleanPassword, env.ADMIN_PASSWORD_HASH)
-          : env.NODE_ENV !== 'production' && Boolean(env.ADMIN_PASSWORD) && cleanPassword === env.ADMIN_PASSWORD);
+      passwordMatches = env.ADMIN_PASSWORD_HASH
+        ? await HashUtil.comparePassword(cleanPassword, env.ADMIN_PASSWORD_HASH)
+        : env.NODE_ENV !== 'production' && Boolean(env.ADMIN_PASSWORD) && cleanPassword === env.ADMIN_PASSWORD;
     }
 
     if (!passwordMatches) {
@@ -624,6 +650,8 @@ export class AuthService {
     const tokens = this.generateTokens(tokenPayload);
     const tokenHash = HashUtil.sha256(tokens.refreshToken);
 
+    // Persist admin refresh session in Redis for 30 days
+    await setCache(`auth:refresh:admin:${tokenHash}`, { userId: adminUser.id, role: effectiveRole }, 30 * 24 * 60 * 60);
     await AuthRepository.updateUserTokens(adminUser.id, tokenHash);
 
     return {
@@ -638,10 +666,12 @@ export class AuthService {
     };
   }
 
-  // Invalidates the active refresh token hash and evicts Redis cache.
-  // Guarantees immediate session revocation across all backend instances.
-  static async logout(userId: string) {
-    await AuthRepository.updateUserTokens(userId, null);
+  // Invalidates the active refresh session in Redis and evicts user cache.
+  static async logout(userId: string, context: 'admin' | 'client' = 'client', refreshToken?: string) {
+    if (refreshToken) {
+      const tokenHash = HashUtil.sha256(refreshToken);
+      await delCache(`auth:refresh:${context}:${tokenHash}`);
+    }
     await delCache(`user:${userId}`);
   }
 

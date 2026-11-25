@@ -18,7 +18,30 @@ export default defineConfig(({ command, mode }) => {
   return {
     envDir: rootDir,
     base: baseUrl,
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: 'redirect-to-admin-base',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const url = req.url || '';
+            if (
+              !url.startsWith('/admin') &&
+              (url.startsWith('/accept-invite') ||
+                url.startsWith('/login') ||
+                url.startsWith('/dashboard') ||
+                url === '/')
+            ) {
+              const redirectPath = `/admin${url === '/' ? '/' : url}`;
+              res.writeHead(302, { Location: redirectPath });
+              res.end();
+              return;
+            }
+            next();
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname || path.resolve(), './src'),
@@ -35,6 +58,9 @@ export default defineConfig(({ command, mode }) => {
         : true,
       watch: {
         usePolling: true,
+        interval: 1000,
+        binaryInterval: 2000,
+        ignored: ['**/node_modules/**', '**/.git/**', '**/dist/**', '**/coverage/**'],
       },
       proxy: {
         '/api': {

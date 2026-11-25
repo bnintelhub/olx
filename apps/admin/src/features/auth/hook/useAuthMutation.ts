@@ -33,12 +33,26 @@ export function useLoginMutation() {
       navigate('/dashboard');
     },
     onError: (error: any) => {
-      const message =
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        error.message ||
-        'Authentication failed. Please verify credentials with server.';
-      toast.error(message);
+      const errData = error.response?.data;
+      const code = errData?.error?.code || errData?.code;
+      const serverMsg =
+        (typeof errData?.error === 'string' ? errData.error : errData?.error?.message) ||
+        (typeof errData?.message === 'string' ? errData.message : null);
+
+      let displayMessage = 'Invalid email and password';
+      if (
+        code === 'INVALID_ADMIN_CREDENTIALS' ||
+        error.response?.status === 401 ||
+        serverMsg?.toLowerCase().includes('invalid admin username or password')
+      ) {
+        displayMessage = 'Invalid email and password';
+      } else if (serverMsg) {
+        displayMessage = serverMsg;
+      } else if (typeof error.message === 'string' && error.message) {
+        displayMessage = error.message;
+      }
+
+      toast.error(displayMessage);
     },
   });
 }

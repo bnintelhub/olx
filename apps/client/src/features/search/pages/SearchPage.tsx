@@ -41,6 +41,18 @@ export const SearchPage: React.FC = () => {
     setLocalQ(q);
   }, [q]);
 
+  // Debounced search query sync to automatically update results without pressing Enter
+  useEffect(() => {
+    const trimmed = localQ.trim();
+    if (trimmed === q) return;
+
+    const timer = setTimeout(() => {
+      updateParam('q', trimmed);
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [localQ, q]);
+
   useEffect(() => {
     setLocalMin(minPrice);
     setLocalMax(maxPrice);

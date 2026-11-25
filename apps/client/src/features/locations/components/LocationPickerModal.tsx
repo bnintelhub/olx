@@ -155,11 +155,12 @@ export const LocationPickerModal: React.FC<LocationPickerModalProps> = ({
 
           if (nearby && nearby.length > 0) {
             const nearest = nearby[0];
-            const distLabel =
-              nearest.distanceKm !== undefined
-                ? ` (~${nearest.distanceKm.toFixed(1)} km away)`
-                : '';
-            toast.success(`Location detected: ${nearest.name}${distLabel}`);
+            const dist = nearest.distanceKm !== undefined ? ` (~${nearest.distanceKm.toFixed(1)} km away)` : '';
+            if (nearest.isExpandedRadius) {
+              toast.info(`Nearest available city: ${nearest.name}${dist}`);
+            } else {
+              toast.success(`Location detected: ${nearest.name}${dist}`);
+            }
             onSelectLocation(nearest);
             onClose();
           } else {

@@ -39,6 +39,14 @@ export interface CreateStaffInvitationPayload {
   customExpiresAt?: string | null;
 }
 
+export interface CreateDirectStaffPayload {
+  name: string;
+  email: string;
+  password: string;
+  role: AdminRole;
+  phoneNumber?: string;
+}
+
 export interface StaffInvitationItem {
   id: string;
   email: string;
@@ -75,14 +83,17 @@ export interface InvitationDetails {
 }
 
 export const authService = {
-  // Authenticates administrative staff via username/password and role.
+  // Authenticates administrative staff via username/password.
   // The server issues secure HTTP-only cookies to maintain session persistence.
   async adminLogin(payload: AdminLoginPayload): Promise<AuthResponseData> {
-    const { data } = await apiClient.post<ApiResponse<any>>('/auth/admin-login', {
+    const requestBody: Record<string, any> = {
       username: payload.username.trim(),
       password: payload.password,
-      role: payload.role || 'ADMIN',
-    });
+    };
+    if (payload.role) {
+      requestBody.role = payload.role;
+    }
+    const { data } = await apiClient.post<ApiResponse<any>>('/auth/admin-login', requestBody);
     const rawUser = data.data.user;
     const user: AdminUser = {
       id: rawUser.id,
@@ -163,6 +174,12 @@ export const authService = {
   // Clears HTTP-only cookies and resets local client application state.
   async logout(): Promise<void> {
     await apiClient.post('/auth/logout');
+  },
+
+  // Directly creates a permanent staff account with pre-set credentials.
+  async createDirectStaff(payload: CreateDirectStaffPayload): Promise<{ user: any; message: string }> {
+    const { data } = await apiClient.post<ApiResponse<{ user: any; message: string }>>('/admin/staff', payload);
+    return data.data;
   },
 
   // Generates a configurable onboarding invitation link for a target staff email.

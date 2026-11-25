@@ -49,7 +49,16 @@ export const updateStaffStatusSchema = z.object({
   reason: z.string().optional(),
 });
 
+export const createDirectStaffSchema = z.object({
+  name: z.string().min(2, 'Staff member name must be at least 2 characters'),
+  email: z.string().email('Valid work email address required'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+  role: z.nativeEnum(UserRole),
+  phoneNumber: z.string().min(10, 'Valid mobile number').optional(),
+});
+
 export type CreateInvitationInput = z.infer<typeof createInvitationSchema>;
 export type AuditLogQueryInput = z.infer<typeof auditLogQuerySchema>;
 export type UpdateUserStatusInput = z.infer<typeof updateUserStatusSchema>;
 export type UpdateStaffStatusInput = z.infer<typeof updateStaffStatusSchema>;
+export type CreateDirectStaffInput = z.infer<typeof createDirectStaffSchema>;

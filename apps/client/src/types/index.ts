@@ -57,6 +57,7 @@ export interface LocationItem {
   latitude?: number | null;
   longitude?: number | null;
   distanceKm?: number;
+  isExpandedRadius?: boolean;
   parent?: {
     id: string;
     name: string;

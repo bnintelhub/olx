@@ -142,12 +142,32 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
         } catch (err: any) {
-          // If server explicitly returns 401 and silent refresh failed, reset session
+          // If server returns 401, attempt silent refresh before deciding to terminate session
           if (err?.response?.status === 401) {
+            try {
+              const refreshed = await get().silentRefresh();
+              if (refreshed) {
+                const refreshedUser = await authService.getMe();
+                if (refreshedUser && (refreshedUser.role as string) !== 'USER') {
+                  schedulePredictiveRefresh(PREDICTIVE_BUFFER_MS);
+                  set({
+                    user: refreshedUser,
+                    role: refreshedUser.role,
+                    isAuthenticated: true,
+                    isLoading: false,
+                  });
+                  return;
+                }
+              }
+            } catch {
+              // Refresh attempt failed
+            }
+
+            // Only logout if refresh genuinely failed (e.g. 30 days expired or revoked)
             await get().logout();
             return;
           }
-          // On network errors or server reboot, preserve existing cached profile
+          // On network errors or temporary disconnection, preserve existing cached profile
         }
 
         set({ isLoading: false });

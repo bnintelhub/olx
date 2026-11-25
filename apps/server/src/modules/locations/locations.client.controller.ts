@@ -59,9 +59,9 @@ export class LocationsClientController {
     const data = await LocationsService.nearby({
       latitude: Number(latitude),
       longitude: Number(longitude),
-      radiusKm: radiusKm ? Number(radiusKm) : 15,
+      radiusKm: radiusKm !== undefined && !isNaN(Number(radiusKm)) ? Number(radiusKm) : undefined,
       type,
-      limit: limit ? Number(limit) : 20,
+      limit: limit !== undefined && !isNaN(Number(limit)) ? Number(limit) : undefined,
     });
     return reply.status(200).send({ success: true, data });
   }

@@ -248,7 +248,7 @@ export class AuthController {
       throw new AppError(400, 'REFRESH_TOKEN_REQUIRED', 'Refresh token is required in request body or cookie');
     }
 
-    const tokens = await AuthService.refreshTokens(refreshToken);
+    const tokens = await AuthService.refreshTokens(refreshToken, context);
     setAuthCookies(reply, tokens, context);
 
     return reply.status(200).send({
@@ -305,7 +305,10 @@ export class AuthController {
   // Clears HTTP-only browser cookies and records an audit log entry.
   static async logout(request: FastifyRequest, reply: FastifyReply) {
     const context = getAuthContext(request);
-    await AuthService.logout(request.user!.id);
+    const cookieToken = context === 'admin'
+      ? request.cookies?.admin_refresh_token
+      : request.cookies?.refresh_token;
+    await AuthService.logout(request.user!.id, context, cookieToken);
     clearAuthCookies(reply, context);
 
     await writeAuditLog({
