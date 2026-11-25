@@ -53,12 +53,14 @@ olx/
 │   └── monitoring/          # Prometheus & Grafana monitoring
 ├── docs/                    # In-depth architectural & deployment documentation
 │   ├── DEPLOYMENT_STRATEGY.md # Comprehensive deployment & operations manual
+│   ├── feed.md                # Phase 1 Feed, Recommendation & Search architecture
 │   └── media.md             # Media upload, storage, and Sharp processing pipeline
 ├── DEPLOYMENT.md            # Quickstart deployment manual for engineers
-├── .env.development         # Local development configuration (Postgres, Redis, Mock SMS)
-├── .env.production          # Production environment configuration (Cloud DB, Redis, PayU, FCM)
+├── .env                     # Active local development config (native pnpm commands)
+├── .env.development         # Docker development configuration (Postgres, Redis, Mock SMS)
+├── .env.production          # Production environment configuration (External DB, Redis, PayU, FCM)
 ├── docker-compose.dev.yml   # Development Docker Compose stack
-├── docker-compose.prod.yml  # Production Docker Compose stack
+├── docker-compose.prod.yml  # Production Docker Compose stack (External DB default, optional local-db profile)
 ├── pnpm-workspace.yaml      # Monorepo packages mapping
 └── package.json             # Root monorepo orchestration scripts
 ```
@@ -75,11 +77,15 @@ All commands can be executed directly from the monorepo root:
 | `pnpm --filter @olx/server dev` | Starts the Fastify API backend in watch mode on port `5000` |
 | `pnpm --filter @olx/workers dev` | Starts BullMQ background workers in watch mode |
 | `pnpm build` | Compiles all packages and applications in topological dependency order |
-| `pnpm test` | Runs unit and integration test suites |
+| `pnpm typecheck` | Generates Prisma client, builds shared packages, and runs TypeScript checks |
+| `pnpm test:unit` | Runs server unit tests via Vitest |
 | `pnpm db:generate` | Generates the Prisma Client in `@olx/database` |
-| `pnpm db:push` | Synchronizes Prisma schema changes directly to PostgreSQL |
+| `pnpm db:migrate:deploy` | Applies pending Prisma migrations safely in production/staging |
+| `pnpm db:push` | Pushes Prisma schema directly to PostgreSQL (local prototyping) |
 | `pnpm db:seed` | Seeds database with categories, locations, sample ads, and admin user |
+| `pnpm db:seed:roles` | Seeds all 7 staff RBAC roles with default credentials |
 | `pnpm db:studio` | Launches Prisma Studio visual database inspector on port `5555` |
+| `pnpm docker:prod:build` | Builds and starts the production stack (`docker-compose.prod.yml`) |
 
 ---
 
@@ -378,6 +384,7 @@ flowchart TD
 
 ## Key Features
 
+- **Personalized Feed & Recommendation Engine (Phase 1)**: Hybrid precomputed + on-demand + cold-start home feed with configurable weighted ranking, cursor pagination, `pg_trgm` dynamic search, and idempotent BullMQ behavioral event processing (see [docs/feed.md](docs/feed.md)).
 - **Decoupled WebP Media System**: Immediate upload preview response with zero race conditions, asynchronous 4-tier Sharp WebP generation, and admin disk capacity monitoring.
 - **Clustered Real-Time Chat**: Multi-node Socket.IO clustering with automatic message deduplication, delivery receipts, read receipts, and audio chime alerts.
 - **Anti-Fraud Security Engine**: Content heuristics scan listings and messages for UPI/QR code scams, suspicious keywords, and rapid messaging bursts.
@@ -388,7 +395,7 @@ flowchart TD
 
 ## Deployment Guide for Engineers
 
-This section provides clear, end-to-end instructions for deployment engineers.
+This section provides clear, end-to-end instructions for the current production setup.
 
 > 📖 **Full Operations Manual**: For extensive configurations, SSL setup, and multi-server topologies, see [DEPLOYMENT.md](DEPLOYMENT.md) and [docs/DEPLOYMENT_STRATEGY.md](docs/DEPLOYMENT_STRATEGY.md).
 
@@ -405,7 +412,11 @@ This section provides clear, end-to-end instructions for deployment engineers.
 
 ### Method 1: Deploying with Docker (Recommended)
 
-Docker Compose provides a complete, containerized environment in a single command.
+The production stack (`docker-compose.prod.yml`) is tuned for a VPS + **external managed PostgreSQL** (e.g., Hostinger Managed PostgreSQL or Neon) so the VPS does not waste RAM/CPU running a database alongside Node, Sharp, and Redis:
+
+- **External PostgreSQL by default**: `postgres` is placed under `profiles: ["local-db"]` and is **not** started unless explicitly requested.
+- **Redis 7**: Runs with `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction` so BullMQ queues and Socket.IO pub/sub never lose jobs or silently evict keys.
+- **Nginx HTTPS Gateway (`:80` & `:443`)**: Serves TLS 1.2/1.3 + HTTP/2 on port `443` and redirects HTTP (`80`) → HTTPS (`443`), while keeping `/.well-known/acme-challenge/` (Certbot) and `/health` reachable on port `80`. `Dockerfile.nginx` generates a fallback self-signed certificate at `/etc/nginx/ssl/` so Nginx starts immediately even before Let's Encrypt certs are mounted.
 
 #### Step 1: Clone & Configure `.env.production`
 ```bash
@@ -417,32 +428,51 @@ cp .env.production.example .env.production
 nano .env.production
 ```
 
-Set your production database connection (`DATABASE_URL`), public domain names (`CLIENT_URL=https://yourdomain.com`), and generate secure JWT secrets:
+Configure your external PostgreSQL connection, public URL, and secrets:
 ```bash
-openssl rand -hex 32  # Run twice: once for JWT_ACCESS_SECRET, once for JWT_REFRESH_SECRET
+# Example external managed PostgreSQL with Prisma pool tuning & SSL
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DB_NAME?schema=public&connection_limit=15&pool_timeout=20&sslmode=require"
+APP_URL="https://yourdomain.com"
+
+# Generate 32-byte secrets (run twice: JWT_ACCESS_SECRET, JWT_REFRESH_SECRET)
+openssl rand -hex 32
 ```
 
-#### Step 2: Start Container Stack
+#### Step 2: SSL Certificates (Recommended for Live Domain)
+By default, `Dockerfile.nginx` provisions a self-signed fallback certificate at `/etc/nginx/ssl/{privkey,fullchain}.pem` so the stack boots cleanly. For a real domain, obtain Let's Encrypt certificates (or place your certs in `./infrastructure/nginx/ssl/`) and uncomment the SSL volume mount in `docker-compose.prod.yml`:
+```yaml
+- ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+```
+
+#### Step 3: Start Container Stack
 ```bash
+# Default: External PostgreSQL (Hostinger / Neon / Cloud DB)
 docker compose -f docker-compose.prod.yml up -d --build
+
+# Optional: Include containerized PostgreSQL on the same VPS
+docker compose -f docker-compose.prod.yml --profile local-db up -d --build
 ```
 
-#### Step 3: Run Database Migrations & Initial Seed
+#### Step 4: Run Database Migrations & Initial Seed
 ```bash
-# Push schema migrations
-docker compose -f docker-compose.prod.yml exec server pnpm db:push
+# Apply production Prisma migrations safely
+docker compose -f docker-compose.prod.yml exec server pnpm db:migrate:deploy
 
-# Seed categories, locations, and default admin account
+# Seed categories, locations, and staff roles
 docker compose -f docker-compose.prod.yml exec server pnpm db:seed
+docker compose -f docker-compose.prod.yml exec server pnpm db:seed:roles
 ```
 
-#### Step 4: Verify Health
+#### Step 5: Verify Health & VPS Firewall
 ```bash
+# HTTP liveness probe (allowed on port 80 without redirect)
 curl -f http://localhost/health
+
+# HTTPS liveness probe (use -k if using the built-in fallback self-signed cert)
+curl -fk https://localhost/health
 # Expected: {"status":"ok","timestamp":"..."}
 ```
-# Expected: {"status":"ok","timestamp":"..."}
-```
+Ensure your VPS firewall (e.g., UFW / Hostinger panel) allows inbound TCP **80** and **443**, and keeps **5000**, **6379**, and **5432** closed externally. Recommended minimum VPS sizing with external DB + 512 MB Redis: **2 vCPU / 4 GB RAM** (2 GB RAM works for light traffic).
 
 ---
 
@@ -519,26 +549,34 @@ sudo certbot --nginx -d yourdomain.com
 |:---|:---:|:---|:---|
 | `NODE_ENV` | **Yes** | `production` | Set to `production` in live environments. |
 | `PORT` | No | `5000` | Port Fastify API listens on. |
-| `DATABASE_URL` | **Yes** | — | PostgreSQL connection URI (`postgresql://user:pass@host:5432/db?schema=public`). |
-| `REDIS_URL` | **Yes** | `redis://redis:6379` | Redis connection URI for cache, Socket.IO adapter, and BullMQ queues. |
+| `APP_URL` | **Yes** | `http://localhost:5173` | Primary public domain; sub-paths (`/admin`, `/api`, `/media`) derive from this. |
+| `DATABASE_URL` | **Yes** | — | PostgreSQL URI. Use `?schema=public&connection_limit=15&pool_timeout=20&sslmode=require` for managed cloud DBs; omit `sslmode=require` for local Docker Postgres (`localhost:5433`). |
+| `DIRECT_URL` | No | — | Direct non-pooled PostgreSQL URI for Prisma migrations when using PgBouncer. |
+| `REDIS_URL` | **Yes** | `redis://redis:6379` | Redis connection URI for cache, Socket.IO adapter, and BullMQ queues (`redis://localhost:6379` locally). |
 | `JWT_ACCESS_SECRET` | **Yes** | — | 32-byte secret for access token signing (`openssl rand -hex 32`). |
 | `JWT_REFRESH_SECRET` | **Yes** | — | 32-byte secret for refresh token signing (`openssl rand -hex 32`). |
-| `CLIENT_URL` | **Yes** | `http://localhost:5173` | Public frontend URL (used for CORS and cookies). |
-| `ADMIN_URL` | No | `http://localhost:5173/admin` | Public admin portal URL. |
+| `CLIENT_URL` | No | Derived from `APP_URL` | Public frontend URL override (used for CORS and cookies). |
+| `ADMIN_URL` | No | Derived from `APP_URL` | Public admin portal URL override. |
 | `MEDIA_ROOT` | **Yes** | `/data/olx-media` | Filesystem path for media assets. |
-| `MEDIA_PUBLIC_BASE_URL` | **Yes** | `/media` | Public URL prefix for serving static media. |
+| `MEDIA_PUBLIC_BASE_URL` | No | `/media` | Public URL prefix for serving static media. |
 | `ENABLE_RATE_LIMIT` | No | `true` | Enables Redis sliding-window IP rate limiting. |
+| `FEED_PERSONALIZATION_ENABLED` | No | `true` | Enables Phase 1 personalized home feed ranking (`false` falls back to chronological). |
+| `FEED_ROLLOUT_PERCENT` | No | `100` | Percentage (`0–100`) of users receiving personalized feed ranking. |
+| `FEED_EVENT_SHADOW_MODE` | No | `false` | Accepts `POST /api/v1/events` without mutating user interest scores when `true`. |
+| `FEED_VERSION` | No | `v1` | Feed cache/version namespace for safe cache invalidation across releases. |
+| `FEED_WEIGHTS_JSON` | No | — | Optional JSON override for ranking signal weights (category, location, price, freshness, engagement, quality). |
 | `SMS_PROVIDER` | **Yes** | `MOCK` | `MSG91`, `TWILIO`, or `MOCK` (dev only). |
 
 ---
 
 ### Production Deployment Security Checklist
 
-1. **Rotate Secrets**: Always generate unique strings for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`.
-2. **Disable Mock SMS**: Set `SMS_PROVIDER=MSG91` or `SMS_PROVIDER=TWILIO` in production.
-3. **Enable Rate Limiting**: Ensure `ENABLE_RATE_LIMIT=true` in `.env`.
-4. **Persistent Media Volumes**: Ensure the directory configured in `MEDIA_ROOT` resides on a persistent, backed-up host volume with sufficient disk space.
-5. **SSL Termination**: Always route public traffic through Nginx with HTTPS (port 443) using Let's Encrypt certificates.
+1. **Rotate Secrets**: Always generate unique 32-byte hex strings for `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`.
+2. **Disable Mock SMS**: Set `SMS_PROVIDER=MSG91` or `SMS_PROVIDER=TWILIO` in `.env.production`.
+3. **Enable Rate Limiting**: Ensure `ENABLE_RATE_LIMIT=true` in `.env.production`.
+4. **Database SSL & Pooling**: Keep `sslmode=require` and `connection_limit=15` for managed cloud PostgreSQL; whitelist only your VPS IP in the database provider's firewall.
+5. **Persistent Media Volumes**: Ensure `MEDIA_ROOT` (`/data/olx-media`) is backed by a persistent, backed-up host volume (`media_data`).
+6. **SSL Termination**: Mount valid Let's Encrypt / CA certificates to `/etc/nginx/ssl/` in `nginx` so port `443` serves trusted TLS instead of the fallback self-signed cert.
 
 ---
 
@@ -546,8 +584,8 @@ sudo certbot --nginx -d yourdomain.com
 
 ### Prerequisites
 - **Node.js**: `v20 LTS` or higher
-- **pnpm**: `v9` or higher
-- **Docker**: For running local PostgreSQL and Redis containers
+- **pnpm**: `v9` or higher (repo `packageManager` is `pnpm@11.25.0`)
+- **Docker**: For running local PostgreSQL (`5433`) and Redis (`6379`) containers
 
 ### Step-by-Step
 ```bash
@@ -555,7 +593,7 @@ sudo certbot --nginx -d yourdomain.com
 pnpm install
 
 # 2. Setup environment file
-cp .env.example .env
+cp .env.development.example .env
 
 # 3. Start local database & redis containers
 docker compose -f docker-compose.dev.yml up -d postgres redis
@@ -564,10 +602,13 @@ docker compose -f docker-compose.dev.yml up -d postgres redis
 pnpm db:generate
 pnpm db:push
 pnpm db:seed
+pnpm db:seed:roles
 
 # 5. Launch all services concurrently
 pnpm dev
 ```
+
+> **Note on Local `DATABASE_URL`**: Local Docker Postgres (`localhost:5433`) does **not** have SSL enabled by default. Use `postgresql://postgres:postgres@localhost:5433/olx_marketplace?schema=public` without `sslmode=require`.
 
 - **Customer App**: [http://localhost:5173](http://localhost:5173)
 - **Admin Portal**: [http://localhost:5174](http://localhost:5174)

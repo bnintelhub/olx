@@ -1,11 +1,12 @@
 services:
   # ========================================================
-  # PostgreSQL 16 Relational Database Container
-  # Note: If using Neon DB / External DB, set DATABASE_URL in .env.production
+  # PostgreSQL 16 Relational Database Container (Optional - External Hostinger DB used by default)
+  # Run with `--profile local-db` only if you want a local container DB
   # ========================================================
   postgres:
     image: postgres:16-alpine
     container_name: bharatmarket_postgres
+    profiles: ["local-db"]
     restart: always
     env_file:
       - .env.production
@@ -26,7 +27,7 @@ services:
     image: redis:7-alpine
     container_name: bharatmarket_redis
     restart: always
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy noeviction
     env_file:
       - .env.production
     volumes:
@@ -49,8 +50,6 @@ services:
       dockerfile: ./infrastructure/docker/prod/Dockerfile.server
     restart: always
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
@@ -78,8 +77,6 @@ services:
     container_name: bharatmarket_workers
     restart: always
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
     env_file:
@@ -153,6 +150,8 @@ services:
     volumes:
       - media_data:/data/olx-media:ro
       - certbot_data:/var/www/certbot:ro
+      # Uncomment below after placing real SSL certs (fullchain.pem & privkey.pem) on VPS:
+      # - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
     networks:
       - bharatmarket_net
 

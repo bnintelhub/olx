@@ -4,23 +4,23 @@
 
 ---
 
-## 1. Architecture Overview
+## 1. Production Architecture Overview
 
-BharatMarket runs on a containerized micro-service stack orchestrated via **Docker Compose**:
+BharatMarket runs on a containerized stack orchestrated via **Docker Compose** (`docker-compose.prod.yml`), tuned for a single VPS paired with an **external managed PostgreSQL** database (e.g., Neon DB, Hostinger Managed PostgreSQL, or AWS RDS):
 
-- **Nginx Gateway (`nginx`)**: Unified reverse proxy listening on port 80 & 443. Routes `/api/*` and `/socket.io` to backend, `/media/*` directly to disk, `/admin/*` to Admin SPA, and `/` to Client SPA.
-- **Backend API (`server`)**: Fastify 5 REST API + Socket.IO server running on port 5000.
-- **Background Workers (`workers`)**: BullMQ worker service processing Sharp WebP image conversions, OTP dispatches, and push notifications.
+- **Nginx Gateway (`nginx`)**: Unified reverse proxy listening on ports `80` (ACME challenge + `/health` + `301` redirect to HTTPS) and `443` (TLS 1.2/1.3 + HTTP/2 + HSTS). Routes `/api/*`, `/socket.io`, and SSE streams to `server`, `/media/*` directly from disk, `/admin/*` to Admin SPA, and `/` to Client SPA. Ships with a fallback self-signed certificate so the container starts immediately before real domain SSL certs are mounted.
+- **Backend API (`server`)**: Fastify 5 REST API + Clustered Socket.IO server running on internal port `5000`.
+- **Background Workers (`workers`)**: BullMQ worker service processing Sharp WebP image variants, OTP dispatches, push notifications, and Phase 1 Feed/Recommendation events.
 - **Client Web App (`client`)**: Production React 18 SPA served via Nginx.
-- **Admin Portal (`admin`)**: Production React 18 Admin Operations portal served via Nginx.
-- **Redis (`redis`)**: In-memory cache, BullMQ queue store, and Socket.IO cluster adapter with AOF persistence.
-- **PostgreSQL (`postgres`)**: PostgreSQL 16 database (or external serverless database such as Neon DB).
+- **Admin Portal (`admin`)**: Production React 18 Admin Operations portal served via Nginx at `/admin/`.
+- **Redis 7 (`redis`)**: In-memory cache, BullMQ queue store, and Socket.IO cluster adapter configured with `--appendonly yes --maxmemory 512mb --maxmemory-policy noeviction` so queued jobs and pub/sub messages are never silently evicted.
+- **PostgreSQL (`postgres` — Optional Profile)**: External cloud PostgreSQL is used by default (zero DB CPU/RAM load on your VPS). A containerized PostgreSQL 16 service is available only when explicitly enabled via `--profile local-db`.
 
 ---
 
 ## 2. Directory & Configuration Structure
 
-All environment configuration and Docker Compose files are located **strictly at the repository root**:
+All environment configuration and Docker Compose files live at the **repository root**:
 
 ```text
 olx/
@@ -29,30 +29,31 @@ olx/
 ├── .env.production            # Production environment secrets (DO NOT COMMIT)
 ├── .env.production.example    # Production template
 ├── docker-compose.dev.yml     # Local development compose stack
-├── docker-compose.prod.yml    # Production compose stack
+├── docker-compose.prod.yml    # Production compose stack (External DB default)
 └── infrastructure/
-    ├── docker/prod/           # Production multi-stage Dockerfiles
-    └── nginx/                 # Gateway configs (nginx.conf, nginx.prod.conf, nginx.dev.conf)
+    ├── docker/prod/           # Production multi-stage Dockerfiles (incl. Dockerfile.nginx)
+    └── nginx/                 # Gateway configs (nginx.conf, nginx.prod.conf) & optional ssl/
 ```
 
 ---
 
 ## 3. Step-by-Step Production Deployment
 
-### Step 1: Install Docker on your VPS
-If Docker is not already installed on your server:
+### Step 1: Install Docker & Configure VPS Firewall
+If Docker is not already installed on your VPS:
 
 ```bash
-# Update packages
 sudo apt-get update && sudo apt-get install -y curl git ca-certificates gnupg
-
-# Install official Docker engine & Compose plugin
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
-
-# Re-login or run:
 newgrp docker
 ```
+
+Ensure your VPS firewall (UFW / Cloud Panel) allows only required public ports:
+- **Open**: `22` (SSH), `80` (HTTP redirect & Let's Encrypt ACME), `443` (HTTPS)
+- **Closed externally**: `5000` (API), `6379` (Redis), `5432` (PostgreSQL)
+
+Recommended minimum VPS sizing with external DB + 512 MB Redis: **2 vCPU / 4 GB RAM** (2 GB RAM works for light traffic).
 
 ---
 
@@ -67,7 +68,7 @@ cd /var/www/olx
 
 ### Step 3: Configure `.env.production`
 
-Copy the production example file to `.env.production`:
+Copy the production template and edit it:
 
 ```bash
 cp .env.production.example .env.production
@@ -76,46 +77,66 @@ nano .env.production
 
 #### Required Variables to Update:
 
-1. **Domain URLs**:
+1. **Primary Domain (`APP_URL`)**:
    ```env
-   CLIENT_URL=https://yourdomain.com
-   ADMIN_URL=https://yourdomain.com/admin
-   SERVER_URL=https://yourdomain.com
+   APP_URL=https://olx.bnorbit.tech
    ```
+   *(Sub-paths for `/admin`, `/api`, `/media`, and callbacks derive from `APP_URL` unless overridden by `CLIENT_URL` / `ADMIN_URL`.)*
+
 2. **Database Connection (`DATABASE_URL`)**:
-   - **If using Neon DB / AWS RDS / External Postgres**:
+   - **External Managed Postgres (Neon DB / Hostinger / RDS — Recommended)**:
      ```env
-     DATABASE_URL="postgresql://user:password@ep-host.region.aws.neon.tech/neondb?sslmode=require"
+     DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DB_NAME?schema=public&connection_limit=15&pool_timeout=20&sslmode=require"
      ```
-   - **If using self-hosted Postgres in Docker Compose**:
+     *(Note: `schema.prisma` reads `DATABASE_URL`. When running `prisma migrate deploy` against Neon, ensure the target connection supports advisory locks, or temporarily use the direct non-pooler Neon host for migrations.)*
+   - **Self-Hosted Postgres inside Docker (`--profile local-db` only)**:
      ```env
      POSTGRES_DB=olx_marketplace
      POSTGRES_USER=postgres
      POSTGRES_PASSWORD=YourStrongDatabasePassword2026!
-     DATABASE_URL="postgresql://postgres:YourStrongDatabasePassword2026!@postgres:5432/olx_marketplace?schema=public"
+     DATABASE_URL="postgresql://postgres:YourStrongDatabasePassword2026!@postgres:5432/olx_marketplace?schema=public&connection_limit=15&pool_timeout=20"
      ```
+
 3. **Generate Secure JWT Secrets**:
-   Run `openssl rand -hex 32` twice and paste the results:
+   Run `openssl rand -hex 32` twice and paste the outputs:
    ```env
    JWT_ACCESS_SECRET=your_generated_access_secret_hex_32
    JWT_REFRESH_SECRET=your_generated_refresh_secret_hex_32
    ```
-4. **PayU Payment Keys**:
-   Set `PAYU_MERCHANT_KEY`, `PAYU_MERCHANT_SALT`, and `PAYU_ENVIRONMENT=production`.
-5. **Firebase Web Push**:
-   Confirm your Firebase project ID, credentials, and `VITE_FIREBASE_VAPID_KEY`.
+
+4. **Security, Feed & Integrations**:
+   - `ENABLE_RATE_LIMIT=true`
+   - `SMS_PROVIDER=MSG91` or `TWILIO` (avoid `MOCK` in live production)
+   - PayU keys (`PAYU_MERCHANT_KEY`, `PAYU_MERCHANT_SALT`, `PAYU_WEBHOOK_SECRET`, `PAYU_ENVIRONMENT=production`)
+   - Firebase Web Push credentials (`FIREBASE_*`, `VITE_FIREBASE_VAPID_KEY`)
+   - Optional Phase 1 Feed flags (`FEED_PERSONALIZATION_ENABLED=true`, `FEED_ROLLOUT_PERCENT=100`, `FEED_EVENT_SHADOW_MODE=false`, `FEED_VERSION=v1`)
 
 ---
 
-### Step 4: Build & Launch Containers
+### Step 4: DNS & SSL Setup (`https://yourdomain.com`)
 
-Launch all production containers in detached mode:
+1. **DNS**: Point an `A` record for your domain/subdomain (e.g., `olx.bnorbit.tech`) to your VPS public IPv4 address.
+2. **Nginx `server_name`** (optional, recommended): In `infrastructure/nginx/nginx.prod.conf`, you can replace `server_name _;` (lines 37 and 65) with `server_name olx.bnorbit.tech;`.
+3. **SSL Certificates**:
+   - `Dockerfile.nginx` generates a fallback self-signed cert at `/etc/nginx/ssl/{fullchain.pem,privkey.pem}` so the stack boots immediately.
+   - For trusted browser HTTPS, place your Let's Encrypt or Cloudflare Origin certificates (`fullchain.pem` and `privkey.pem`) in `./infrastructure/nginx/ssl/` on the VPS, and uncomment line 154 in `docker-compose.prod.yml`:
+     ```yaml
+     - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
+     ```
+
+---
+
+### Step 5: Build & Launch Containers
 
 ```bash
+# Default: External PostgreSQL (Neon / Hostinger / Cloud DB)
 docker compose -f docker-compose.prod.yml up -d --build
+
+# Optional: Include containerized PostgreSQL on the same VPS
+docker compose -f docker-compose.prod.yml --profile local-db up -d --build
 ```
 
-To monitor build and launch progress:
+Monitor startup logs:
 
 ```bash
 docker compose -f docker-compose.prod.yml logs -f
@@ -123,89 +144,81 @@ docker compose -f docker-compose.prod.yml logs -f
 
 ---
 
-### Step 5: Database Migrations & Initial Data Seeding
+### Step 6: Database Migrations & Initial Seeding
 
-Once the containers are running, execute database migrations and initialize seed data:
+Once `server` is running, apply Prisma migrations safely and seed initial data:
 
 ```bash
-# Push Prisma schema migrations to the production database
-docker compose -f docker-compose.prod.yml exec server pnpm db:push
+# Apply production migrations
+docker compose -f docker-compose.prod.yml exec server pnpm db:migrate:deploy
 
-# Seed categories, locations, system defaults, and initial Super Admin
+# Seed categories, locations, and staff RBAC roles
 docker compose -f docker-compose.prod.yml exec server pnpm db:seed
+docker compose -f docker-compose.prod.yml exec server pnpm db:seed:roles
 ```
 
 ---
 
-### Step 6: Verify Deployment Health
+### Step 7: Verify Deployment Health
 
-Test that the services are online and responding:
+Port `80` redirects all routes except `/health` and `/.well-known/acme-challenge/` to HTTPS (`443`). Verify using:
 
 ```bash
-# Health Check Endpoint
+# HTTP liveness probe (no redirect on /health)
 curl -i http://localhost/health
 
-# Verify API
-curl -i http://localhost/api/v1/categories
-
-# Verify Static & Dynamic Media Serving through Nginx
-curl -I http://localhost/media/categories/med_mwf5exqab15bc2e326db/icon/image.webp
+# HTTPS health & API check (-k ignores self-signed cert if real SSL is not mounted yet)
+curl -ik https://localhost/health
+curl -ik https://localhost/api/v1/categories
 ```
 
-Expected output for Health:
+Expected `/health` output:
 ```json
 HTTP/1.1 200 OK
-{"status":"ok"}
-```
-
-Expected output for Media:
-```http
-HTTP/1.1 200 OK
-Content-Type: image/webp
-Cache-Control: public, max-age=2592000, immutable
-Access-Control-Allow-Origin: *
+{"status":"ok","timestamp":"..."}
 ```
 
 ---
 
-## 4. Media Storage & Delivery Configuration
+## 4. Media Storage & Delivery Architecture
 
-BharatMarket operates on a high-efficiency **Zero-S3 / Zero-MinIO Local Persistent Volume Architecture**:
-- **Disk Mount**: In Docker, `./data/olx-media` is mounted to `/data/olx-media` (`media_data` volume).
-- **Single Source of Truth**: Database stores only relative filepaths (`ads/drafts/...`, `categories/...`). Backend returns `/media/${filepath}`. Frontend renders `<img src={url} />` directly without string replacement.
+BharatMarket uses a **Local Persistent Docker Volume** (`media_data:/data/olx-media`):
+- **Single Source of Truth**: The database stores only relative file paths (`ads/drafts/...`, `categories/...`). The API returns `/media/${filepath}` and frontends render it directly.
 - **Dual-Tier Serving**:
-  1. Nginx checks `/data/olx-media/` directly using kernel `sendfile` (30-day immutable caching).
-  2. If a file is not yet cached on disk, Nginx falls back to `@media_backend` (`server:5000`), where Fastify streams the image.
-
-### Remote / GitHub Codespaces Testing
-When testing on GitHub Codespaces:
-1. Open the **Ports** panel in VS Code.
-2. Ensure **Port 5000 (Backend API & Media)** is set to **Public** (otherwise external requests will return 401 Unauthorized / redirect to GitHub login).
-3. Ensure **Port 5174 (Admin)** is set to **Public**.
-4. Access via the forwarded URL or click the 🌐 **Open in Browser** icon.
+  1. Nginx serves `/media/*` directly from `/data/olx-media/` using kernel `sendfile` with 30-day immutable caching.
+  2. Internal directories (`/media/temp/`, `quarantine/`, `trash/`, `failed/`) are blocked with `403`.
+  3. If a file is not yet on disk, Nginx falls back to `@media_backend` (`server:5000`), where Fastify streams it.
 
 ---
 
-## 5. Setting Up SSL (HTTPS) with Let's Encrypt / Certbot
+## 5. Provisioning Let's Encrypt SSL on the VPS
 
-In production, run Certbot on the host to generate SSL certificates for your domain:
+If you do not use Cloudflare Origin Certificates, generate Let's Encrypt certificates on the VPS host and copy them into `./infrastructure/nginx/ssl/`:
 
 ```bash
-# 1. Install Certbot
+# 1. Install Certbot on the VPS
 sudo apt-get install -y certbot
 
-# 2. Issue Certificate using Webroot (Nginx proxies /.well-known/acme-challenge/ automatically)
-sudo certbot certonly --webroot -w /var/www/certbot -d yourdomain.com -d www.yourdomain.com
+# 2. Obtain certificate (use --standalone if port 80 is stopped, or webroot if mapped)
+docker compose -f docker-compose.prod.yml stop nginx
+sudo certbot certonly --standalone -d olx.bnorbit.tech
 
-# 3. Mount certificate path in docker-compose.prod.yml under nginx service:
-#    - /etc/letsencrypt:/etc/letsencrypt:ro
+# 3. Copy certs into the repo's mounted SSL folder
+mkdir -p /var/www/olx/infrastructure/nginx/ssl
+sudo cp /etc/letsencrypt/live/olx.bnorbit.tech/fullchain.pem /var/www/olx/infrastructure/nginx/ssl/fullchain.pem
+sudo cp /etc/letsencrypt/live/olx.bnorbit.tech/privkey.pem /var/www/olx/infrastructure/nginx/ssl/privkey.pem
+sudo chmod 644 /var/www/olx/infrastructure/nginx/ssl/fullchain.pem
+sudo chmod 600 /var/www/olx/infrastructure/nginx/ssl/privkey.pem
+
+# 4. Ensure line 154 in docker-compose.prod.yml is uncommented, then restart nginx
+docker compose -f docker-compose.prod.yml up -d --force-recreate nginx
 ```
 
 ---
 
-## 5. Maintenance & Updates
+## 6. Maintenance & Zero-Downtime Updates
 
-### Deploying New Code (Zero Downtime Updates)
+### Deploying Code Updates
 
 ```bash
 cd /var/www/olx
@@ -213,32 +226,24 @@ cd /var/www/olx
 # Pull latest changes
 git pull origin main
 
-# Rebuild and restart modified services
+# Rebuild and recreate updated containers
 docker compose -f docker-compose.prod.yml up -d --build
 
-# Run schema migrations if schema changed
-docker compose -f docker-compose.prod.yml exec server pnpm db:push
+# Apply any new Prisma migrations safely
+docker compose -f docker-compose.prod.yml exec server pnpm db:migrate:deploy
 ```
 
-### Viewing Logs
+### Viewing Logs & Restarting Services
 
 ```bash
-# All logs
+# All services
 docker compose -f docker-compose.prod.yml logs -f --tail=100
 
-# Server API only
+# Individual services
 docker compose -f docker-compose.prod.yml logs -f server
-
-# BullMQ Workers only
 docker compose -f docker-compose.prod.yml logs -f workers
-
-# Nginx Gateway only
 docker compose -f docker-compose.prod.yml logs -f nginx
-```
 
-### Restarting Services
-
-```bash
+# Restart API and workers
 docker compose -f docker-compose.prod.yml restart server workers
 ```
-
