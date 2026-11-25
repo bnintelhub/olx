@@ -133,13 +133,13 @@ export const NavbarSearchBar: React.FC<NavbarSearchBarProps> = ({
 
         {/* Live Suggestions Dropdown */}
         {isSuggestionsOpen && suggestions.length > 0 && (
-          <div className="absolute left-0 right-0 mt-2 rounded-xl border border-gray-200 bg-white shadow-2xl z-50 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
-            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between text-[11px] text-gray-400 font-bold uppercase tracking-wider bg-gray-50/80">
+          <div className="absolute left-0 right-0 min-w-[280px] sm:min-w-[360px] mt-2 rounded-xl border border-gray-200 bg-white shadow-2xl z-50 overflow-hidden animate-in fade-in-50 zoom-in-95 duration-150">
+            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2 text-[11px] text-gray-400 font-bold uppercase tracking-wider bg-gray-50/80 whitespace-nowrap">
               <span className="flex items-center gap-1.5">
-                <Search size={12} className="text-[#002f34]" />
-                Matching Suggestions
+                <Search size={12} className="text-[#002f34] shrink-0" />
+                <span>Matching Suggestions</span>
               </span>
-              <span>{suggestions.length} results</span>
+              <span className="shrink-0">{suggestions.length} results</span>
             </div>
 
             <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">

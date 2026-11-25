@@ -5,6 +5,12 @@ import { AdStatus, Prisma } from '@prisma/client';
 import { SearchParams } from './search.schema';
 import { getCache, setCache } from '../../config/redis';
 import { toPublicMediaUrl } from '../../shared/utils/media-url.util';
+import {
+  parseSearchQuery,
+  buildTokenWhereConditions,
+  findFuzzyAdIds,
+  sortAdsByRelevance,
+} from './search-query.helper';
 
 function formatSearchAdImages(ads: any[]): any[] {
   return ads.map((ad) => ({
@@ -40,18 +46,26 @@ export class SearchService {
   static async search(params: SearchParams, request?: FastifyRequest) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.min(50, Math.max(1, Number(params.limit) || 20));
-    const skip = (page - 1) * limit;
+    const cursor = params.cursor?.trim() || undefined;
+    const skip = cursor ? 1 : (page - 1) * limit;
+
+    const { cleanQuery, tokenGroups, inferredMaxPrice, inferredMinPrice } = parseSearchQuery(params.q);
+    const effectiveSort = params.sort || (cleanQuery ? 'relevance' : 'newest');
 
     // Cache key for search feeds to absorb traffic spikes and protect database
     const cacheKey = `search:feed:${JSON.stringify({
-      p: page,
+      cur: cursor || '',
+      p: cursor ? 0 : page,
       l: limit,
       q: params.q?.trim() || '',
       c: params.categoryId || params.categorySlug || '',
       loc: params.locationId || params.citySlug || '',
-      s: params.sort || 'newest',
-      min: params.minPrice,
-      max: params.maxPrice,
+      lat: params.latitude,
+      lng: params.longitude,
+      r: params.radiusKm,
+      s: effectiveSort,
+      min: params.minPrice ?? inferredMinPrice,
+      max: params.maxPrice ?? inferredMaxPrice,
       attrs: params.attributes || {},
     })}`;
 
@@ -65,17 +79,15 @@ export class SearchService {
 
     const tDbStart = performance.now();
 
-    const where: Prisma.AdWhereInput = {
+    const baseWhere: Prisma.AdWhereInput = {
       status: AdStatus.ACTIVE,
+      deletedAt: null,
       expiresAt: { gt: new Date() },
     };
 
-    if (params.q && params.q.trim()) {
-      const keyword = params.q.trim();
-      where.OR = [
-        { title: { contains: keyword, mode: 'insensitive' } },
-        { description: { contains: keyword, mode: 'insensitive' } },
-      ];
+    const andConditions: Prisma.AdWhereInput[] = [];
+    if (tokenGroups.length > 0) {
+      andConditions.push(...buildTokenWhereConditions(tokenGroups));
     }
 
     if (params.categoryId || params.categorySlug) {
@@ -90,7 +102,7 @@ export class SearchService {
 
       if (category) {
         const catIds = [category.id, ...category.children.map((c) => c.id)];
-        where.categoryId = { in: catIds };
+        baseWhere.categoryId = { in: catIds };
       }
     }
 
@@ -149,7 +161,7 @@ export class SearchService {
           matchingIds.push(targetLoc.id);
         }
 
-        where.locationId = { in: matchingIds.length > 0 ? matchingIds : ['none'] };
+        baseWhere.locationId = { in: matchingIds.length > 0 ? matchingIds : ['none'] };
       } else if (targetLoc) {
         // Materialized path hierarchical search: include target location + all its descendants
         const subtreeLocations = await prisma.location.findMany({
@@ -163,26 +175,28 @@ export class SearchService {
         });
 
         const locIds = subtreeLocations.map((l) => l.id);
-        where.locationId = { in: locIds.length > 0 ? locIds : [targetLoc.id] };
+        baseWhere.locationId = { in: locIds.length > 0 ? locIds : [targetLoc.id] };
       }
     }
 
-    if (params.minPrice !== undefined || params.maxPrice !== undefined) {
-      where.price = {};
-      if (params.minPrice !== undefined && !isNaN(Number(params.minPrice))) {
-        where.price.gte = Number(params.minPrice);
+    const effectiveMinPrice = params.minPrice !== undefined ? Number(params.minPrice) : inferredMinPrice;
+    const effectiveMaxPrice = params.maxPrice !== undefined ? Number(params.maxPrice) : inferredMaxPrice;
+
+    if (effectiveMinPrice !== undefined || effectiveMaxPrice !== undefined) {
+      baseWhere.price = {};
+      if (effectiveMinPrice !== undefined && !isNaN(effectiveMinPrice)) {
+        baseWhere.price.gte = effectiveMinPrice;
       }
-      if (params.maxPrice !== undefined && !isNaN(Number(params.maxPrice))) {
-        where.price.lte = Number(params.maxPrice);
+      if (effectiveMaxPrice !== undefined && !isNaN(effectiveMaxPrice)) {
+        baseWhere.price.lte = effectiveMaxPrice;
       }
     }
 
     if (params.attributes && Object.keys(params.attributes).length > 0) {
-      const conditions: Prisma.AdWhereInput[] = [];
       for (const [key, value] of Object.entries(params.attributes)) {
         if (value !== undefined && value !== null && value !== '') {
           const strVal = String(value).trim();
-          conditions.push({
+          andConditions.push({
             OR: [
               {
                 attributeValues: {
@@ -198,35 +212,89 @@ export class SearchService {
           });
         }
       }
-      if (conditions.length > 0) {
-        where.AND = conditions;
-      }
     }
 
-    let orderBy: Prisma.AdOrderByWithRelationInput = { createdAt: 'desc' };
-    switch (params.sort) {
+    const where: Prisma.AdWhereInput = {
+      ...baseWhere,
+      ...(andConditions.length > 0 ? { AND: andConditions } : {}),
+    };
+
+    let orderBy: Prisma.AdOrderByWithRelationInput[] = [{ createdAt: 'desc' }, { id: 'desc' }];
+    switch (effectiveSort) {
       case 'price_asc':
-        orderBy = { price: 'asc' };
+        orderBy = [{ price: 'asc' }, { id: 'asc' }];
         break;
       case 'price_desc':
-        orderBy = { price: 'desc' };
+        orderBy = [{ price: 'desc' }, { id: 'desc' }];
         break;
       case 'popular':
-        orderBy = { viewCount: 'desc' };
+        orderBy = [{ viewCount: 'desc' }, { id: 'desc' }];
+        break;
+      case 'relevance':
+        orderBy = [{ viewCount: 'desc' }, { id: 'desc' }];
         break;
       case 'newest':
       default:
-        orderBy = { createdAt: 'desc' };
+        orderBy = [{ createdAt: 'desc' }, { id: 'desc' }];
         break;
     }
+
+    const adSelect = {
+      id: true,
+      title: true,
+      description: true,
+      slug: true,
+      price: true,
+      isNegotiable: true,
+      status: true,
+      viewCount: true,
+      favouriteCount: true,
+      latitude: true,
+      longitude: true,
+      createdAt: true,
+      expiresAt: true,
+      categoryId: true,
+      locationId: true,
+      category: { select: { id: true, name: true, slug: true, parentId: true } },
+      location: { select: { id: true, name: true, slug: true, type: true } },
+      attributeValues: { select: { value: true } },
+      images: {
+        select: {
+          id: true,
+          sortOrder: true,
+          isCover: true,
+          mediaAssetId: true,
+          mediaAsset: {
+            select: { id: true, variants: true, storageKey: true, sizeBytes: true },
+          },
+        },
+        orderBy: { sortOrder: 'asc' as const },
+        take: 2,
+      },
+      user: {
+        select: {
+          id: true,
+          role: true,
+          profile: {
+            select: {
+              name: true,
+              businessName: true,
+              avatarUrl: true,
+              ratingAverage: true,
+              isIdentityVerified: true,
+            },
+          },
+        },
+      },
+    };
 
     // Optimize COUNT(*): Cache count in Redis for 120s using deterministic query params
     const countCacheKey = `search:count:${JSON.stringify({
       q: params.q?.trim() || '',
       c: params.categoryId || params.categorySlug || '',
       loc: params.locationId || params.citySlug || '',
-      min: params.minPrice,
-      max: params.maxPrice,
+      min: effectiveMinPrice,
+      max: effectiveMaxPrice,
       attrs: params.attributes || {},
     })}`;
     const cachedCount = await getCache<number>(countCacheKey);
@@ -238,63 +306,71 @@ export class SearchService {
           return cnt;
         });
 
-    const [total, ads] = await Promise.all([
+    const isRelevanceQuery = effectiveSort === 'relevance' && Boolean(cleanQuery);
+
+    let [total, ads] = await Promise.all([
       countPromise,
       prisma.ad.findMany({
         where,
         orderBy,
-        skip,
-        take: limit,
-        select: {
-          id: true,
-          title: true,
-          slug: true,
-          price: true,
-          isNegotiable: true,
-          status: true,
-          viewCount: true,
-          favouriteCount: true,
-          latitude: true,
-          longitude: true,
-          createdAt: true,
-          expiresAt: true,
-          categoryId: true,
-          locationId: true,
-          category: { select: { id: true, name: true, slug: true, parentId: true } },
-          location: { select: { id: true, name: true, slug: true, type: true } },
-          images: {
-            select: {
-              id: true,
-              sortOrder: true,
-              isCover: true,
-              mediaAssetId: true,
-              mediaAsset: {
-                select: { id: true, variants: true, storageKey: true, sizeBytes: true },
-              },
-            },
-            orderBy: { sortOrder: 'asc' },
-            take: 2,
-          },
-          user: {
-            select: {
-              id: true,
-              role: true,
-              profile: {
-                select: {
-                  name: true,
-                  avatarUrl: true,
-                  ratingAverage: true,
-                  isIdentityVerified: true,
-                },
-              },
-            },
-          },
-        },
+        ...(isRelevanceQuery
+          ? { skip: 0, take: 150 }
+          : cursor
+          ? { cursor: { id: cursor }, skip: 1, take: limit + 1 }
+          : { skip, take: limit + 1 }),
+        select: adSelect,
       }),
     ]);
+
+    // Typo-tolerant pg_trgm fallback if exact token search yielded 0 results
+    let activeWhere = where;
+    let hasMore = false;
+    let nextCursor: string | null = null;
+
+    const sliceByCursor = (ordered: any[]) => {
+      const startIdx = cursor ? ordered.findIndex((a) => a.id === cursor) + 1 : skip;
+      const sliced = ordered.slice(startIdx, startIdx + limit);
+      const more = startIdx + limit < ordered.length;
+      return { sliced, more, cursorId: more && sliced.length > 0 ? sliced[sliced.length - 1].id : null };
+    };
+
+    if (total === 0 && cleanQuery.length >= 2) {
+      const fuzzyIds = await findFuzzyAdIds(cleanQuery, 100);
+      if (fuzzyIds.length > 0) {
+        const fuzzyWhere: Prisma.AdWhereInput = {
+          ...baseWhere,
+          id: { in: fuzzyIds },
+        };
+        activeWhere = fuzzyWhere;
+        const fuzzyAds = await prisma.ad.findMany({
+          where: fuzzyWhere,
+          select: adSelect,
+        });
+        const orderMap = new Map(fuzzyIds.map((id, idx) => [id, idx]));
+        fuzzyAds.sort((a, b) => (orderMap.get(a.id) ?? 999) - (orderMap.get(b.id) ?? 999));
+        total = fuzzyAds.length;
+        const paged = sliceByCursor(fuzzyAds);
+        ads = paged.sliced;
+        hasMore = paged.more;
+        nextCursor = paged.cursorId;
+      }
+    } else if (isRelevanceQuery && ads.length > 0) {
+      const sorted = sortAdsByRelevance(ads, cleanQuery, tokenGroups);
+      const paged = sliceByCursor(sorted);
+      ads = paged.sliced;
+      hasMore = paged.more;
+      nextCursor = paged.cursorId;
+    } else {
+      hasMore = ads.length > limit;
+      if (hasMore) {
+        ads = ads.slice(0, limit);
+      }
+      nextCursor = hasMore && ads.length > 0 ? ads[ads.length - 1].id : null;
+    }
+
     request?.trackTiming?.('db', performance.now() - tDbStart);
 
-    const facets = await this.computeFacets(where);
+    const facets = await this.computeFacets(activeWhere, countCacheKey);
 
     const formattedAds = formatSearchAdImages(ads);
 
@@ -305,7 +381,8 @@ export class SearchService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total,
+        hasMore,
+        nextCursor,
       },
       facets,
     };
@@ -316,10 +393,10 @@ export class SearchService {
     return result;
   }
 
-  private static async computeFacets(baseWhere: Prisma.AdWhereInput) {
+  private static async computeFacets(baseWhere: Prisma.AdWhereInput, cacheSuffix = 'all') {
     try {
-      // 1. Check Redis for cached facets to eliminate repetitive GROUP BY queries
-      const facetCacheKey = `facets:categories:${baseWhere.categoryId ? JSON.stringify(baseWhere.categoryId) : 'all'}`;
+      // 1. Check Redis for cached facets using full search context key
+      const facetCacheKey = `facets:categories:${cacheSuffix}`;
       const cached = await getCache<any>(facetCacheKey);
       if (cached) return cached;
 
@@ -405,11 +482,17 @@ export class SearchService {
       }
     }
 
+    const { tokenGroups } = parseSearchQuery(q);
+    const adMatchConditions = tokenGroups.length > 0
+      ? buildTokenWhereConditions(tokenGroups)
+      : [{ title: { contains: q, mode: 'insensitive' as const } }];
+
     const titleAds = await prisma.ad.findMany({
       where: {
         status: AdStatus.ACTIVE,
+        deletedAt: null,
         expiresAt: { gt: new Date() },
-        title: { contains: q, mode: 'insensitive' },
+        AND: adMatchConditions,
         ...(locationIds ? { locationId: { in: locationIds } } : {}),
       },
       select: {

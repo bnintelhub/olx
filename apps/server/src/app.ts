@@ -43,6 +43,8 @@ import { supportRoutes, adminSupportRoutes } from './modules/support/support.rou
 import { ListingsController } from './modules/listings/listings.controller';
 import { defaultStorage } from './integrations/storage/storage.adapter';
 import { eventsRoutes } from './modules/events/events.routes';
+import { feedRoutes } from './modules/feed/feed.routes';
+import { feedEventRoutes } from './modules/feed-events/feed-events.routes';
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = fastify({
@@ -312,6 +314,8 @@ export async function buildApp(): Promise<FastifyInstance> {
     await api.register(bannerRoutes, { prefix: '/banners' });
     await api.register(supportRoutes, { prefix: '/support' });
     await api.register(adminSupportRoutes, { prefix: '/admin/support' });
+    await api.register(feedRoutes, { prefix: '/feed' });
+    await api.register(feedEventRoutes, { prefix: '/events' });
   }, { prefix: '/api/v1' });
 
   return app;

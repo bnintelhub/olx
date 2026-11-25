@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useAdsQuery } from '@/features/ads/hook/useAdsQuery';
+import { Filter, X, Loader2 } from 'lucide-react';
+import { useInfiniteAdsQuery } from '@/features/ads/hook/useAdsQuery';
 import { AdCard } from '@/features/ads/components/AdCard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,10 +19,9 @@ export const SearchPage: React.FC = () => {
   const category = searchParams.get('category') || '';
   const city = searchParams.get('city') || '';
   const locationId = searchParams.get('locationId') || '';
-  const sort = searchParams.get('sort') || 'newest';
+  const sort = searchParams.get('sort') || (q ? 'relevance' : 'newest');
   const minPrice = searchParams.get('minPrice') || '';
   const maxPrice = searchParams.get('maxPrice') || '';
-  const page = Number(searchParams.get('page') || '1');
 
   // Local Form Buffers
   const [localQ, setLocalQ] = useState(q);
@@ -178,25 +177,36 @@ export const SearchPage: React.FC = () => {
     return params;
   }, [q, category, city, locationId, sort, minPrice, maxPrice, searchParams]);
 
-  const { data: adsResult, isLoading, isFetching } = useAdsQuery(queryParams);
+  const {
+    data: adsResult,
+    isLoading,
+    isFetching,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useInfiniteAdsQuery(queryParams);
 
   const ads = useMemo(() => {
-    if (!adsResult) return [];
-    if (Array.isArray(adsResult)) return adsResult;
-    return adsResult.ads || (adsResult as any).data || [];
+    if (!adsResult?.pages) return [];
+    const all = adsResult.pages.flatMap((p) => p.ads || []);
+    const seen = new Set<string>();
+    return all.filter((ad: any) => {
+      if (seen.has(ad.id)) return false;
+      seen.add(ad.id);
+      return true;
+    });
   }, [adsResult]);
 
   const total = useMemo(() => {
-    if (!adsResult) return 0;
-    if (Array.isArray(adsResult)) return adsResult.length;
-    return adsResult.total ?? (adsResult as any).meta?.total ?? ads.length;
+    const firstPage = adsResult?.pages?.[0];
+    return firstPage?.total ?? ads.length;
   }, [adsResult, ads.length]);
 
   const updateParam = (key: string, val: string) => {
     const next = new URLSearchParams(searchParams);
     if (val) next.set(key, val);
     else next.delete(key);
-    next.set('page', '1');
+    next.delete('page');
     setSearchParams(next);
   };
 
@@ -358,7 +368,9 @@ export const SearchPage: React.FC = () => {
                     onChange={(e) => updateParam('sort', e.target.value)}
                     className="h-9 text-xs bg-white border border-[#D8DFE2] rounded-xl px-3 font-semibold text-[#002f34] focus:outline-none focus:border-teal-700 cursor-pointer shadow-xs"
                   >
+                    <option value="relevance">Best Match</option>
                     <option value="newest">Newest First</option>
+                    <option value="popular">Most Popular</option>
                     <option value="price_asc">Price: Low to High</option>
                     <option value="price_desc">Price: High to Low</option>
                   </select>
@@ -406,11 +418,34 @@ export const SearchPage: React.FC = () => {
                 </Button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                {ads.map((item: any) => (
-                  <AdCard key={item.id} ad={item} />
-                ))}
-              </div>
+              <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+                  {ads.map((item: any) => (
+                    <AdCard key={item.id} ad={item} />
+                  ))}
+                </div>
+
+                {hasNextPage && (
+                  <div className="pt-6 text-center">
+                    <Button
+                      onClick={() => fetchNextPage()}
+                      disabled={isFetchingNextPage}
+                      variant="outline"
+                      size="default"
+                      className="rounded-xl px-8 py-2.5 font-bold border-[#002f34] text-[#002f34] hover:bg-[#002f34] hover:text-white transition-all cursor-pointer"
+                    >
+                      {isFetchingNextPage ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          <span>Loading more results...</span>
+                        </>
+                      ) : (
+                        <span>Load more ({ads.length} of {total})</span>
+                      )}
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

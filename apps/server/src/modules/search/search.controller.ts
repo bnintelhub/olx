@@ -15,9 +15,13 @@ export class SearchController {
       'locationId',
       'citySlug',
       'city',
+      'radiusKm',
+      'latitude',
+      'longitude',
       'minPrice',
       'maxPrice',
       'sort',
+      'cursor',
       'page',
       'limit',
     ]);

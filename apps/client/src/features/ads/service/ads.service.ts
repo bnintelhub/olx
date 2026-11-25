@@ -9,6 +9,7 @@ export interface AdsQueryParams {
   minPrice?: number;
   maxPrice?: number;
   sort?: string;
+  cursor?: string;
   page?: number;
   limit?: number;
   featured?: boolean;
@@ -28,6 +29,8 @@ export interface AdsListResponse {
   total: number;
   page: number;
   totalPages: number;
+  hasMore: boolean;
+  nextCursor: string | null;
 }
 
 export const adsService = {
@@ -35,14 +38,17 @@ export const adsService = {
   async getAds(params: AdsQueryParams = {}): Promise<AdsListResponse> {
     const { data } = await apiClient.get('/ads', { params });
     if (data.success && data.data) {
+      const pagination = data.data.pagination || {};
       return {
         ads: Array.isArray(data.data) ? data.data : data.data.ads || [],
-        total: data.data.total ?? (Array.isArray(data.data) ? data.data.length : 0),
-        page: data.data.page ?? 1,
-        totalPages: data.data.totalPages ?? 1,
+        total: pagination.total ?? data.data.total ?? (Array.isArray(data.data) ? data.data.length : 0),
+        page: pagination.page ?? data.data.page ?? 1,
+        totalPages: pagination.totalPages ?? data.data.totalPages ?? 1,
+        hasMore: Boolean(pagination.hasMore ?? data.data.hasMore ?? false),
+        nextCursor: pagination.nextCursor ?? data.data.nextCursor ?? null,
       };
     }
-    return { ads: [], total: 0, page: 1, totalPages: 1 };
+    return { ads: [], total: 0, page: 1, totalPages: 1, hasMore: false, nextCursor: null };
   },
 
   // Get ad details by ID

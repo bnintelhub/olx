@@ -102,6 +102,18 @@ const envSchema = z
       .string()
       .transform((v) => v === 'true' || v === '1')
       .default(process.env.NODE_ENV === 'production' ? 'true' : 'false'),
+    // Phase 1 Feed & Recommendation Feature Flags
+    FEED_PERSONALIZATION_ENABLED: z
+      .string()
+      .transform((v) => v === 'true' || v === '1')
+      .default('true'),
+    FEED_ROLLOUT_PERCENT: z.string().transform(Number).default('100'),
+    FEED_EVENT_SHADOW_MODE: z
+      .string()
+      .transform((v) => v === 'true' || v === '1')
+      .default('false'),
+    FEED_VERSION: z.string().default('v1'),
+    FEED_WEIGHTS_JSON: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.NODE_ENV === 'production' && data.PAYU_ENVIRONMENT === 'production') {

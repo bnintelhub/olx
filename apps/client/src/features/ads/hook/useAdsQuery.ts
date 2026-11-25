@@ -1,9 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import { adsService, AdsQueryParams } from '../service/ads.service';
 
 export const ADS_QUERY_KEYS = {
   all: ['ads'] as const,
   list: (params: AdsQueryParams) => [...ADS_QUERY_KEYS.all, 'list', params] as const,
+  infinite: (params: Omit<AdsQueryParams, 'cursor' | 'page'>) =>
+    [...ADS_QUERY_KEYS.all, 'infinite', params] as const,
   detail: (id: string) => [...ADS_QUERY_KEYS.all, 'detail', id] as const,
   similar: (id: string) => [...ADS_QUERY_KEYS.all, 'similar', id] as const,
   myAds: () => [...ADS_QUERY_KEYS.all, 'my-ads'] as const,
@@ -13,6 +15,16 @@ export function useAdsQuery(params: AdsQueryParams = {}) {
   return useQuery({
     queryKey: ADS_QUERY_KEYS.list(params),
     queryFn: () => adsService.getAds(params),
+  });
+}
+
+export function useInfiniteAdsQuery(params: Omit<AdsQueryParams, 'cursor' | 'page'> = {}) {
+  return useInfiniteQuery({
+    queryKey: ADS_QUERY_KEYS.infinite(params),
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => adsService.getAds({ ...params, cursor: pageParam }),
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
   });
 }
 

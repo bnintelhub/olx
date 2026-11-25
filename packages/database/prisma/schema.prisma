@@ -177,8 +177,12 @@ model User {
   reviewsReceived      Review[]             @relation("ReviewTarget")
   auditLogs            AuditLog[]
   staffInvitations     StaffInvitation[]    @relation("StaffInvitationsSent")
-  mediaAssets          MediaAsset[]
-  paymentOrders        PaymentOrder[]
+  mediaAssets              MediaAsset[]
+  paymentOrders            PaymentOrder[]
+  interactions             UserInteraction[]
+  interests                UserInterest[]
+  feedImpressions          FeedImpression[]
+  recommendationCandidates RecommendationCandidate[]
 
   @@index([phoneNumber])
   @@index([email])
@@ -358,8 +362,11 @@ model Ad {
   favourites      Favourite[]
   conversations   Conversation[]
   reports         Report[]
-  featuredBoosts  FeaturedAd[]
-  paymentOrders   PaymentOrder[]
+  featuredBoosts           FeaturedAd[]
+  paymentOrders            PaymentOrder[]
+  interactions             UserInteraction[]
+  feedImpressions          FeedImpression[]
+  recommendationCandidates RecommendationCandidate[]
 
   @@index([status, categoryId, createdAt])
   @@index([status, locationId, createdAt])
@@ -899,4 +906,92 @@ model PaymentTransaction {
   @@index([merchantTransactionId])
   @@index([providerTransactionId])
   @@map("payment_transactions")
+}
+
+// ============================================================================
+// PHASE 1: FEED & RECOMMENDATION SYSTEM
+// ============================================================================
+
+enum InteractionEventType {
+  IMPRESSION
+  CLICK
+  VIEW
+  SEARCH
+  CATEGORY_BROWSE
+  WISHLIST
+  CHAT
+}
+
+model UserInteraction {
+  id         String               @id @default(uuid()) @db.VarChar(36)
+  userId     String?              @map("user_id") @db.VarChar(36)
+  sessionId  String?              @map("session_id") @db.VarChar(100)
+  listingId  String?              @map("listing_id") @db.VarChar(36)
+  categoryId String?              @map("category_id") @db.VarChar(36)
+  eventType  InteractionEventType @map("event_type")
+  eventId    String               @unique @map("event_id") @db.VarChar(100)
+  metadata   Json?
+  createdAt  DateTime             @default(now()) @map("created_at")
+
+  user    User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Ad?   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([listingId, eventType, createdAt])
+  @@index([createdAt])
+  @@map("user_interactions")
+}
+
+model UserInterest {
+  id                  String   @id @default(uuid()) @db.VarChar(36)
+  userId              String   @map("user_id") @db.VarChar(36)
+  categoryId          String   @map("category_id") @db.VarChar(36)
+  interestScore       Float    @default(0) @map("interest_score")
+  avgPriceMin         Decimal? @map("avg_price_min") @db.Decimal(12, 2)
+  avgPriceMax         Decimal? @map("avg_price_max") @db.Decimal(12, 2)
+  preferredLocationId String?  @map("preferred_location_id") @db.VarChar(36)
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryId])
+  @@index([userId, interestScore])
+  @@map("user_interests")
+}
+
+model FeedImpression {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  userId       String?  @map("user_id") @db.VarChar(36)
+  sessionId    String?  @map("session_id") @db.VarChar(100)
+  listingId    String   @map("listing_id") @db.VarChar(36)
+  feedPosition Int      @map("feed_position")
+  feedVersion  String   @default("v1") @map("feed_version") @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user    User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Ad    @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([sessionId, createdAt])
+  @@index([listingId, createdAt])
+  @@map("feed_impressions")
+}
+
+model RecommendationCandidate {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      String   @map("user_id") @db.VarChar(36)
+  listingId   String   @map("listing_id") @db.VarChar(36)
+  score       Float    @default(0)
+  reason      String?  @db.VarChar(100)
+  generatedAt DateTime @default(now()) @map("generated_at")
+  expiresAt   DateTime @map("expires_at")
+
+  user    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listing Ad   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, listingId])
+  @@index([userId, score])
+  @@index([expiresAt])
+  @@map("recommendation_candidates")
 }

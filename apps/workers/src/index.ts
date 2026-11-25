@@ -5,6 +5,7 @@ import { startOtpWorker } from './workers/otp.worker';
 import { startMediaWorker } from './workers/media.worker';
 import { startPaymentFulfillmentWorker } from './workers/payment-fulfillment.worker';
 import { startPushWorker } from './workers/push.worker';
+import { startFeedWorker } from './workers/feed.worker';
 import { startStorageHousekeeping } from './tasks/cleanup.task';
 
 async function bootstrap() {
@@ -14,6 +15,7 @@ async function bootstrap() {
   const mediaWorker = startMediaWorker();
   const paymentWorker = startPaymentFulfillmentWorker();
   const pushWorker = startPushWorker();
+  const feedWorker = startFeedWorker();
   const housekeeping = startStorageHousekeeping();
 
   // Active Realtime Worker Heartbeat in Redis (TTL: 15s, sent every 5s)
@@ -51,7 +53,13 @@ async function bootstrap() {
     await heartbeatRedis.del(HEARTBEAT_KEY).catch(() => {});
     await heartbeatRedis.quit().catch(() => {});
     housekeeping.stop();
-    await Promise.all([otpWorker.close(), mediaWorker.close(), paymentWorker.close(), pushWorker.close()]);
+    await Promise.all([
+      otpWorker.close(),
+      mediaWorker.close(),
+      paymentWorker.close(),
+      pushWorker.close(),
+      feedWorker.close(),
+    ]);
     process.exit(0);
   };
 

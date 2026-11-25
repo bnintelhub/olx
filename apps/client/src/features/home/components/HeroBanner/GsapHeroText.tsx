@@ -201,127 +201,98 @@ export const GsapHeroText: React.FC<GsapHeroTextProps> = ({
   }, [bannerId, line1, line2, title]);
 
   return (
-    <div ref={containerRef} className="flex flex-col justify-center text-left w-full select-none">
-      {/* 
-        BADGES ROW
-        Matches exact reference design: Amber glowing Star badge + translucent pills
-      */}
-      <div className="flex flex-wrap items-center gap-2 mb-2 sm:mb-3">
-        {/* Featured Promotion Badge */}
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#f5a623] text-slate-950 px-3 py-1 text-[11px] sm:text-xs font-black shadow-md shadow-amber-500/25 tracking-wide">
-          <Star size={12} className="fill-slate-950 text-slate-950" />
+    <div ref={containerRef} className="flex flex-col justify-center text-left w-full select-none min-w-0">
+      {/* Badges Row: Clean mint-tinted pills matching green/white marketplace theme */}
+      <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-4">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F1FAF4] border border-[#C6E6D2] text-[#053B24] px-3 py-1 text-[11px] sm:text-xs font-semibold shadow-2xs">
+          <Star size={12} className="fill-[#007F3E] text-[#007F3E]" />
           <span>Featured Promotion</span>
         </span>
 
-        {/* Location Badge */}
         {locationText && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-black/40 backdrop-blur-md px-3 py-1 text-[11px] sm:text-xs font-medium text-slate-200 border border-white/15 shadow-xs">
-            <MapPin size={11} className="text-emerald-400" />
-            <span>{locationText}</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 border border-[#D4E6DA] px-3 py-1 text-[11px] sm:text-xs font-medium text-[#053B24] shadow-2xs max-w-[160px] truncate">
+            <MapPin size={11} className="text-[#053B24] shrink-0" />
+            <span className="truncate">{locationText}</span>
           </span>
         )}
 
-        {/* Category Badge */}
         {categoryText && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-black/40 backdrop-blur-md px-3 py-1 text-[11px] sm:text-xs font-medium text-slate-200 border border-white/15 shadow-xs">
-            <Tag size={11} className="text-teal-300" />
-            <span>{categoryText}</span>
+          <span className="inline-flex items-center gap-1 rounded-full bg-white/90 border border-[#D4E6DA] px-3 py-1 text-[11px] sm:text-xs font-medium text-[#053B24] shadow-2xs max-w-[160px] truncate">
+            <Tag size={11} className="text-[#007F3E] shrink-0" />
+            <span className="truncate">{categoryText}</span>
           </span>
         )}
       </div>
 
-      {/* 
-        TITLE PATTERN DESIGN
-        - Clean, large, bold typography with high contrast
-        - Line 1: Crisp Pure White
-        - Line 2: Vibrant Warm Amber/Gold highlight
-        - Max 2 lines strictly enforced with line-clamp-2 & text-ellipsis
-        - Reserved min-height prevents layout shifts (CLS = 0)
-      */}
-      <div className="relative min-h-[3.6rem] sm:min-h-[5.5rem] lg:min-h-[7.2rem] flex flex-col justify-center">
+      {/* Title Area: Strict single-line ellipsis per segment so long titles never wrap or overflow */}
+      <div className="relative flex flex-col items-start gap-1.5 min-w-0 max-w-full">
         <h1
-          className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-[1.08] text-white drop-shadow-lg line-clamp-2 overflow-hidden text-ellipsis"
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            wordBreak: 'break-word',
-          }}
+          title={title || undefined}
+          className="w-full min-w-0 flex flex-col items-start gap-1.5"
         >
-          {/* Line 1: Pure White */}
-          <span className="text-white block sm:inline">
+          <span className="block max-w-full truncate text-2xl sm:text-4xl lg:text-[52px] font-black tracking-tight leading-[1.08] text-[#053B24]">
             {displayedLine1 || (!displayedLine2 ? line1 : '')}
           </span>
-          {line2 && ' '}
-          {/* Line 2: Warm Amber/Gold Highlight */}
+
           {line2 && (
-            <span className="relative inline-block text-[#FFD54A] drop-shadow-[0_0_16px_rgba(255,213,74,0.35)]">
-              {displayedLine2 || line2}
-              {/* Dynamic Curved Underline Swoosh */}
+            <span className="relative inline-block max-w-full">
+              <span className="block max-w-full truncate rounded-xl sm:rounded-2xl bg-[#007F3E] px-3 py-1 sm:px-5 sm:py-1.5 text-xl sm:text-3xl lg:text-[42px] font-black tracking-tight leading-tight text-white shadow-sm">
+                {displayedLine2 || line2}
+              </span>
               <svg
-                className={`absolute -bottom-1.5 sm:-bottom-2.5 left-0 w-32 sm:w-48 h-2 sm:h-3 text-[#FFD54A] pointer-events-none transition-opacity duration-300 ${
-                  isTypingComplete || displayedLine2 ? 'opacity-90' : 'opacity-0'
+                className={`mt-1 w-36 sm:w-52 h-2 text-[#F5B82E] pointer-events-none transition-opacity duration-300 ${
+                  isTypingComplete || displayedLine2 ? 'opacity-95' : 'opacity-0'
                 }`}
-                viewBox="0 0 180 12"
+                viewBox="0 0 180 10"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
-                <path
-                  d="M2 9C50 2 135 1 178 8C125 4 60 4 2 9Z"
-                  fill="currentColor"
-                />
+                <path d="M2 8C50 2 135 1 178 7C125 4 60 4 2 8Z" fill="currentColor" />
               </svg>
             </span>
           )}
         </h1>
       </div>
 
-      {/* 
-        SUBTITLE (Placed directly beneath the Title, NOT at the bottom of the banner)
-        Clean, highly legible text
-      */}
+      {/* Subtitle with optional discount highlight badge */}
       {subtitle && (
-        <p
-          className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg text-slate-200/90 font-medium leading-relaxed max-w-xl drop-shadow-xs line-clamp-2 overflow-hidden text-ellipsis"
-          style={{
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {subtitle}
+        <p className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-[17px] text-[#1D3B2C] font-medium leading-relaxed max-w-xl line-clamp-2 overflow-hidden text-ellipsis">
+          {subtitle.split(/(\b\d+%\s*OFF\b)/gi).map((part, idx) =>
+            /^\d+%\s*OFF$/i.test(part) ? (
+              <span
+                key={idx}
+                className="inline-block rounded-md bg-[#FCD34D] text-[#053B24] font-extrabold px-2 py-0.5 mx-0.5 text-xs sm:text-sm align-middle"
+              >
+                {part}
+              </span>
+            ) : (
+              <React.Fragment key={idx}>{part}</React.Fragment>
+            )
+          )}
         </p>
       )}
 
-      {/* 
-        CTA ACTION BUTTONS
-        - Primary: Warm Gold Pill "Shop Deals →"
-        - Secondary: Play icon in circle "Post Free Ad"
-      */}
-      <div className="mt-6 sm:mt-8 flex flex-wrap items-center gap-4 sm:gap-5">
+      {/* CTA Action Buttons */}
+      <div className="mt-5 sm:mt-7 flex flex-wrap items-center gap-4 sm:gap-5">
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             onBannerClick();
           }}
-          className="inline-flex items-center gap-2.5 rounded-full bg-[#FFD54A] hover:bg-[#f5c62d] active:bg-[#e6b925] px-7 py-3 text-sm font-extrabold text-slate-950 shadow-lg shadow-amber-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          className="inline-flex items-center gap-2.5 rounded-full bg-[#053B24] hover:bg-[#075232] active:bg-[#032919] px-7 py-3 text-sm font-bold text-white shadow-md shadow-emerald-950/15 transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
         >
-          <span>{ctaText || 'Shop Deals'}</span>
+          <span>{ctaText || 'Shop Now'}</span>
           <ArrowRight size={16} strokeWidth={2.5} />
         </button>
 
         <button
           type="button"
           onClick={onStartSelling}
-          className="inline-flex items-center gap-2 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white transition-colors cursor-pointer group"
+          className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold text-[#053B24] hover:text-[#007F3E] transition-colors cursor-pointer group"
         >
-          <span className="w-7 h-7 rounded-full border border-white/40 group-hover:border-white group-hover:bg-white/10 flex items-center justify-center transition-all">
-            <Play size={10} className="fill-white text-white translate-x-0.5" />
+          <span className="w-7 h-7 rounded-full border-2 border-[#053B24]/75 group-hover:border-[#007F3E] group-hover:bg-[#007F3E] group-hover:text-white flex items-center justify-center transition-all">
+            <Play size={10} className="fill-current translate-x-0.5" />
           </span>
           <span className="underline underline-offset-4">Post Free Ad</span>
         </button>

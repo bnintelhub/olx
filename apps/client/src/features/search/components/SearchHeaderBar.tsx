@@ -83,7 +83,7 @@ export const SearchHeaderBar: React.FC<SearchHeaderBarProps> = ({
                 onChange={(e) => onQueryChange(e.target.value)}
                 onFocus={() => setIsFocused(true)}
                 onBlur={() => setIsFocused(false)}
-                placeholder="Search products, cars, flats, mobiles..."
+                placeholder="Search anything — product, brand, city, specs, or under 20k..."
                 className={`pl-9 pr-9 h-9 text-xs sm:text-sm rounded-full bg-white text-[#002f34] placeholder:text-gray-400 shadow-none transition-all duration-300 ${
                   isFocused
                     ? 'border-[#002f34] ring-2 ring-[#002f34]/15 shadow-sm'

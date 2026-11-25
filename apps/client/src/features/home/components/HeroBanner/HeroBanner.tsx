@@ -9,7 +9,6 @@ import {
   recordBannerClick,
   BannerItem,
 } from '../../hook/useBannersQuery';
-import { AnimatedHeroBackground } from './AnimatedHeroBackground';
 import { GsapHeroText } from './GsapHeroText';
 
 export interface HeroBannerProps {
@@ -121,15 +120,14 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
             onMouseMove={handleMouseMove}
             onMouseEnter={handleMouseEnter}
             onMouseLeave={handleMouseLeave}
-            className={`relative overflow-hidden rounded-3xl text-white border border-slate-700/50 shadow-xl h-[360px] sm:h-[400px] lg:h-[440px] flex items-center ${
+            className={`relative overflow-hidden rounded-2xl sm:rounded-3xl bg-[#F4FAF6] text-[#053B24] border border-emerald-200/80 shadow-sm min-h-[300px] sm:min-h-[370px] lg:h-[440px] flex items-center ${
               currentPromo.targetUrl ? 'cursor-pointer' : ''
             }`}
           >
         {/* ========================================================
             BACKGROUND LAYER
-            Promotional image is set in the background, positioned right,
-            with a smooth dark gradient on the left for maximum text contrast.
-            If no promo media exists, falls back to AnimatedHeroBackground.
+            Promotional image positioned right with a clean white/mint
+            left readability fade (no muddy dark/black blur).
             ======================================================== */}
         {promoMediaUrl ? (
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
@@ -149,16 +147,15 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
                 className="w-full h-full object-cover object-center sm:object-right transition-transform duration-700"
               />
             )}
-            {/* Multi-stop gradient: solid dark on left for title/subtitle, fading to transparent on right so promo art shines */}
-            <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/85 to-transparent sm:w-[75%] lg:w-[65%]" />
-            <div className="absolute inset-0 bg-slate-950/20" />
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent sm:hidden" />
+            {/* Clean white-to-transparent gradient on left for crisp green/dark text contrast */}
+            <div className="absolute inset-0 bg-gradient-to-r from-[#F7FBF8] via-[#F7FBF8]/92 to-transparent sm:w-[70%] lg:w-[62%]" />
+            <div className="absolute inset-0 bg-gradient-to-t from-[#F7FBF8]/90 via-[#F7FBF8]/45 to-transparent sm:hidden" />
           </div>
         ) : (
-          <AnimatedHeroBackground
-            parallaxX={mouseOffset.x}
-            parallaxY={mouseOffset.y}
-          />
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none bg-gradient-to-br from-[#F4FAF6] via-[#E8F6EE] to-[#D4EFE0]">
+            <div className="absolute -right-16 -top-16 w-80 h-80 rounded-full bg-[#007F3E]/10" />
+            <div className="absolute right-12 -bottom-20 w-96 h-96 rounded-full bg-[#007F3E]/15" />
+          </div>
         )}
 
         {/* ========================================================
@@ -173,9 +170,9 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 12 }}
             transition={{ duration: 0.4, ease: 'easeOut' }}
-            className="absolute inset-0 z-10 w-full h-full p-6 sm:p-10 lg:p-14 flex items-center"
+            className="relative z-10 w-full p-5 sm:p-8 lg:p-14 flex items-center"
           >
-            <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl flex flex-col justify-center text-left">
+            <div className="w-full max-w-xl sm:max-w-2xl lg:max-w-3xl flex flex-col justify-center text-left min-w-0">
               <GsapHeroText
                 bannerId={currentPromo.id}
                 title={currentPromo.title}
@@ -203,7 +200,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
                   (prev) => (prev - 1 + activeBanners.length) % activeBanners.length
                 )
               }
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-white/25 hover:border-white text-white/80 hover:text-white flex items-center justify-center bg-black/40 hover:bg-black/70 backdrop-blur-md transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-emerald-200/80 hover:border-[#053B24] text-[#053B24]/80 hover:text-[#053B24] flex items-center justify-center bg-white/90 hover:bg-white backdrop-blur-md transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
               title="Previous banner"
             >
               <ChevronLeft size={16} />
@@ -213,7 +210,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
               onClick={() =>
                 setActiveBannerIndex((prev) => (prev + 1) % activeBanners.length)
               }
-              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-white/25 hover:border-white text-white/80 hover:text-white flex items-center justify-center bg-black/40 hover:bg-black/70 backdrop-blur-md transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
+              className="w-8 h-8 sm:w-9 sm:h-9 rounded-full border border-emerald-200/80 hover:border-[#053B24] text-[#053B24]/80 hover:text-[#053B24] flex items-center justify-center bg-white/90 hover:bg-white backdrop-blur-md transition-all cursor-pointer shadow-sm hover:scale-105 active:scale-95"
               title="Next banner"
             >
               <ChevronRight size={16} />
@@ -234,8 +231,8 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({ onOpenPostAd }) => {
                 onClick={() => setActiveBannerIndex(idx)}
                 className={`transition-all duration-300 rounded-full cursor-pointer ${
                   idx === activeBannerIndex
-                    ? 'w-7 h-2 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]'
-                    : 'w-2 h-2 bg-white/30 hover:bg-white/60'
+                    ? 'w-7 h-2 bg-[#007F3E] shadow-xs'
+                    : 'w-2 h-2 bg-[#053B24]/25 hover:bg-[#053B24]/50'
                 }`}
                 title={`Go to slide ${idx + 1}`}
               />

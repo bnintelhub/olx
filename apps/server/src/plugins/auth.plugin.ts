@@ -18,6 +18,7 @@ import {
 declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    optionalAuthenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
@@ -143,6 +144,15 @@ export const authPlugin = fp(async (fastify: FastifyInstance) => {
         throw new AppError(401, 'INVALID_TOKEN', 'Invalid or expired authentication token');
       }
       throw new AppError(401, 'UNAUTHORIZED', err.message || 'Authentication failed');
+    }
+  });
+
+  // Populates request.user when a valid token is present; falls back to anonymous without throwing 401
+  fastify.decorate('optionalAuthenticate', async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await fastify.authenticate(request, reply);
+    } catch {
+      delete (request as any).user;
     }
   });
 });

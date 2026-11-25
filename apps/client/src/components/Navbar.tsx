@@ -157,9 +157,9 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="sticky top-0 z-40 bg-white border-b border-slate-200/80">
-      <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-2 px-3 sm:flex-nowrap sm:gap-4 sm:px-6 lg:px-8 py-2.5">
+      <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-x-2 gap-y-2.5 px-3 lg:flex-nowrap lg:gap-4 sm:px-6 lg:px-8 py-2.5">
         {/* Brand Logo */}
-        <div className="hidden sm:flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             onClick={() => {
               if (onLogoClick) onLogoClick();
@@ -209,7 +209,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         />
 
         {/* Global Search Bar with Live Suggestions */}
-        <div className="order-3 basis-full sm:order-none sm:basis-auto sm:flex-1 sm:max-w-2xl">
+        <div className="order-3 basis-full lg:order-none lg:basis-auto lg:flex-1 lg:max-w-2xl min-w-0">
           <NavbarSearchBar
             keyword={keyword}
             onKeywordChange={setKeyword}
