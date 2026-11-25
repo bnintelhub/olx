@@ -439,7 +439,30 @@ openssl rand -hex 32
 ```
 
 #### Step 2: SSL Certificates (Recommended for Live Domain)
-By default, `Dockerfile.nginx` provisions a self-signed fallback certificate at `/etc/nginx/ssl/{privkey,fullchain}.pem` so the stack boots cleanly. For a real domain, obtain Let's Encrypt certificates (or place your certs in `./infrastructure/nginx/ssl/`) and uncomment the SSL volume mount in `docker-compose.prod.yml`:
+By default, `Dockerfile.nginx` provisions a self-signed fallback certificate at `/etc/nginx/ssl/{privkey,fullchain}.pem` so the stack boots cleanly. Because plain DNS (e.g., Hostinger DNS `A` record) only resolves your domain to your VPS IP and does **not** terminate TLS, the SSL certificate must be installed on the VPS Nginx gateway itself (e.g., via Let's Encrypt / Certbot) unless you place a reverse proxy like Cloudflare in front of the VPS:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as User Browser
+    participant DNS as Domain DNS (Port 53)
+    participant VPS as VPS Nginx Gateway (Port 443)
+    participant App as Fastify / Client / Admin
+
+    User->>DNS: "What is the IP for yourdomain.com?"
+    DNS-->>User: "VPS Public IP (A Record)"
+    Note over DNS: DNS stops here (no SSL termination)
+
+    User->>VPS: HTTPS / TLS Handshake (Port 443)
+    VPS-->>User: SSL Certificate (fullchain.pem)
+    Note over User,VPS: Encrypted HTTPS connection established at VPS Nginx
+
+    User->>VPS: GET /api/v1/feed/home
+    VPS->>App: Proxy internal HTTP (:5000 / :80)
+    App-->>User: Response via Nginx
+```
+
+Place your domain's `fullchain.pem` and `privkey.pem` in `./infrastructure/nginx/ssl/` on the VPS and uncomment the SSL volume mount in `docker-compose.prod.yml`:
 ```yaml
 - ./infrastructure/nginx/ssl:/etc/nginx/ssl:ro
 ```
