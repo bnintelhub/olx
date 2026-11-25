@@ -28,8 +28,13 @@ import {
   ImageIcon,
   Loader2,
   X,
+  AlertTriangle,
+  Lock,
 } from 'lucide-react';
 import { apiClient } from '../../lib/api-client';
+import { useAuthStore } from '../../stores/auth.store';
+
+const BANNER_MANAGER_ROLES = new Set(['SUPER_ADMIN', 'ADMIN', 'CONTENT_MANAGER']);
 
 // Helper to resolve media URLs through current origin proxy
 function formatMediaUrl(url?: string | null): string {
@@ -282,10 +287,17 @@ interface BannerData {
 }
 
 export function PromotionsPage() {
+  const user = useAuthStore((s) => s.user);
+  const activeRole = useAuthStore((s) => s.role);
+  const effectiveRole = (user?.role === 'SUPER_ADMIN' && activeRole ? activeRole : user?.role) || 'ADMIN';
+  const canManageBanners = BANNER_MANAGER_ROLES.has(effectiveRole);
+
   const [banners, setBanners] = useState<BannerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingBanner, setEditingBanner] = useState<BannerData | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<BannerData | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Direct upload states
   const [uploadingDesktop, setUploadingDesktop] = useState(false);
@@ -328,6 +340,10 @@ export function PromotionsPage() {
   }, []);
 
   const handleOpenCreate = () => {
+    if (!canManageBanners) {
+      toast.error('You do not have permission to create promotional banners.');
+      return;
+    }
     setEditingBanner(null);
     setForm({
       title: '',
@@ -349,6 +365,10 @@ export function PromotionsPage() {
   };
 
   const handleOpenEdit = (banner: BannerData) => {
+    if (!canManageBanners) {
+      toast.error('You do not have permission to edit promotional banners.');
+      return;
+    }
     setEditingBanner(banner);
     setForm({
       title: banner.title,
@@ -444,6 +464,10 @@ export function PromotionsPage() {
   };
 
   const handleToggleStatus = async (banner: BannerData) => {
+    if (!canManageBanners) {
+      toast.error('You do not have permission to update banner status.');
+      return;
+    }
     try {
       const nextStatus = banner.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE';
       await apiClient.patch(`/banners/admin/${banner.id}/status`, { status: nextStatus });
@@ -454,14 +478,18 @@ export function PromotionsPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this promotional banner?')) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !canManageBanners) return;
     try {
-      await apiClient.delete(`/banners/admin/${id}`);
+      setIsDeleting(true);
+      await apiClient.delete(`/banners/admin/${deleteTarget.id}`);
       toast.success('Promotional banner deleted successfully');
+      setDeleteTarget(null);
       await fetchBanners();
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to delete banner');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -484,10 +512,12 @@ export function PromotionsPage() {
             Directly upload banner creatives (up to 50MB video & 10MB image) with click & view tracking.
           </p>
         </div>
-        <Button onClick={handleOpenCreate} className="gap-1.5 font-bold cursor-pointer">
-          <Plus className="h-4 w-4" />
-          <span>New Banner</span>
-        </Button>
+        {canManageBanners && (
+          <Button onClick={handleOpenCreate} className="gap-1.5 font-bold cursor-pointer">
+            <Plus className="h-4 w-4" />
+            <span>New Banner</span>
+          </Button>
+        )}
       </div>
 
       {/* Analytics KPI Ribbon */}
@@ -657,42 +687,51 @@ export function PromotionsPage() {
 
                 {/* Card Actions */}
                 <div className="p-3 border-t bg-muted/10 flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleToggleStatus(banner)}
-                    className="h-8 flex-1 text-xs gap-1"
-                  >
-                    {banner.status === 'ACTIVE' ? (
-                      <>
-                        <Pause className="h-3 w-3 text-amber-500" />
-                        <span>Pause</span>
-                      </>
-                    ) : (
-                      <>
-                        <Play className="h-3 w-3 text-emerald-500" />
-                        <span>Resume</span>
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleOpenEdit(banner)}
-                    className="h-8 px-2.5 text-xs"
-                    title="Edit banner"
-                  >
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(banner.id)}
-                    className="h-8 px-2.5 text-xs text-destructive hover:bg-destructive/10"
-                    title="Delete banner"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
+                  {canManageBanners ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleToggleStatus(banner)}
+                        className="h-8 flex-1 text-xs gap-1 cursor-pointer"
+                      >
+                        {banner.status === 'ACTIVE' ? (
+                          <>
+                            <Pause className="h-3 w-3 text-amber-500" />
+                            <span>Pause</span>
+                          </>
+                        ) : (
+                          <>
+                            <Play className="h-3 w-3 text-emerald-500" />
+                            <span>Resume</span>
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleOpenEdit(banner)}
+                        className="h-8 px-2.5 text-xs cursor-pointer"
+                        title="Edit banner"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDeleteTarget(banner)}
+                        className="h-8 px-2.5 text-xs text-destructive hover:bg-destructive/10 cursor-pointer"
+                        title="Delete banner"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground py-1">
+                      <Lock className="h-3 w-3" />
+                      <span>Read-only (Requires banners:manage)</span>
+                    </div>
+                  )}
                 </div>
               </Card>
             );
@@ -832,6 +871,48 @@ export function PromotionsPage() {
             </Button>
           </DialogFooter>
         </form>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => !open && !isDeleting && setDeleteTarget(null)}
+        className="max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <span>Delete Promotional Banner</span>
+          </DialogTitle>
+          <DialogDescription className="pt-1 text-xs">
+            Are you sure you want to permanently delete{' '}
+            <span className="font-semibold text-foreground">&quot;{deleteTarget?.title}&quot;</span>?
+            This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="pt-4 gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isDeleting}
+            onClick={() => setDeleteTarget(null)}
+            className="cursor-pointer"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            size="sm"
+            disabled={isDeleting}
+            onClick={handleConfirmDelete}
+            className="gap-1.5 cursor-pointer"
+          >
+            {isDeleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+            <span>{isDeleting ? 'Deleting...' : 'Delete Banner'}</span>
+          </Button>
+        </DialogFooter>
       </Dialog>
     </div>
   );
