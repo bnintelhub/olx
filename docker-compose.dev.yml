@@ -203,6 +203,21 @@ services:
     networks:
       - bharatmarket_net
 
+  # ========================================================
+  # Local Quick Cloudflare Tunnel (Optional - Run with `--profile tunnel`)
+  # Exposes local `http://nginx:80` via a public `*.trycloudflare.com` URL
+  # ========================================================
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: bharatmarket_dev_cloudflared
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      - nginx
+    command: tunnel --no-autoupdate --url http://nginx:80
+    networks:
+      - bharatmarket_net
+
 volumes:
   postgres_data:
     driver: local

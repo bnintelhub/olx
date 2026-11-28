@@ -663,7 +663,7 @@ export const ChatPage: React.FC = () => {
 
   if (isAuthLoading && !hasSession) {
     return (
-      <div className="w-full h-screen flex items-center justify-center bg-white">
+      <div className="w-full h-full min-h-[240px] flex items-center justify-center bg-white">
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-3 border-[#002f34] border-t-transparent rounded-full animate-spin" />
           <span className="text-xs font-semibold text-gray-500">Loading chat...</span>
@@ -676,9 +676,9 @@ export const ChatPage: React.FC = () => {
   const activeConversation = conversations.find((c) => c.id === activeConvId) || activeConvDetails;
 
   return (
-    <div className="w-full h-screen flex flex-col bg-white overflow-hidden select-none">
-      {/* Top Header Bar - Full width edge-to-edge */}
-      <div className="w-full bg-[#002f34] text-white px-4 sm:px-6 py-3 flex items-center justify-between border-b border-[#003d44] shadow-sm flex-shrink-0 z-20">
+    <div className="w-full h-full min-h-0 flex flex-col bg-white overflow-hidden select-none">
+      {/* Top Header Bar - Full width edge-to-edge (hidden on mobile inside active conversation) */}
+      <div className={`w-full bg-[#002f34] text-white px-4 sm:px-6 py-3 items-center justify-between border-b border-[#003d44] shadow-sm flex-shrink-0 z-20 ${mobileShowThread ? 'hidden md:flex' : 'flex'}`}>
         <div className="flex items-center gap-3">
           <button onClick={() => navigate('/')} className="p-1.5 hover:bg-white/10 rounded-lg text-gray-300 hover:text-white transition cursor-pointer" title="Back to Home">
             <ArrowLeft className="w-5 h-5" />

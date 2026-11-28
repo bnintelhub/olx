@@ -60,6 +60,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(fastifyHelmet, {
     crossOriginResourcePolicy: { policy: 'cross-origin' },
     contentSecurityPolicy: false,
+    hsts: env.NODE_ENV === 'production',
   });
 
   // Parse HTTP cookies for cookie-based authentication

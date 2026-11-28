@@ -307,13 +307,22 @@ export function UsersPage() {
                 ) : (
                   users.map((user) => {
                     const isSelected = selectedIds.includes(user.id);
-                    const initials = (user.name || 'User')
-                      .split(' ')
-                      .filter(Boolean)
-                      .map((n) => n[0])
-                      .slice(0, 2)
-                      .join('')
-                      .toUpperCase() || 'U';
+                    const words = (user.name || 'User').trim().split(/\s+/).filter(Boolean);
+                    const initials = (
+                      words.length >= 2
+                        ? `${words[0][0]}${words[1][0]}`
+                        : (words[0] || 'US').slice(0, 2)
+                    ).toUpperCase();
+                    const cleanedAvatar = user.avatarUrl
+                      ? user.avatarUrl
+                          .trim()
+                          .replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/(?:media|uploads|olx-media)\/.*)$/i, '$3')
+                      : null;
+                    const resolvedAvatarUrl = cleanedAvatar
+                      ? cleanedAvatar.startsWith('http') || cleanedAvatar.startsWith('/')
+                        ? cleanedAvatar
+                        : `/media/${cleanedAvatar}`
+                      : null;
 
                     return (
                       <TableRow
@@ -335,8 +344,22 @@ export function UsersPage() {
                         {/* User Identity */}
                         <TableCell className="px-4 py-3">
                           <div className="flex items-center gap-3">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background font-bold text-xs shrink-0 shadow-2xs">
-                              {initials}
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background font-bold text-xs shrink-0 shadow-2xs overflow-hidden">
+                              {resolvedAvatarUrl ? (
+                                <img
+                                  src={resolvedAvatarUrl}
+                                  alt={user.name}
+                                  className="h-full w-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                    const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+                                    if (fallback) fallback.style.display = 'inline';
+                                  }}
+                                />
+                              ) : null}
+                              <span style={{ display: resolvedAvatarUrl ? 'none' : 'inline' }}>
+                                {initials}
+                              </span>
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
@@ -368,11 +391,13 @@ export function UsersPage() {
                         <TableCell className="px-4 py-3">
                           <div className="flex items-center gap-1 text-xs font-medium text-foreground">
                             <MapPin className="h-3 w-3 text-muted-foreground shrink-0" />
-                            <span>{user.city}</span>
+                            <span>{user.city || 'Not set'}</span>
                           </div>
-                          <span className="text-[10px] text-muted-foreground block pl-4">
-                            {user.state}
-                          </span>
+                          {user.state && (
+                            <span className="text-[10px] text-muted-foreground block pl-4">
+                              {user.state}
+                            </span>
+                          )}
                         </TableCell>
 
                         {/* KYC Verification */}

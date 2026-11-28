@@ -11,7 +11,13 @@ export class UsersService {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       include: {
-        profile: true,
+        profile: {
+          include: {
+            location: {
+              include: { parent: true },
+            },
+          },
+        },
         _count: {
           select: {
             ads: true,
@@ -28,7 +34,17 @@ export class UsersService {
   }
 
   static async updateProfile(userId: string, body: UpdateProfileInput) {
-    const { name, bio, email, avatarUrl, businessName } = body;
+    const { name, bio, email, avatarUrl, businessName, locationId } = body;
+
+    if (locationId) {
+      const locationExists = await prisma.location.findFirst({
+        where: { id: locationId, isActive: true },
+        select: { id: true },
+      });
+      if (!locationExists) {
+        throw new AppError(400, 'INVALID_LOCATION', 'Selected location does not exist or is inactive.');
+      }
+    }
 
     if (email) {
       const existing = await prisma.user.findFirst({
@@ -85,12 +101,14 @@ export class UsersService {
         bio: bio || null,
         avatarUrl: avatarUrl || null,
         businessName: businessName || null,
+        locationId: locationId ?? null,
       },
       update: {
         ...(name !== undefined ? { name } : {}),
         ...(bio !== undefined ? { bio } : {}),
         ...(avatarUrl !== undefined ? { avatarUrl } : {}),
         ...(businessName !== undefined ? { businessName } : {}),
+        ...(locationId !== undefined ? { locationId } : {}),
       },
     });
 

@@ -9,12 +9,18 @@ interface NavbarCityDropdownProps {
   cities: LocationItem[];
   selectedCity: string;
   onSelectCity: (name: string, slug: string, locationId?: string) => void;
+  hideMobileButton?: boolean;
+  externalMobileOpen?: boolean;
+  onExternalMobileClose?: () => void;
 }
 
 export const NavbarCityDropdown: React.FC<NavbarCityDropdownProps> = ({
   cities,
   selectedCity,
   onSelectCity,
+  hideMobileButton = false,
+  externalMobileOpen = false,
+  onExternalMobileClose,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -104,17 +110,19 @@ export const NavbarCityDropdown: React.FC<NavbarCityDropdownProps> = ({
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setIsModalOpen(true)}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#003F46] text-[#102A33] md:hidden"
-        title={`Location: ${selectedCity}`}
-        aria-label={`Location: ${selectedCity}`}
-      >
-        <MapPin size={17} />
-      </button>
+      {!hideMobileButton && (
+        <button
+          type="button"
+          onClick={() => setIsModalOpen(true)}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#003F46] text-[#102A33] md:hidden"
+          title={`Location: ${selectedCity}`}
+          aria-label={`Location: ${selectedCity}`}
+        >
+          <MapPin size={17} />
+        </button>
+      )}
 
-      <div ref={dropdownRef} className="relative hidden md:block w-56 lg:w-64">
+      <div ref={dropdownRef} className="relative hidden md:block md:w-40 lg:w-44 xl:w-56 shrink-0">
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
@@ -253,8 +261,11 @@ export const NavbarCityDropdown: React.FC<NavbarCityDropdownProps> = ({
 
       {/* Full Modal Picker */}
       <LocationPickerModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        isOpen={isModalOpen || externalMobileOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          onExternalMobileClose?.();
+        }}
         onSelectLocation={(loc) => {
           onSelectCity(loc.name, loc.slug, loc.id);
         }}

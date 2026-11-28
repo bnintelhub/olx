@@ -85,7 +85,7 @@ export const NavbarUserMenu: React.FC<NavbarUserMenuProps> = ({
         <div className="h-8 w-8 rounded-full bg-[#002f34] text-white flex items-center justify-center font-bold text-xs">
           {avatarLetter}
         </div>
-        <span className="text-xs font-bold text-[#102A33] hidden sm:inline max-w-[100px] truncate">
+        <span className="text-xs font-bold text-[#102A33] hidden md:inline max-w-[88px] xl:max-w-[115px] truncate">
           {displayName}
         </span>
         <ChevronDown size={14} className="text-gray-500" />

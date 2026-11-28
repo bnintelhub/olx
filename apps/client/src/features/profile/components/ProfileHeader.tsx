@@ -75,7 +75,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
         {/* Left: Avatar & Identity details */}
         <div className="flex items-center gap-4 sm:gap-5 min-w-0">
           <div className="relative shrink-0 group">
-            <div className="w-20 h-20 sm:w-22 sm:h-22 rounded-xl bg-[#F4F6F8] border border-[#E5EAED] overflow-hidden flex items-center justify-center relative">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-xl bg-[#F4F6F8] border border-[#E5EAED] overflow-hidden flex items-center justify-center relative">
               {isUploadingAvatar ? (
                 <div className="flex flex-col items-center justify-center bg-white/80 absolute inset-0">
                   <Loader2 className="w-5 h-5 animate-spin text-[#002f34]" />

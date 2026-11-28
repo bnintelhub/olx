@@ -51,10 +51,12 @@ export function formatPostingDate(dateString?: string): string {
   return `${day}-${month}-${year}`;
 }
 
-// Return media URL as-is from backend (backend provides valid, ready-to-use URLs)
+// Normalize local-only media origins so images work across localhost, tunnels, and production domains
 export function formatMediaUrl(url?: string | null): string {
   if (!url) return '';
-  const trimmed = url.trim();
+  const trimmed = url
+    .trim()
+    .replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/(?:media|uploads|olx-media)\/.*)$/i, '$3');
   if (trimmed.startsWith('/') || /^https?:\/\//i.test(trimmed) || trimmed.startsWith('blob:') || trimmed.startsWith('data:')) {
     return trimmed;
   }

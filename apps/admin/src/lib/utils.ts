@@ -22,7 +22,9 @@ export function formatDate(date: string | Date): string {
 
 export function formatMediaUrl(url?: string | null): string {
   if (!url) return '';
-  const trimmed = url.trim();
+  const trimmed = url
+    .trim()
+    .replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/(?:media|uploads|olx-media)\/.*)$/i, '$3');
   if (!trimmed || trimmed === '/' || /^\/(?:media|uploads)\/?$/i.test(trimmed)) {
     return '';
   }

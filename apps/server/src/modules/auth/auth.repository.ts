@@ -1,18 +1,26 @@
 import { prisma } from '../../config/prisma';
 import { OtpPurpose, UserRole } from '@prisma/client';
 
+const profileWithLocation = {
+  include: {
+    location: {
+      include: { parent: true },
+    },
+  },
+} as const;
+
 export class AuthRepository {
   static async findUserByPhone(phoneNumber: string) {
     return prisma.user.findUnique({
       where: { phoneNumber },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 
   static async findUserByEmail(email: string) {
     return prisma.user.findUnique({
       where: { email: email.toLowerCase() },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 
@@ -20,7 +28,7 @@ export class AuthRepository {
     return prisma.user.findUnique({
       where: { id },
       include: {
-        profile: true,
+        profile: profileWithLocation,
         _count: { select: { ads: true, favourites: true } },
       },
     });
@@ -35,7 +43,7 @@ export class AuthRepository {
           { phoneNumber: cleanUsername.trim() },
         ],
       },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 
@@ -54,7 +62,7 @@ export class AuthRepository {
           },
         },
       },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 
@@ -69,7 +77,7 @@ export class AuthRepository {
           },
         },
       },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 
@@ -91,7 +99,7 @@ export class AuthRepository {
           },
         },
       },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 
@@ -174,7 +182,7 @@ export class AuthRepository {
   static async findUserByRefreshTokenHash(tokenHash: string) {
     return prisma.user.findFirst({
       where: { refreshTokenHash: tokenHash, status: 'ACTIVE' },
-      include: { profile: true },
+      include: { profile: profileWithLocation },
     });
   }
 }

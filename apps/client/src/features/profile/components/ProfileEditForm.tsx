@@ -61,7 +61,7 @@ export const ProfileEditForm: React.FC<ProfileEditFormProps> = ({
 
       {/* Avatar Changer Row */}
       <div className="p-4 bg-gray-50/70 rounded-lg border border-gray-100 flex flex-col sm:flex-row items-center gap-4">
-        <div className="relative w-18 h-18 rounded-xl bg-gray-200 border border-gray-300 overflow-hidden shrink-0 flex items-center justify-center">
+        <div className="relative w-20 h-20 rounded-xl bg-gray-200 border border-gray-300 overflow-hidden shrink-0 flex items-center justify-center">
           {isUploadingAvatar ? (
             <Loader2 className="w-5 h-5 animate-spin text-[#002f34]" />
           ) : avatarUrl && !imgError ? (

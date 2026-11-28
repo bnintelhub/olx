@@ -93,7 +93,7 @@ export const AppLayout: React.FC = () => {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col bg-[#F5F7F8] ${isChatPage ? 'h-screen overflow-hidden' : ''}`}>
+    <div className={`flex flex-col bg-[#F5F7F8] ${isChatPage ? 'h-[100dvh] overflow-hidden' : 'min-h-screen'}`}>
       {/* Push Notification Permission Prompt */}
       <PushNotificationPrompt />
 

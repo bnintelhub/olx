@@ -5,6 +5,8 @@ export interface UserProfile {
   avatarUrl?: string;
   bio?: string;
   businessName?: string;
+  locationId?: string | null;
+  location?: LocationItem | null;
   ratingAverage: string | number;
   ratingCount: number;
   isIdentityVerified: boolean;

@@ -14,11 +14,12 @@ export type UserStatus = 'ACTIVE' | 'SUSPENDED' | 'BANNED' | 'DELETED';
 export interface UserRecord {
   id: string;
   name: string;
+  avatarUrl?: string | null;
   email: string;
   phone: string;
   role: UserRole;
-  city: string;
-  state: string;
+  city: string | null;
+  state: string | null;
   kycVerified: boolean;
   activeAds: number;
   totalDeals: number;

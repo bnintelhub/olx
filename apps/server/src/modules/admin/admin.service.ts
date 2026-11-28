@@ -476,8 +476,8 @@ export class AdminService {
         role = 'VERIFIED_USER';
       }
 
-      const city = u.profile?.location?.name || 'New Delhi';
-      const state = u.profile?.location?.parent?.name || u.profile?.location?.name || 'Delhi NCR';
+      const city = u.profile?.location?.name ?? null;
+      const state = u.profile?.location?.parent?.name ?? null;
       const kycVerified = Boolean(u.profile?.isIdentityVerified || (u.isPhoneVerified && u.isEmailVerified));
       const activeAds = u.ads?.filter((a) => a.status === 'ACTIVE').length || 0;
       const totalDeals = u.ads?.filter((a) => a.status === 'SOLD').length || 0;
@@ -504,6 +504,7 @@ export class AdminService {
       return {
         id: u.id,
         name: u.profile?.name || u.profile?.businessName || (u.email ? u.email.split('@')[0] : 'User'),
+        avatarUrl: u.profile?.avatarUrl || null,
         email: u.email || '',
         phone: u.phoneNumber || '',
         role,

@@ -46,30 +46,41 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
   const backdropRef = useRef<HTMLDivElement>(null);
   const listContainerRef = useRef<HTMLDivElement>(null);
 
+  // Fetch notifications strictly scoped to user and excluding chat messages
+  const {
+    data: notifications = [],
+    isLoading,
+    isFetching,
+    refetch,
+  } = useQuery<NotificationItem[]>({
+    queryKey: ['notifications', user?.id],
+    queryFn: async () => {
+      const res = await apiClient.get('/notifications');
+      const list: NotificationItem[] = res.data?.data || [];
+      const filtered = list.filter((n) => n.type !== 'CHAT_MESSAGE');
+      if (user?.id) {
+        const unread = filtered.filter((n) => !n.isRead).length;
+        queryClient.setQueryData(['notifications-unread-count', user.id], { count: unread });
+      }
+      return filtered;
+    },
+    enabled: Boolean(user?.id),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+
   useEffect(() => {
     if (isOpen) {
       setShouldRender(true);
       if (user?.id) {
-        void queryClient.invalidateQueries({ queryKey: ['notifications', user.id] });
+        void refetch();
         void queryClient.invalidateQueries({ queryKey: ['notifications-unread-count', user.id] });
       }
     } else if (shouldRender) {
       setSelectedNotification(null);
       handleCloseAnimation();
     }
-  }, [isOpen, user?.id]);
-
-  // Fetch notifications strictly scoped to user and excluding chat messages
-  const { data: notifications = [], isLoading } = useQuery<NotificationItem[]>({
-    queryKey: ['notifications', user?.id],
-    queryFn: async () => {
-      const res = await apiClient.get('/notifications');
-      const list: NotificationItem[] = res.data?.data || [];
-      return list.filter((n) => n.type !== 'CHAT_MESSAGE');
-    },
-    enabled: Boolean(isOpen || shouldRender) && Boolean(user?.id),
-    staleTime: 2000,
-  });
+  }, [isOpen, user?.id, refetch, queryClient]);
 
   // Mark all read mutation
   const markAllReadMutation = useMutation({
@@ -333,7 +344,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({ isOpen, on
               ref={listContainerRef}
               className="flex-1 overflow-y-auto divide-y divide-gray-100 bg-white"
             >
-              {isLoading ? (
+              {isLoading || (isFetching && notifications.length === 0) ? (
                 <div className="flex flex-col items-center justify-center py-20 text-gray-400 gap-2">
                   <Loader2 className="w-6 h-6 animate-spin text-[#002f34]" />
                   <span className="text-xs">Loading notifications...</span>

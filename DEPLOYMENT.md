@@ -134,7 +134,12 @@ docker compose -f docker-compose.prod.yml up -d --build
 
 # Optional: Include containerized PostgreSQL on the same VPS
 docker compose -f docker-compose.prod.yml --profile local-db up -d --build
+
+# Optional: Enable Cloudflare Tunnel (`olx.bnorbit.tech` -> `https://nginx:443`)
+docker compose -f docker-compose.prod.yml --profile tunnel up -d --build
 ```
+
+> **Cloudflare Zero Trust Tunnel Setup**: In Cloudflare One → Networks → Tunnels, create a tunnel, copy the token into `TUNNEL_TOKEN` in `.env.production`, and add a Public Hostname for `olx.bnorbit.tech` pointing to **Service Type: `HTTPS`**, **URL: `nginx:443`**, with **No TLS Verify** enabled (because `nginx:80` redirects to HTTPS).
 
 Monitor startup logs:
 

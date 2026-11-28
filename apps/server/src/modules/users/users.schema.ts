@@ -6,6 +6,7 @@ export const updateProfileSchema = z.object({
   email: z.string().email().optional(),
   avatarUrl: z.string().nullable().optional(),
   businessName: z.string().nullable().optional(),
+  locationId: z.string().min(1).max(36).nullable().optional(),
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

@@ -56,6 +56,12 @@ export const authService = {
     return data;
   },
 
+  // Persist user's selected or detected location to profile
+  async updateProfileLocation(locationId: string | null): Promise<{ success: boolean; data: User }> {
+    const { data } = await apiClient.put('/user/profile', { locationId });
+    return data;
+  },
+
   // Logout user
   async logout() {
     const { data } = await apiClient.post('/auth/logout');
