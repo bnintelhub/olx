@@ -155,23 +155,6 @@ services:
     networks:
       - bharatmarket_net
 
-  # ========================================================
-  # Cloudflare Tunnel (Optional - Run with `--profile tunnel`)
-  # Exposes `https://nginx:443` to `olx.bnorbit.tech` without opening VPS ports
-  # ========================================================
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: bharatmarket_cloudflared
-    profiles: ["tunnel"]
-    restart: always
-    depends_on:
-      - nginx
-    env_file:
-      - .env.production
-    command: tunnel --no-autoupdate run
-    networks:
-      - bharatmarket_net
-
 volumes:
   postgres_data:
     driver: local
